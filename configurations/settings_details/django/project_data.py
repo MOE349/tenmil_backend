@@ -1,1 +1,1 @@
-BASE_DOMAIN = "localhost"
+BASE_DOMAIN = "alfrih.com"
