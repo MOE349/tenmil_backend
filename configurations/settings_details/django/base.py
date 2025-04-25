@@ -15,7 +15,7 @@ enviroment = "STAGE_" if DEBUG else "PROD_"
 # SECURITY WARNING: don't run with debug turned on in production!
 SECRET_KEY = env(f"{enviroment}DJANGO_SECRET_KEY")
 
-ALLOWED_HOSTS = ["localhost:5173", "127.0.0.1:5173", "0.0.0.0:5173", "alfrih.com", ".alfrih.com", '.vercel.app']
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0", "alfrih.com", ".alfrih.com", '.vercel.app']
 ENVIROMENT = env(f"{enviroment}ENVIROMENT")
 
 AUTH_USER_MODEL = 'users.User'
