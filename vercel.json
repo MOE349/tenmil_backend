@@ -7,11 +7,8 @@
         },
         {
             "src": "configurations/wsgi.py",
-            "use": "@ardnt/vercel-python-wsgi",
-            "config": { 
-                "maxLambdaSize": "15mb",
-                "runtime": "python 3.12.6" 
-            }
+            "use": "@vercel/python"
+            
         }
     ],
     "routes": [
