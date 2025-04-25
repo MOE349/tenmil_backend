@@ -4,7 +4,8 @@ from configurations.settings_details.django.installed_apps import (
     BASE_APPS,
     PROJECT_APPS,
     THIRD_PARTY_APPS,
-    TENANT_APPS
+    TENANT_APPS,
+    
 )
 
 
@@ -19,35 +20,9 @@ ENVIROMENT = env(f"{enviroment}ENVIROMENT")
 
 AUTH_USER_MODEL = 'users.User'
 
-# Database
-DATABASES = {
-    'default': {
-        'ENGINE': env(f"{enviroment}DATABASE_ENGINE"),
-        'NAME': env(f"{enviroment}DATABASE_NAME"),
-        'USER': env(f"{enviroment}DATABASE_USER"),
-        'PASSWORD': env(f"{enviroment}DATABASE_PASSWORD"),
-        'HOST': env(f"{enviroment}DATABASE_HOST"),
-        'PORT': env(f"{enviroment}DATABASE_PORT"),
-    }
-}
-# DATABASES = {
-#     'default': {
-#         'ENGINE': "django_tenants.postgresql_backend",
-#         'NAME': "neondb",
-#         'USER': "neondb_owner",
-#         'PASSWORD': "npg_jC7N1wlMJaLY",
-#         'HOST': "ep-still-field-a5zkks85-pooler.us-east-2.aws.neon.tech",
-#         'PORT': "5433",
-#     }
-# }
-DATABASE_ROUTERS = ['django_tenants.routers.TenantSyncRouter']
 
-PUBLIC_SCHEMA_URLCONF = "configurations.urls"
 ROOT_URLCONF = 'configurations.urls'
 
-TENANT_MODEL = "core.Client" # app.Model
-
-TENANT_DOMAIN_MODEL = "core.Domain"  # app.Model
 
 # Application definition
 SHARED_APPS = [*BASE_APPS,

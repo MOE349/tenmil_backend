@@ -6,6 +6,7 @@ environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
 # import base django settings
 from configurations.settings_details.django.base import *  # noqa
+from configurations.settings_details.django.database import *  # noqa
 from configurations.settings_details.django.project_data import *  # noqa
 
 # import third party apps settings
