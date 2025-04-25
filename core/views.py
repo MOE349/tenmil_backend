@@ -19,8 +19,7 @@ class TenantView(BaseAPIView):
     serializer_class = TenantSerializer
     http_method_names = ['get', 'patch', 'delete', 'post']
 
-    def create(self, request, *args, **kwargs):
-        payload = request.data.copy()
+    def create(self, payload, *args, **kwargs):
         tenant_keys = ['name', 'schema_name', 'paid_until', 'on_trial']
         domain_keys = ['is_primary']
 
