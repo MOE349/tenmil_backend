@@ -81,7 +81,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'configurations.wsgi.application'
+WSGI_APPLICATION = 'configurations.wsgi.app'
 ASGI_APPLICATION = 'configurations.asgi.application'
 
 # Password validation
