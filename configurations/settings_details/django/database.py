@@ -10,7 +10,7 @@ DATABASES = {
         'USER': env(f"{enviroment}DATABASE_USER"),
         'PASSWORD': env(f"{enviroment}DATABASE_PASSWORD"),
         'HOST': env(f"{enviroment}DATABASE_HOST"),
-        'PORT': env(f"{enviroment}DATABASE_PORT"),
+        # 'PORT': env(f"{enviroment}DATABASE_PORT"),
     }
 }
 # DATABASES = {
