@@ -5,9 +5,9 @@ from configurations.base_features.serializers.base_serializer import BaseSeriali
 from configurations.base_features.views.base_api_view import BaseAPIView
 from core.models import Domain, Tenant
 
-def index(request):
+def ping(request):
    
-    return HttpResponse(f"{request.tenant.name} INDEX")
+    return HttpResponse(f"pong")
 
 class TenantSerializer(BaseSerializer):
     class Meta:
