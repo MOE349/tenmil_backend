@@ -2,15 +2,23 @@
     "version": 2,
     "builds": [
         {
+        "src": "build_files.sh",
+        "use": "@vercel/static"
+        },
+        {
             "src": "configurations/wsgi.py",
             "use": "@ardnt/vercel-python-wsgi",
             "config": { 
                 "maxLambdaSize": "15mb",
-                "pythonVersion": "3.12.6" 
+                "runtime": "python3.12.6" 
             }
         }
     ],
     "routes": [
+        {
+            "src": "/staticfiles/(.*)",
+            "dest": "/staticfiles/$1"
+        },
         {
             "src": "/(.*)",
             "dest": "configurations/wsgi.py"
