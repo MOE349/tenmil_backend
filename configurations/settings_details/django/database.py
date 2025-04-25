@@ -9,8 +9,7 @@ DATABASES = {
         'NAME': env(f"{enviroment}DATABASE_NAME"),
         'USER': env(f"{enviroment}DATABASE_USER"),
         'PASSWORD': env(f"{enviroment}DATABASE_PASSWORD"),
-        'HOST': "ep-still-field-a5zkks85-pooler.us-east-2.aws.neon.tech" if not settings.DEBUG else env(f"{enviroment}DATABASE_HOST"),
-        # 'HOST': env(f"{enviroment}DATABASE_HOST"),
+        'HOST': env(f"{enviroment}DATABASE_HOST"),
         'PORT': env(f"{enviroment}DATABASE_PORT"),
     }
 }
