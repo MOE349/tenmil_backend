@@ -8,6 +8,8 @@ from rest_framework_simplejwt.views import (
 )
 
 from configurations.system_start_checks import system_start_checks
+from django.conf.urls.static import static
+from django.conf import settings
 
 from .views import *
 
@@ -20,3 +22,6 @@ urlpatterns = [
     path('v1/api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('v1/api/token/verify/', TokenVerifyView.as_view(), name='token_verify'),
 ]
+
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT) 
+urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
