@@ -10,7 +10,7 @@
             "use": "@ardnt/vercel-python-wsgi",
             "config": { 
                 "maxLambdaSize": "15mb",
-                "runtime": "python3.12.6" 
+                "runtime": "python3.12" 
             }
         }
     ],
