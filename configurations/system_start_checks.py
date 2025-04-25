@@ -5,9 +5,9 @@ from core.models import Domain, Tenant, WorkOrderStatusControls
 
 
 def public_tenant_check():
-
-    is_system_ready = Tenant.objects.filter(schema_name='public')
-    if not is_system_ready:
+    try:
+        Tenant.objects.filter(schema_name='public')
+    except:
         # create your public tenant
         tenant = Tenant(schema_name='public',
                         name='Tenmil Inc.',
