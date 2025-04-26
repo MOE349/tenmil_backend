@@ -1,1 +1,1 @@
-BASE_DOMAIN = "alfrih.com"
+BASE_DOMAIN = "api.alfrih.com"
