@@ -236,7 +236,6 @@ class BaseAPIView(AuthMixin, BaseExceptionHandlerMixin, APIView, ResponseFormatt
             :param partial: Whether to update all fields or only the fields provided in the request
             :param allow_unauthenticated_user: Allow unauthenticated user to access this endpoint
             calls update method, override update() as needed"""
-        
         try:
             if not allow_unauthenticated_user:
                 self.authorize_user(request)
