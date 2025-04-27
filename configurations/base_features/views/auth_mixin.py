@@ -17,7 +17,10 @@ class AuthMixin(BaseAuthentication):
         not_found_error = ERRORS['not_found'][user_lang]
         try:            
             authenticator = JWTAuthentication()
-            user , token  = authenticator.authenticate(request)
+            authentication  = authenticator.authenticate(request)
+            if not authentication:
+                raise LocalBaseException(not_authenticated_error, 401)
+            user, token = authentication
             return user, token
         except (ValueError, KeyError, User.DoesNotExist) as e:
             traceback.print_exc()
