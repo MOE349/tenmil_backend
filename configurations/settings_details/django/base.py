@@ -10,7 +10,7 @@ from configurations.settings_details.django.installed_apps import (
 
 
 # DEBUG = env.bool("DEBUG", True)
-DEBUG = env("DEBUG")
+DEBUG = False
 enviroment = "STAGE_" if DEBUG else "PROD_"
 # SECURITY WARNING: don't run with debug turned on in production!
 SECRET_KEY = env(f"{enviroment}DJANGO_SECRET_KEY")
