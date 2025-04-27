@@ -7,7 +7,7 @@ echo "creating database makemigrations"
 python3 manage.py makemigrations --noinput
 
 echo "creating database migrate"
-python3 manage.py migrate --noinput
+python3 manage.py migrate_schemas --noinput
 
 echo "collect statics"
 python3 manage.py collectstatic --noinput
