@@ -138,11 +138,12 @@ class BaseAPIView(AuthMixin, BaseExceptionHandlerMixin, APIView, ResponseFormatt
         params = {}
         request_params = request.query_params
         for key in request_params.keys():
-            params[key] = request_params.get(key)
+            params[f"{key}__icontains"] = request_params.get(key)
         bad_keys = ['_end', '_start']
         for key in bad_keys:
             if key in params:
                 del params[key]
+        
         return params
 
     def clear_paginations_params(self, params):
