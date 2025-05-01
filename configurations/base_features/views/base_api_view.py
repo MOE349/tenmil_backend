@@ -102,7 +102,7 @@ class BaseAPIView(AuthMixin, BaseExceptionHandlerMixin, APIView, ResponseFormatt
 
         return sorted_fields
 
-    def get_queryset(self, params=None):
+    def get_queryset(self, params=None, ordering=None):
         """Get the queryset based on the given params"""
         if params is None:
             params = {}
@@ -112,7 +112,10 @@ class BaseAPIView(AuthMixin, BaseExceptionHandlerMixin, APIView, ResponseFormatt
             q_params = []
         instances = self.model_class.objects.filter(
             *q_params, **params)
-        instances = instances.order_by("-created_at")
+        if ordering:
+            instances = instances.order_by(ordering)
+        else:
+            instances = instances.order_by("-created_at")
         return instances
 
     def get_instance(self, pk=None, params=None):
@@ -176,6 +179,8 @@ class BaseAPIView(AuthMixin, BaseExceptionHandlerMixin, APIView, ResponseFormatt
     def retrieve(self, pk, params, *args, **kwargs):
         """Get single serialized object"""
         user_lang = params.pop('lang', 'en')
+        if "ordering" in params:
+            params.pop('ordering')
         if pk == "0":
             fields = self.get_field_properities()
             return self.format_response(data=[], status_code=200, fields=fields)
@@ -186,8 +191,11 @@ class BaseAPIView(AuthMixin, BaseExceptionHandlerMixin, APIView, ResponseFormatt
 
     def list(self, params, *args, **kwargs):
         """Get list of serialized objects"""
+        ordering_by = None
+        if "ordering" in params:
+            ordering_by = params.pop('ordering')
         user_lang = params.pop('lang', 'en')
-        instance_objects = self.get_queryset(params)
+        instance_objects = self.get_queryset(params=params, ordering=ordering_by)
         serialized_data = self.get_serialized_objects(
             instance_objects, many=True)
         return self.format_response(data=serialized_data, status_code=200)
