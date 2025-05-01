@@ -33,7 +33,8 @@ class BaseAPIView(AuthMixin, BaseExceptionHandlerMixin, APIView, ResponseFormatt
     model_class = None
     serializer_class = None
     http_method_names = ["get", "post", "put", "patch", "delete"]
-    authentication_classes = [AuthMixin]
+    authentication_classes = []
+    # authentication_classes = [AuthMixin]
     permission_classes = []
     # ['*'] to allow all roles or specify roles like ['admin', 'support'] from STANDARD_GROUPS
     allowed_roles = ['*']  # "super-admin" and "admin" are always allowed
