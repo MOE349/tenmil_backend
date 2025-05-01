@@ -4,12 +4,12 @@ from django.conf import settings
 
 
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTStatelessUserAuthentication',
-    ),
-    'AUTH_TOKEN_CLASSES ':(
-        'rest_framework_simplejwt.tokens.SlidingToken',
-    )
+    # 'DEFAULT_AUTHENTICATION_CLASSES': (
+    #     'rest_framework_simplejwt.authentication.JWTStatelessUserAuthentication',
+    # ),
+    # 'AUTH_TOKEN_CLASSES ':(
+    #     'rest_framework_simplejwt.tokens.SlidingToken',
+    # )
 }
 
 SIMPLE_JWT = {

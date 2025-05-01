@@ -9,8 +9,8 @@ from configurations.settings_details.django.installed_apps import (
 )
 
 
-# DEBUG = env.bool("DEBUG", True)
-DEBUG = False
+DEBUG = env.bool("DEBUG", True)
+# DEBUG = False
 enviroment = "STAGE_" if DEBUG else "PROD_"
 # SECURITY WARNING: don't run with debug turned on in production!
 SECRET_KEY = env(f"{enviroment}DJANGO_SECRET_KEY")
@@ -35,8 +35,8 @@ INSTALLED_APPS = [
 
 
 MIDDLEWARE = [
-    "corsheaders.middleware.CorsMiddleware",
     'django_tenants.middleware.main.TenantMainMiddleware',
+    "corsheaders.middleware.CorsMiddleware",
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',

@@ -159,8 +159,8 @@ class BaseAPIView(AuthMixin, BaseExceptionHandlerMixin, APIView, ResponseFormatt
                           allow_unauthenticated_user=True, *args, **kwargs)
         """
         try:
-            if not allow_unauthenticated_user:
-                self.authorize_user(request)
+            # if not allow_unauthenticated_user:
+            #     self.authorize_user(request)
             if params is None:
                 params = self.get_request_params(request)
             params = self.clear_paginations_params(params)
@@ -211,8 +211,8 @@ class BaseAPIView(AuthMixin, BaseExceptionHandlerMixin, APIView, ResponseFormatt
             calls create method, override create() as needed
         """
         try:
-            if not allow_unauthenticated_user:
-                self.authorize_user(request)
+            # if not allow_unauthenticated_user:
+            #     self.authorize_user(request)
             data = self.handle_post_data(request)
             params = self.get_request_params(request)
             params = self.handle_post_params(request, params, allow_unauthenticated_user)
@@ -237,8 +237,8 @@ class BaseAPIView(AuthMixin, BaseExceptionHandlerMixin, APIView, ResponseFormatt
             :param allow_unauthenticated_user: Allow unauthenticated user to access this endpoint
             calls update method, override update() as needed"""
         try:
-            if not allow_unauthenticated_user:
-                self.authorize_user(request)
+            # if not allow_unauthenticated_user:
+            #     self.authorize_user(request)
             data = self.handle_update_data(request)
             params = self.get_request_params(request)
             params = self.handle_post_params(request, params, allow_unauthenticated_user)
@@ -272,8 +272,8 @@ class BaseAPIView(AuthMixin, BaseExceptionHandlerMixin, APIView, ResponseFormatt
         it calls destroy method, override destroy as needed
         """
         try:
-            if not allow_unauthenticated_user:
-                self.authorize_user(request)
+            # if not allow_unauthenticated_user:
+            #     self.authorize_user(request)
             return self.destroy(request, pk, *args, **kwargs)
         except Exception as e:
             return self.handle_exception(e)
