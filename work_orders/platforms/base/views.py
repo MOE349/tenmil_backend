@@ -74,8 +74,9 @@ class WorkOrderCompletionNoteBaseView(BaseAPIView):
         if params is None:
             params = self.get_request_params(request)
         params = self.clear_paginations_params(params)
-        instance = self.model_class.objects.get_object_or_404(raise_exception=True, **params)
-        return super().get(request, instance.pk, params, allow_unauthenticated_user, *args, **kwargs)
+        instance, errors, status_code= self.model_class.objects.get_object_or_404(raise_exception=False, **params)
+        pk = instance.pk if instance else None
+        return super().get(request, pk, params, allow_unauthenticated_user, *args, **kwargs)
 
     def handle_post_data(self, request):
         data = super().handle_post_data(request)

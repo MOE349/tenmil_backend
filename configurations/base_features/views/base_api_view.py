@@ -101,9 +101,19 @@ class BaseAPIView(AuthMixin, BaseExceptionHandlerMixin, APIView, ResponseFormatt
                 sorted_fields.insert(1, field)
 
         return sorted_fields
-
+    def modify_params(self, old_params):
+        params = {}
+        for field in old_params.keys():
+            field_type =self.model_class._meta.get_field(field.split('__')[0]).get_internal_type()
+            if field_type == 'ForeignKey':
+                params[f"{field.split('__')[0]}__id"] = old_params[field]
+            else:
+                params[field] = old_params[field]
+        return params
+    
     def get_queryset(self, params=None, ordering=None):
         """Get the queryset based on the given params"""
+        params = self.modify_params(params)
         if params is None:
             params = {}
         if "Q" in params:
