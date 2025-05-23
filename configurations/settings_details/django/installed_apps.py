@@ -21,10 +21,10 @@ PROJECT_APPS = [
     'custom_commands.apps.CustomCommandsConfig',
 ]
 TENANT_APPS = [
-    # 'tenant_users.apps.TenantUsersConfig',
+    'tenant_users.apps.TenantUsersConfig',
     'company.apps.CompanyConfig',
-    # 'assets.apps.AssetsConfig',
-    # 'financial_reports.apps.FinancialReportsConfig',
-    # 'meter_readings.apps.MeterReadingsConfig',
-    # 'work_orders.apps.WorkOrdersConfig',
+    'assets.apps.AssetsConfig',
+    'financial_reports.apps.FinancialReportsConfig',
+    'meter_readings.apps.MeterReadingsConfig',
+    'work_orders.apps.WorkOrdersConfig',
 ]

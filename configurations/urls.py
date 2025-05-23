@@ -14,13 +14,13 @@ from django.conf import settings
 
 
 api_urls = [
-    # path('users/', include('tenant_users.platforms.api.urls')),
-    # path('company/', include('company.platforms.api.urls')),
-    # path('assets/', include('assets.platforms.api.urls')),
-    # path('financial-reports/', include('financial_reports.platforms.api.urls')),
-    # path('meter-readings/', include('meter_readings.platforms.api.urls')),
-    # path('work-orders/', include('work_orders.platforms.api.urls')),
-    # path('dashboard', DashboardApiView.as_view(), name='dashboard'),
+    path('users/', include('tenant_users.platforms.api.urls')),
+    path('company/', include('company.platforms.api.urls')),
+    path('assets/', include('assets.platforms.api.urls')),
+    path('financial-reports/', include('financial_reports.platforms.api.urls')),
+    path('meter-readings/', include('meter_readings.platforms.api.urls')),
+    path('work-orders/', include('work_orders.platforms.api.urls')),
+    path('dashboard', DashboardApiView.as_view(), name='dashboard'),
 ]
 # dashboard_urls = [
 #     # path('users/', include('users.platforms.dashboard.urls')),
