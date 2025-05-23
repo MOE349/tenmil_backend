@@ -21,6 +21,19 @@ def public_tenant_check():
             domain.tenant = tenant
             domain.is_primary = True
             domain.save()
+            # create your public tenant
+            tenant = Tenant(schema_name='tenmil',
+                            name='Tenmil Inc.',
+                            paid_until='2100-12-05',
+                            on_trial=False)
+            tenant.save()
+
+            # Add one or more domains for the tenant
+            domain = Domain()
+            domain.domain = f"tenmil.{settings.BASE_DOMAIN}" # don't add your port or www here! on a local server you'll want to use localhost here
+            domain.tenant = tenant
+            domain.is_primary = True
+            domain.save()
     except:
         pass
 

@@ -7,6 +7,9 @@ class CapitalCostBaseSerializer(BaseSerializer):
     class Meta:
         model = CapitalCost
         fields = '__all__'
+    
+    def calculate_maint_coast_per_hour(self):
+        return 48
 
     def to_representation(self, instance):
         response = super().to_representation(instance)
@@ -21,7 +24,7 @@ class CapitalCostBaseSerializer(BaseSerializer):
         yearly_hours = expected_hours / finance_years
         capital_cost_per_hr = ((purchase_cost + interst_amount + capital_work_cost) - instance.resale_cost) / expected_hours
         operational_cost_per_year = instance.operational_cost_per_year
-        maintnance_cost_per_hr = 48
+        maintnance_cost_per_hr = self.calculate_maint_coast_per_hour()
         operational_cost_per_hr = operational_cost_per_year / expected_hours
         total_cost_per_hr = operational_cost_per_hr + maintnance_cost_per_hr + capital_cost_per_hr
         response['table'] = {

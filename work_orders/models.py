@@ -1,8 +1,7 @@
 from django.db import models
 
 from configurations.base_features.db.base_model import BaseModel
-from core.models import WorkOrderStatusControls
-from users.models import User
+from tenant_users.models import TenantUser as User
 
 
 class WorkOrderStatusNames(BaseModel):

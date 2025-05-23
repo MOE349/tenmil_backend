@@ -15,10 +15,11 @@ enviroment = "STAGE_" if DEBUG else "PROD_"
 # SECURITY WARNING: don't run with debug turned on in production!
 SECRET_KEY = env(f"{enviroment}DJANGO_SECRET_KEY")
 
-ALLOWED_HOSTS = ["localhost", ".localhost", "127.0.0.1", "0.0.0.0", "alfrih.com", ".alfrih.com", '.vercel.app']
+ALLOWED_HOSTS = ["*"]
+# ALLOWED_HOSTS = ["localhost", ".localhost", "127.0.0.1", "0.0.0.0", "alfrih.com", ".alfrih.com", '.vercel.app']
 ENVIROMENT = env(f"{enviroment}ENVIROMENT")
 
-AUTH_USER_MODEL = 'users.User'
+AUTH_USER_MODEL = 'admin_users.AdminUser'
 
 
 ROOT_URLCONF = 'configurations.urls'
@@ -35,16 +36,17 @@ INSTALLED_APPS = [
 
 
 MIDDLEWARE = [
-    'django_tenants.middleware.main.TenantMainMiddleware',
+    'configurations.base_features.middlewares.subdomain_middleware.SubdomainTenantMiddleware',
     "corsheaders.middleware.CorsMiddleware",
+    'django_tenants.middleware.main.TenantMainMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # 'django.middleware.csrf.CsrfViewMiddleware',
 ]
 
 

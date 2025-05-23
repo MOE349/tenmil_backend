@@ -1,15 +1,17 @@
 from rest_framework.views import APIView
-
 from configurations.base_features.error_translation import ERRORS
 from configurations.base_features.exceptions.base_exceptions import LocalBaseException
 from configurations.base_features.helpers.text_helpers import snake_to_title
 from configurations.base_features.views.auth_mixin import AuthMixin
 from configurations.base_features.views.base_exception_handler import BaseExceptionHandlerMixin
 from configurations.base_features.views.base_response import ResponseFormatterMixin
+from tenant_users.auth_backend import TenantUserAuthBackend
+from tenant_users.auth_jwt import TenantJWTAuthentication
+from tenant_users.permissions import IsTenantAuthenticated
 # from configurations.base_features.views.auth_mixin import AuthMixin
 
 
-class BaseAPIView(AuthMixin, BaseExceptionHandlerMixin, APIView, ResponseFormatterMixin):
+class BaseAPIView(TenantUserAuthBackend, BaseExceptionHandlerMixin, APIView, ResponseFormatterMixin):
     """
         an abstract class for all api views
 
@@ -33,9 +35,9 @@ class BaseAPIView(AuthMixin, BaseExceptionHandlerMixin, APIView, ResponseFormatt
     model_class = None
     serializer_class = None
     http_method_names = ["get", "post", "put", "patch", "delete"]
-    authentication_classes = []
     # authentication_classes = [AuthMixin]
-    permission_classes = []
+    permission_classes = [IsTenantAuthenticated]
+    authentication_classes = [TenantJWTAuthentication]
     # ['*'] to allow all roles or specify roles like ['admin', 'support'] from STANDARD_GROUPS
     allowed_roles = ['*']  # "super-admin" and "admin" are always allowed
 

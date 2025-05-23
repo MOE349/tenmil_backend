@@ -5,10 +5,6 @@ from configurations.base_features.views.base_exception_handler import BaseExcept
 from configurations.base_features.views.base_response import ResponseFormatterMixin
 from core.models import Tenant, Domain
 from django.conf import settings
-from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.authentication import JWTAuthentication
-
-from users.platforms.base.serializers import UserBaseSerializer
 
 def index(request):
     is_system_ready = Tenant.objects.exists()

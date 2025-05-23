@@ -13,36 +13,31 @@ from django.conf.urls.static import static
 from django.conf import settings
 
 
-# urlpatterns = [
-#     path('admin/', admin.site.urls),
-#     path('', index)
-# ]
-
 api_urls = [
-    path('users/', include('users.platforms.api.urls')),
+    path('users/', include('tenant_users.platforms.api.urls')),
     path('company/', include('company.platforms.api.urls')),
     path('assets/', include('assets.platforms.api.urls')),
     path('financial-reports/', include('financial_reports.platforms.api.urls')),
     path('meter-readings/', include('meter_readings.platforms.api.urls')),
     path('work-orders/', include('work_orders.platforms.api.urls')),
 ]
-dashboard_urls = [
-    path('users/', include('users.platforms.dashboard.urls')),
-    path('company/', include('company.platforms.dashboard.urls')),
-    path('assets/', include('assets.platforms.dashboard.urls')),
-    path('financial-reports/', include('financial_reports.platforms.dashboard.urls')),
-    path('meter-readings/', include('meter_readings.platforms.dashboard.urls')),
-    path('work-orders/', include('work_orders.platforms.dashboard.urls')),
-]
+# dashboard_urls = [
+#     # path('users/', include('users.platforms.dashboard.urls')),
+#     path('company/', include('company.platforms.dashboard.urls')),
+#     path('assets/', include('assets.platforms.dashboard.urls')),
+#     path('financial-reports/', include('financial_reports.platforms.dashboard.urls')),
+#     path('meter-readings/', include('meter_readings.platforms.dashboard.urls')),
+#     path('work-orders/', include('work_orders.platforms.dashboard.urls')),
+# ]
 
-mobile_urls = [
-    path('users/', include('users.platforms.mobile.urls')),
-    path('company/', include('company.platforms.mobile.urls')),
-    path('assets/', include('assets.platforms.mobile.urls')),
-    path('financial-reports/', include('financial_reports.platforms.mobile.urls')),
-    path('meter-readings/', include('meter_readings.platforms.mobile.urls')),
-    path('work-orders/', include('work_orders.platforms.mobile.urls')),
-]
+# mobile_urls = [
+#     # path('users/', include('users.platforms.mobile.urls')),
+#     path('company/', include('company.platforms.mobile.urls')),
+#     path('assets/', include('assets.platforms.mobile.urls')),
+#     path('financial-reports/', include('financial_reports.platforms.mobile.urls')),
+#     path('meter-readings/', include('meter_readings.platforms.mobile.urls')),
+#     path('work-orders/', include('work_orders.platforms.mobile.urls')),
+# ]
 v1_urlpatterns = [
     path('api/', include(api_urls)),
     # path('mobile/', include(mobile_urls)),

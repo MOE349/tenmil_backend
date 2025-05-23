@@ -12,15 +12,16 @@ THIRD_PARTY_APPS = [
     'rest_framework',
     "corsheaders",
     'rest_framework_simplejwt',
-    "rest_framework_simplejwt.token_blacklist",
+    # "rest_framework_simplejwt.token_blacklist",
 
 ]
 PROJECT_APPS = [
-    'users.apps.UsersConfig',
+    'admin_users.apps.AdminUsersConfig',
     'core.apps.CoreConfig',
     'custom_commands.apps.CustomCommandsConfig',
 ]
 TENANT_APPS = [
+    'tenant_users.apps.TenantUsersConfig',
     'company.apps.CompanyConfig',
     'assets.apps.AssetsConfig',
     'financial_reports.apps.FinancialReportsConfig',

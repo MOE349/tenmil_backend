@@ -1,7 +1,8 @@
 from assets.models import Equipment
 from assets.platforms.base.serializers import EquipmentBaseSerializer
 from configurations.base_features.serializers.base_serializer import BaseSerializer
-from users.platforms.base.serializers import UserBaseSerializer
+from core.models import WorkOrderStatusControls
+from tenant_users.platforms.base.serializers import TenantUserBaseSerializer
 from work_orders.models import *
 
 
@@ -27,8 +28,8 @@ class WorkOrderChecklistBaseSerializer(BaseSerializer):
     def to_representation(self, instance):
         response = super().to_representation(instance)
         response['work_order'] = WorkOrderBaseSerializer(instance.work_order).data
-        response['assigned_to'] =  UserBaseSerializer(instance.assigned_to).data
-        response['completed_by'] =  UserBaseSerializer(instance.completed_by).data
+        response['assigned_to'] =  TenantUserBaseSerializer(instance.assigned_to).data
+        response['completed_by'] =  TenantUserBaseSerializer(instance.completed_by).data
         return response
 
 class WorkOrderLogBaseSerializer(BaseSerializer):
@@ -39,7 +40,7 @@ class WorkOrderLogBaseSerializer(BaseSerializer):
     def to_representation(self, instance):
         response = super().to_representation(instance)
         response['work_order'] = WorkOrderBaseSerializer(instance.work_order).data
-        response['user'] =  UserBaseSerializer(instance.user).data
+        response['user'] =  TenantUserBaseSerializer(instance.user).data
         return response
 
 
