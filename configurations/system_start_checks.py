@@ -50,5 +50,5 @@ def system_start_checks():
     """
         all project setup steps should be added here
     """
-    # public_tenant_check()
-    # work_order_status_actions_check()
+    public_tenant_check()
+    work_order_status_actions_check()
