@@ -9,6 +9,7 @@ class WorkOrderBaseView(BaseAPIView):
 
     def create(self, data, params, return_instance=False, *args, **kwargs):
         params['status'] = WorkOrderStatusNames.objects.get(name="Created")
+        data['code'] =  f"WO_{WorkOrder.objects.count() + 1}"
         instance, response = super().create(data, params, return_instance=True, *args, **kwargs)
         WorkOrderLog.objects.create(work_order=instance, amount=0, log_type=WorkOrderLog.LogTypeChoices.CREATED, user=params['user'], description="Work Order Created")
         return self.format_response(data=response, status_code=201)

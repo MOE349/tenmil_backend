@@ -1,10 +1,12 @@
 import traceback
 from django.shortcuts import HttpResponse
 from rest_framework_simplejwt.views import TokenRefreshView
+from configurations.base_features.views.base_api_view import BaseAPIView
 from configurations.base_features.views.base_exception_handler import BaseExceptionHandlerMixin
 from configurations.base_features.views.base_response import ResponseFormatterMixin
 from core.models import Tenant, Domain
 from django.conf import settings
+from configurations.serializers import *
 
 def index(request):
     is_system_ready = Tenant.objects.exists()
@@ -24,6 +26,15 @@ def index(request):
         domain.is_primary = True
         domain.save()
     return HttpResponse(f"{request.tenant.name} INDEX")
+
+class DashboardApiView(BaseAPIView):
+    model_class = Tenant
+    serializer_class = DashboardApiSerializer
+    http_method_names = ['get']
+
+    def get(self, request, pk=None, params=None, allow_unauthenticated_user=False, *args, **kwargs):
+        serializer = self.serializer_class({})
+        return self.format_response(serializer.data, [], 200)
 
 class TokenSliding(TokenRefreshView, BaseExceptionHandlerMixin, ResponseFormatterMixin):
     def post(self, request, *args, **kwargs):

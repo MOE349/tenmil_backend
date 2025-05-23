@@ -54,9 +54,9 @@ class TenantUserBaseView(BaseAPIView):
     serializer_class = TenantUserBaseSerializer
     http_method_names = ['get']
 
-    def get(self, request):
-        user = request.user
-        if user.is_anonymous:
-            return self.format_response({"user is not authenticated"}, [], 401)
-        serializer = self.serializer_class(user)
-        return self.format_response(serializer.data, [], 200)
+    # def get(self, request):
+    #     user = request.user
+    #     if user.is_anonymous:
+    #         return self.format_response({"user is not authenticated"}, [], 401)
+    #     serializer = self.serializer_class(user)
+    #     return self.format_response(serializer.data, [], 200)

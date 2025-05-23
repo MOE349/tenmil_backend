@@ -10,6 +10,7 @@ class WorkOrderStatusNames(BaseModel):
 
 
 class WorkOrder(BaseModel):
+    code = models.CharField(max_length=50, unique=True, null=True, blank=True)
     asset = models.ForeignKey('assets.Asset', on_delete=models.CASCADE)
     status = models.ForeignKey(WorkOrderStatusNames, on_delete=models.CASCADE)
     maint_type = models.CharField(max_length=50)

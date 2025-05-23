@@ -8,7 +8,7 @@ from rest_framework_simplejwt.views import (
 )
 
 from configurations.system_start_checks import system_start_checks
-from configurations.views import index
+from configurations.views import *
 from django.conf.urls.static import static
 from django.conf import settings
 
@@ -20,6 +20,7 @@ api_urls = [
     path('financial-reports/', include('financial_reports.platforms.api.urls')),
     path('meter-readings/', include('meter_readings.platforms.api.urls')),
     path('work-orders/', include('work_orders.platforms.api.urls')),
+    path('dashboard', DashboardApiView.as_view(), name='dashboard'),
 ]
 # dashboard_urls = [
 #     # path('users/', include('users.platforms.dashboard.urls')),

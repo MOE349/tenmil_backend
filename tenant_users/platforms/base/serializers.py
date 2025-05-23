@@ -12,6 +12,7 @@ class TenantUserBaseSerializer(BaseSerializer):
     def to_representation(self, instance):
         response = super().to_representation(instance)
         response['tenant'] = instance.tenant.name
+        return response
 
 
 class TenantTokenObtainPairBaseSerializer(TokenObtainPairSerializer):
