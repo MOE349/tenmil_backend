@@ -4,7 +4,7 @@ from configurations.settings_details.django.installed_apps import (
     BASE_APPS,
     PROJECT_APPS,
     THIRD_PARTY_APPS,
-    # TENANT_APPS,
+    TENANT_APPS,
     
 )
 
@@ -31,7 +31,7 @@ SHARED_APPS = [*BASE_APPS,
                *THIRD_PARTY_APPS]
 INSTALLED_APPS = [
     *SHARED_APPS,
-    # *TENANT_APPS
+    *TENANT_APPS
 ]
 
 

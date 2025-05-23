@@ -22,7 +22,7 @@ PROJECT_APPS = [
 ]
 TENANT_APPS = [
     # 'tenant_users.apps.TenantUsersConfig',
-    # 'company.apps.CompanyConfig',
+    'company.apps.CompanyConfig',
     # 'assets.apps.AssetsConfig',
     # 'financial_reports.apps.FinancialReportsConfig',
     # 'meter_readings.apps.MeterReadingsConfig',

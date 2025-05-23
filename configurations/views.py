@@ -27,25 +27,25 @@ def index(request):
         domain.save()
     return HttpResponse(f"{request.tenant.name} INDEX")
 
-class DashboardApiView(BaseAPIView):
-    model_class = Tenant
-    serializer_class = DashboardApiSerializer
-    http_method_names = ['get']
+# class DashboardApiView(BaseAPIView):
+#     model_class = Tenant
+#     serializer_class = DashboardApiSerializer
+#     http_method_names = ['get']
 
-    def get(self, request, pk=None, params=None, allow_unauthenticated_user=False, *args, **kwargs):
-        serializer = self.serializer_class({})
-        return self.format_response(serializer.data, [], 200)
+#     def get(self, request, pk=None, params=None, allow_unauthenticated_user=False, *args, **kwargs):
+#         serializer = self.serializer_class({})
+#         return self.format_response(serializer.data, [], 200)
 
-class TokenSliding(TokenRefreshView, BaseExceptionHandlerMixin, ResponseFormatterMixin):
-    def post(self, request, *args, **kwargs):
-        try:
-            response = super().post(request, *args, **kwargs)
-            print(response.data)
-            token = response.data['access']
-            response =  {
-                'access_token': str(token),
-            }
-            return self.format_response(response, status_code=200)
-        except Exception as e:
-            traceback.print_exc()
-            return self.handle_exception(e)
+# class TokenSliding(TokenRefreshView, BaseExceptionHandlerMixin, ResponseFormatterMixin):
+#     def post(self, request, *args, **kwargs):
+#         try:
+#             response = super().post(request, *args, **kwargs)
+#             print(response.data)
+#             token = response.data['access']
+#             response =  {
+#                 'access_token': str(token),
+#             }
+#             return self.format_response(response, status_code=200)
+#         except Exception as e:
+#             traceback.print_exc()
+#             return self.handle_exception(e)
