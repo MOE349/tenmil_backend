@@ -3,9 +3,10 @@ from django.conf import settings
 CORS_ALLOW_ALL_ORIGINS = settings.DEBUG  # True for dev, False for prod
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
+    "http://*.localhost:3000",
     "http://127.0.0.1:3000",
     "https://alfrih.com",
-    "https://www.alfrih.com"
+    "https://*.alfrih.com",
 ]
 CORS_ALLOW_CREDENTIALS = True
 
