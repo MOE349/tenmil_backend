@@ -1,4 +1,5 @@
 .venv
+.vmv
 .env
 .vercel
 ignore
