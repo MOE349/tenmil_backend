@@ -6,6 +6,10 @@ from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 
 class AssetBaseSerializer(BaseSerializer):
+    # def mod_create(self, validated_data):
+    #     instance = 
+    
+
     def to_representation(self, instance):
         response = super().to_representation(instance)
         response['id'] = str(instance.id)

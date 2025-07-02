@@ -29,6 +29,7 @@ def get_object_by_content_type_and_id(content_type_id: int, object_id: str) -> M
 def get_content_type_and_object_id(
     obj_or_id: Union[Model, str],
     candidate_models: list[Type[Model]],
+    return_ct_instance=False
 ) -> tuple[int, str]:
     """
     Given a model instance or ID, resolve its content_type ID and object ID.
@@ -41,12 +42,16 @@ def get_content_type_and_object_id(
 
     if isinstance(obj_or_id, Model):
         ct = ContentType.objects.get_for_model(obj_or_id.__class__)
+        if return_ct_instance:
+            return ct , str(obj_or_id.pk)
         return ct.pk, str(obj_or_id.pk)
 
     for model in candidate_models:
         instance = model.objects.filter(pk=obj_or_id).first()
         if instance:
             ct = ContentType.objects.get_for_model(model)
+            if return_ct_instance:
+                return ct , str(instance.pk)
             return ct.pk, str(instance.pk)
     raise LocalBaseException(exception="Invalid ID or related model")
 
