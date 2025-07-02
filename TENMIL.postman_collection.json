@@ -1,0 +1,849 @@
+{
+	"info": {
+		"_postman_id": "98f8d90c-28c2-4771-801e-5bf2c66308cc",
+		"name": "TENMIL",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "45022099",
+		"_collection_link": "https://ferasalfrih-1952804.postman.co/workspace/Feras-Alfrih's-Workspace~fb7fbfbb-0160-40e4-82ff-42442d487f6d/collection/45022099-98f8d90c-28c2-4771-801e-5bf2c66308cc?action=share&source=collection_link&creator=45022099"
+	},
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Tenants",
+					"item": [
+						{
+							"name": "register",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"name\": \"Feras Alfrih\",\r\n    \"email\": \"feras.alfrih@gmail.com\",\r\n    \"password\": \"Feras1234\"\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{tenantBaseUrl}}/users/register",
+									"host": [
+										"{{tenantBaseUrl}}"
+									],
+									"path": [
+										"users",
+										"register"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "login",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"email\": \"feras.alfrih@gmail.com\",\r\n    \"password\": \"Feras1234\"\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{tenantBaseUrl}}/users/login",
+									"host": [
+										"{{tenantBaseUrl}}"
+									],
+									"path": [
+										"users",
+										"login"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Admins",
+					"item": [
+						{
+							"name": "register",
+							"request": {
+								"auth": {
+									"type": "noauth"
+								},
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"name\": \"Feras Alfrih\",\r\n    \"email\": \"feras.alfrih.dev@gmail.com\",\r\n    \"password\": \"Feras1234\"\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/users/register",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"users",
+										"register"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "login",
+							"request": {
+								"auth": {
+									"type": "noauth"
+								},
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"email\": \"feras.alfrih.dev@gmail.com\",\r\n    \"password\": \"Feras1234\"\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/users/login",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"users",
+										"login"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Users",
+			"item": []
+		},
+		{
+			"name": "Compnaies",
+			"item": []
+		},
+		{
+			"name": "Tenants",
+			"item": [
+				{
+					"name": "create tenant",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"schema_name\": \"tndc\",\r\n    \"name\": \"Tahtant\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/tenants/tenant",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"tenants",
+								"tenant"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Assets",
+			"item": [
+				{
+					"name": "get_all",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{tenantBaseUrl}}/assets/equipments",
+							"host": [
+								"{{tenantBaseUrl}}"
+							],
+							"path": [
+								"assets",
+								"equipments"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get_details",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{tenantBaseUrl}}/assets/equipments/{{id}}",
+							"host": [
+								"{{tenantBaseUrl}}"
+							],
+							"path": [
+								"assets",
+								"equipments",
+								"{{id}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "edit",
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    // \"location\": {\r\n    //     \"id\": \"19a292d0-11ac-4b7c-8f62-e6ff5552d66c\",\r\n    //     \"name\": \"Red Chris - Red Chris\",\r\n    //     \"end_point\": \"/company/location\"\r\n    // }\r\n    \"code\": \"RT73\",\r\n    \"name\": \"Eq2-2025\",\r\n    \"description\": \"jkhk\",\r\n    \"make\": \"Cat\",\r\n    \"model\": \"15552\",\r\n    \"serial_number\": \"15425442\",\r\n    \"purchase_date\": \"2025-05-23\",\r\n    \"is_online\": false\r\n\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{tenantBaseUrl}}/assets/equipments/{{id}}",
+							"host": [
+								"{{tenantBaseUrl}}"
+							],
+							"path": [
+								"assets",
+								"equipments",
+								"{{id}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "create",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"location\": \"19a292d0-11ac-4b7c-8f62-e6ff5552d66c\",\r\n    \"category\": \"5e377fed-1161-4351-81d9-039c68b8ae52\",\r\n    \"code\": \"RT79\",\r\n    \"name\": \"Eq2-2025\",\r\n    \"description\": \"jkhk\",\r\n    \"make\": \"Cat\",\r\n    \"model\": \"15552\",\r\n    \"serial_number\": \"15425442\",\r\n    \"purchase_date\": \"2025-05-23\",\r\n    \"is_online\": false\r\n\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{tenantBaseUrl}}/assets/equipments",
+							"host": [
+								"{{tenantBaseUrl}}"
+							],
+							"path": [
+								"assets",
+								"equipments"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Work Orders",
+			"item": [
+				{
+					"name": "Work Order Status Names",
+					"item": [
+						{
+							"name": "get all",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{tenantBaseUrl}}/work-orders/status",
+									"host": [
+										"{{tenantBaseUrl}}"
+									],
+									"path": [
+										"work-orders",
+										"status"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "create",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "// {\r\n//     \"name\": \"Created\",\r\n//     \"control\": \"ca7d486e-7da3-41a2-8246-c8171320d5b9\"\r\n// }\r\n\r\n{\r\n    \"name\": \"Closed\",\r\n    \"control\": \"4f85781e-efb7-4909-b6e6-fc093eb95841\"\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{tenantBaseUrl}}/work-orders/status",
+									"host": [
+										"{{tenantBaseUrl}}"
+									],
+									"path": [
+										"work-orders",
+										"status"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Work Order Status Controls",
+					"item": [
+						{
+							"name": "get all",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{tenantBaseUrl}}/work-orders/controls",
+									"host": [
+										"{{tenantBaseUrl}}"
+									],
+									"path": [
+										"work-orders",
+										"controls"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "get all",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{tenantBaseUrl}}/work-orders/work_order?asset=0a94a69c-ce39-4c70-b2b4-47af7b51de75",
+							"host": [
+								"{{tenantBaseUrl}}"
+							],
+							"path": [
+								"work-orders",
+								"work_order"
+							],
+							"query": [
+								{
+									"key": "asset",
+									"value": "0a94a69c-ce39-4c70-b2b4-47af7b51de75"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "create",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"asset\": \"0a94a69c-ce39-4c70-b2b4-47af7b51de75\",\r\n    \"maint_type\": \"HD PM\",\r\n    \"priority\": \"High\",\r\n    \"description\": \"sdsd\"\r\n\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{tenantBaseUrl}}/work-orders/work_order",
+							"host": [
+								"{{tenantBaseUrl}}"
+							],
+							"path": [
+								"work-orders",
+								"work_order"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get by id",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{tenantBaseUrl}}/work-orders/work_order/0a94a69c-ce39-4c70-b2b4-47af7b51de75",
+							"host": [
+								"{{tenantBaseUrl}}"
+							],
+							"path": [
+								"work-orders",
+								"work_order",
+								"0a94a69c-ce39-4c70-b2b4-47af7b51de75"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "delete",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{tenantBaseUrl}}/work-orders/work_order/0a94a69c-ce39-4c70-b2b4-47af7b51de75",
+							"host": [
+								"{{tenantBaseUrl}}"
+							],
+							"path": [
+								"work-orders",
+								"work_order",
+								"0a94a69c-ce39-4c70-b2b4-47af7b51de75"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Scheduled Maintenance",
+			"item": [
+				{
+					"name": "ittirations",
+					"item": [
+						{
+							"name": "create ittiration",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"scheduled_maintenance\": \"3a774eae-ea2f-4a37-8dfb-c1b06725ad6f\",\r\n    \"ittiration\" : 1500,\r\n    \"checklist\": [\"391cd001-b537-4179-81a2-f9d173a1dd36\", \"f93eaf18-248a-434a-bf3b-35c8e43a1309\"]\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{tenantBaseUrl}}/scheduled-maintenance/sm_ittiration_cycle",
+									"host": [
+										"{{tenantBaseUrl}}"
+									],
+									"path": [
+										"scheduled-maintenance",
+										"sm_ittiration_cycle"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "get ittirations",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{tenantBaseUrl}}/scheduled-maintenance/sm_ittiration_cycle?scheduled_maintenance=3a774eae-ea2f-4a37-8dfb-c1b06725ad6f",
+									"host": [
+										"{{tenantBaseUrl}}"
+									],
+									"path": [
+										"scheduled-maintenance",
+										"sm_ittiration_cycle"
+									],
+									"query": [
+										{
+											"key": "scheduled_maintenance",
+											"value": "3a774eae-ea2f-4a37-8dfb-c1b06725ad6f"
+										}
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "checklist",
+					"item": [
+						{
+							"name": "create checklist",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"name\": \"change oil\",\r\n    \"description\": \"change oil for asset\"\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{tenantBaseUrl}}\\scheduled-maintenance\\sm_ittiration_checklist",
+									"host": [
+										"{{tenantBaseUrl}}"
+									],
+									"path": [
+										"scheduled-maintenance",
+										"sm_ittiration_checklist"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "get checklist",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{tenantBaseUrl}}\\scheduled-maintenance\\sm_ittiration_checklist",
+									"host": [
+										"{{tenantBaseUrl}}"
+									],
+									"path": [
+										"scheduled-maintenance",
+										"sm_ittiration_checklist"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "create",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"asset\":\"df7cf83c-ed44-4374-86e4-c78c97d98028\",\r\n    \"starting_at\" : \"2025-6-12\",\r\n    \"trigger_type\": \"meter_reading\",\r\n    \"trigger_at\": {\"meter_reading\": 500}\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{tenantBaseUrl}}\\scheduled-maintenance\\scheduled_maintenance",
+							"host": [
+								"{{tenantBaseUrl}}"
+							],
+							"path": [
+								"scheduled-maintenance",
+								"scheduled_maintenance"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get by id",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{tenantBaseUrl}}/scheduled-maintenance/get-info?asset_id={{id}}",
+							"host": [
+								"{{tenantBaseUrl}}"
+							],
+							"path": [
+								"scheduled-maintenance",
+								"get-info"
+							],
+							"query": [
+								{
+									"key": "asset_id",
+									"value": "{{id}}"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get all",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{tenantBaseUrl}}/scheduled-maintenance/get-info?asset=0a94a69c-ce39-4c70-b2b4-47af7b51de75",
+							"host": [
+								"{{tenantBaseUrl}}"
+							],
+							"path": [
+								"scheduled-maintenance",
+								"get-info"
+							],
+							"query": [
+								{
+									"key": "asset",
+									"value": "0a94a69c-ce39-4c70-b2b4-47af7b51de75"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Meter Readings",
+			"item": [
+				{
+					"name": "get by id",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{tenantBaseUrl}}/meter-readings/meter_reading/8306acd8-d3a2-460a-9df0-239dc2c61369",
+							"host": [
+								"{{tenantBaseUrl}}"
+							],
+							"path": [
+								"meter-readings",
+								"meter_reading",
+								"8306acd8-d3a2-460a-9df0-239dc2c61369"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "delete",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{tenantBaseUrl}}/meter-readings/meter_reading/8a5399c6-462d-4b42-8110-d0636f2414cd",
+							"host": [
+								"{{tenantBaseUrl}}"
+							],
+							"path": [
+								"meter-readings",
+								"meter_reading",
+								"8a5399c6-462d-4b42-8110-d0636f2414cd"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get all",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{tenantBaseUrl}}/meter-readings/meter_reading?asset=0a94a69c-ce39-4c70-b2b4-47af7b51de75",
+							"host": [
+								"{{tenantBaseUrl}}"
+							],
+							"path": [
+								"meter-readings",
+								"meter_reading"
+							],
+							"query": [
+								{
+									"key": "asset",
+									"value": "0a94a69c-ce39-4c70-b2b4-47af7b51de75"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "create",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"asset\": \"0a94a69c-ce39-4c70-b2b4-47af7b51de75\",\r\n    \"meter_reading\": 320\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{tenantBaseUrl}}/meter-readings/meter_reading",
+							"host": [
+								"{{tenantBaseUrl}}"
+							],
+							"path": [
+								"meter-readings",
+								"meter_reading"
+							],
+							"query": [
+								{
+									"key": "asset",
+									"value": "0a94a69c-ce39-4c70-b2b4-47af7b51de75",
+									"disabled": true
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Ping",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/ping",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"ping"
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{token}}",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "tenantName",
+			"value": "local",
+			"type": "string"
+		},
+		{
+			"key": "baseUrl",
+			"value": "local",
+			"type": "string"
+		},
+		{
+			"key": "tenantBaseUrl",
+			"value": "local",
+			"type": "string"
+		},
+		{
+			"key": "token",
+			"value": "local",
+			"type": "string"
+		},
+		{
+			"key": "id",
+			"value": "local",
+			"type": "string"
+		},
+		{
+			"key": "tenantName",
+			"value": "stage",
+			"type": "string",
+			"disabled": true
+		},
+		{
+			"key": "baseUrl",
+			"value": "stage",
+			"type": "string",
+			"disabled": true
+		},
+		{
+			"key": "tenantBaseUrl",
+			"value": "stage",
+			"type": "string",
+			"disabled": true
+		},
+		{
+			"key": "token",
+			"value": "stage",
+			"type": "string",
+			"disabled": true
+		},
+		{
+			"key": "tenantName",
+			"value": "prod",
+			"type": "string",
+			"disabled": true
+		},
+		{
+			"key": "baseUrl",
+			"value": "prod",
+			"type": "string",
+			"disabled": true
+		},
+		{
+			"key": "token",
+			"value": "prod",
+			"type": "string",
+			"disabled": true
+		}
+	]
+}
