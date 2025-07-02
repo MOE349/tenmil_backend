@@ -5,3 +5,11 @@ class ScheduledMaintenanceMobileSerializer(ScheduledMaintenanceBaseSerializer):
     pass
 
 
+class SmIttirationCycleMobileSerializer(SmIttirationCycleBaseSerializer):
+    pass
+
+
+class SmLogMobileSerializer(SmLogBaseSerializer):
+    pass
+
+

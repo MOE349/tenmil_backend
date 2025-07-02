@@ -8,3 +8,8 @@ class StatusChoices(TextChoices):
     CANCELLED = "cancelled", "Cancelled"
     EXPIRED = "expired", "Expired"
     IN_PROGRESS = "in progress", "In Progress"
+
+class TriggerTypeChoices(TextChoices):
+    TIME = "time", "Time"
+    METER_READING = "meter_reading", "Meter Reading"
+    EVENT = "event", "Event"

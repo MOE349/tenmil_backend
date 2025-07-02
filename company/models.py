@@ -5,19 +5,17 @@ from django.utils.translation import gettext_lazy as _
 
 class Site(BaseModel):
     name = models.CharField(_("Name"), max_length=255)
-    code = models.CharField(_("Code"), max_length=6)
+    code = models.CharField(_("Code"), max_length=6, unique=True)
 
     def __str__(self):
-        return self.name
+        return f"{self.name} ({self.code})"
 
 
 class Location(BaseModel):
     name = models.CharField(_("Name"), max_length=255)
-    site = models.ForeignKey(
-        Site, on_delete=models.CASCADE, verbose_name=_("Site"))
-    address = models.CharField(
-        _("Address"), max_length=255, null=True, blank=True)
-    slug = models.CharField(_("Slug"), max_length=255)
+    slug = models.SlugField(_("Slug"), max_length=255, unique=True)
+    address = models.CharField(_("Address"), max_length=255, blank=True, null=True)
+    site = models.ForeignKey(Site, related_name="locations", on_delete=models.CASCADE)
 
     def __str__(self):
-        return self.name
+        return f"{self.name} @ {self.site.name}"

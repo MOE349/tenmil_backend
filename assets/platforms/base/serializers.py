@@ -1,12 +1,11 @@
+from company.models import Location
 from configurations.base_features.serializers.base_serializer import BaseSerializer
 from assets.models import *
 
+from django.utils.translation import gettext_lazy as _
+from rest_framework import serializers
 
-class EquipmentBaseSerializer(BaseSerializer):
-    class Meta:
-        model = Equipment
-        fields = '__all__'
-
+class AssetBaseSerializer(BaseSerializer):
     def to_representation(self, instance):
         response = super().to_representation(instance)
         response['id'] = str(instance.id)
@@ -29,9 +28,16 @@ class EquipmentBaseSerializer(BaseSerializer):
         response['created_at'] = instance.created_at
         response['updated_at'] = instance.updated_at
         response['purchase_date'] = instance.purchase_date
+        if hasattr(instance, 'equipment'):
+            response['equipment'] = EquipmentBaseSerializer(instance.equipment).data
         return response
 
-class AttachmentBaseSerializer(BaseSerializer):
+class EquipmentBaseSerializer(AssetBaseSerializer):
+    class Meta:
+        model = Equipment
+        fields = '__all__'    
+
+class AttachmentBaseSerializer(AssetBaseSerializer):
     class Meta:
         model = Attachment
         fields = '__all__'
@@ -41,3 +47,28 @@ class EquipmentCategoryBaseSerializer(BaseSerializer):
     class Meta:
         model = EquipmentCategory
         fields = '__all__'
+
+
+class AssetMoveBaseSerializer(BaseSerializer):
+    to_location = serializers.UUIDField()
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        location_id = attrs.get("to_location")
+        location = Location.objects.filter(id=location_id).first()
+
+        if not location:
+            raise serializers.ValidationError({"to_location": _("Invalid location ID")})
+
+        attrs["to_location_obj"] = location
+        return attrs
+
+    def mod_create(self, validated_data):
+        # Should be called from the BaseApiView `create()` method
+        asset = self.context.get("asset")
+        user = self.context.get("request").user
+        to_location = validated_data["to_location_obj"]
+        notes = validated_data.get("notes", "")
+
+        from assets.services import move_asset
+        return move_asset(asset, to_location, notes=notes, user=user)

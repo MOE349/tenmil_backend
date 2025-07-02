@@ -1,3 +1,4 @@
+from configurations.base_features.exceptions.base_exceptions import LocalBaseException
 from configurations.base_features.views.base_api_view import BaseAPIView
 from work_orders.models import *
 from work_orders.platforms.base.serializers import *
@@ -7,16 +8,45 @@ class WorkOrderBaseView(BaseAPIView):
     serializer_class = WorkOrderBaseSerializer
     model_class = WorkOrder
 
+
+    def handle_post_data(self, request):        
+        data =  super().handle_post_data(request)
+        data = self.validate_post_data(data)
+        return data
+    
+    def validate_post_data(self, data):
+        opened_work_orders = WorkOrder.objects.filter(status__control__name='Active', object_id=data.get('object_id'))
+        if opened_work_orders.exists():
+            raise LocalBaseException(exception="There is an opened work order, please close it first")
+        return data
+    
     def create(self, data, params, return_instance=False, *args, **kwargs):
-        params['status'] = WorkOrderStatusNames.objects.get(name="Created")
+        if "status" not in data:
+            data['status'] = WorkOrderStatusNames.objects.get(name="Created").pk
         data['code'] =  f"WO_{WorkOrder.objects.count() + 1}"
         instance, response = super().create(data, params, return_instance=True, *args, **kwargs)
         WorkOrderLog.objects.create(work_order=instance, amount=0, log_type=WorkOrderLog.LogTypeChoices.CREATED, user=params['user'], description="Work Order Created")
         return self.format_response(data=response, status_code=201)
     
-    
+    def handle_update_data(self, request):
+        data = super().handle_update_data(request)
+        return data
+
     def update(self, data, params,  pk, partial,  *args, **kwargs):
         amount = data.pop('amount', 0)
+        status = data.pop('status', None)
+        status_instance, errors, status_code = WorkOrderStatusNames.objects.get_object_or_404(id=status, raise_exception=False)
+        status = status_instance.control.name if status_instance else ""
+        if status == "Closed":
+            if 'completion_meter_reading' not in data:
+                raise LocalBaseException(exception={"completion_meter_reading": "this field is required"})
+            
+        elif status == 'Active':
+            if 'completion_meter_reading' in data:
+                raise LocalBaseException(exception={"completion_meter_reading": "this field is not allowed"})
+            if 'starting_meter_reading' not in data:
+                raise LocalBaseException(exception={"starting_meter_reading": "this field is required"})
+
         """Update an object"""
         user_lang = params.pop('lang', 'en')
         instance = self.get_instance(pk)
@@ -26,20 +56,21 @@ class WorkOrderBaseView(BaseAPIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         response = serializer.data
-        if instance.status.control.name == "Closed":
+        if status == "Closed":
             instance.is_closed = True
+            instance.status = status_instance
             instance.save()
             WorkOrderLog.objects.create(work_order=instance, amount=amount, log_type=WorkOrderLog.LogTypeChoices.COMPLETED, user=params['user'], description="Work Order Closed")
         else:
             instance.is_closed = False
-            if instance.status.name == "Created":
-                instance.status = WorkOrderStatusNames.objects.get(name="Updated")
+            instance.status = WorkOrderStatusNames.objects.get(name="Updated")
             instance.save()
             if is_closed:
                 WorkOrderLog.objects.create(work_order=instance, amount=amount, log_type=WorkOrderLog.LogTypeChoices.REOPENED, user=params['user'], description="Work Order Reopened")                
             WorkOrderLog.objects.create(work_order=instance, amount=amount, log_type=WorkOrderLog.LogTypeChoices.UPDATED, user=params['user'], description="Work Order Updated")
         response['status'] = WorkOrderStatusNamesBaseSerializer(instance.status).data
         return self.format_response(data=response, status_code=200)
+    
 
 class WorkOrderChecklistBaseView(BaseAPIView):
     serializer_class = WorkOrderChecklistBaseSerializer
@@ -50,6 +81,12 @@ class WorkOrderLogBaseView(BaseAPIView):
     serializer_class = WorkOrderLogBaseSerializer
     model_class = WorkOrderLog
     http_method_names=['get']
+
+    def get_request_params(self, request):
+        params = super().get_request_params(request)
+        params['ordering'] = "created_at"
+        return params
+
 
 
 class WorkOrderMiscCostBaseView(BaseAPIView):

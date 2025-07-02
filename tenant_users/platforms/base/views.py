@@ -1,3 +1,4 @@
+import traceback
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -8,32 +9,37 @@ from tenant_users.auth_backend import TenantUserAuthBackend
 from rest_framework_simplejwt.tokens import RefreshToken
 from tenant_users.platforms.base.serializers import *
 from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
 
 
 
 class TenantLoginBaseView(TokenObtainPairView, BaseAPIView):
     serializer_class = TenantTokenObtainPairBaseSerializer
     permission_classes = [AllowAny]
+    authentication_classes=[]
     
     def post(self, request, *args, **kwargs):
-        email = request.data.get('email')
-        password = request.data.get('password')
-        user = TenantUserAuthBackend().authenticate(request, email=email, password=password)
+        try:
+            email = request.data.get('email')
+            password = request.data.get('password')
+            print(email, password)
+            user = TenantUserAuthBackend().authenticate(request, email=email, password=password)
 
-        if not user:
-            return Response({"detail": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
+            if not user:
+                return Response({"detail": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
 
-        refresh = RefreshToken.for_user(user)
-        response ={
-            "refresh": str(refresh),
-            "access": str(refresh.access_token),
-            "email": user.email,
-            "name": user.name,
-            "tenant_id": user.tenant_id
-        }
-        print("login response: ", response)
-        return self.format_response(response, [], 200)
+            refresh = RefreshToken.for_user(user)
+            response ={
+                "refresh": str(refresh),
+                "access": str(refresh.access_token),
+                "email": user.email,
+                "name": user.name,
+                "tenant_id": user.tenant_id
+            }
+            print("login response: ", response)
+            return self.format_response(response, [], 200)
+        except Exception as e:
+            traceback.print_exc()
+            return self.format_response({"detail": str(e)}, [], 500)
 
 class TenantRegisterBaseView(APIView):
     serializer_class = TenantRegisterBaseSerializer

@@ -1,5 +1,7 @@
 from assets.models import Equipment
-from assets.platforms.base.serializers import EquipmentBaseSerializer
+from assets.platforms.base.serializers import AssetBaseSerializer
+from assets.services import get_asset_serializer
+from configurations.base_features.db.db_helpers import get_object_by_content_type_and_id
 from configurations.base_features.serializers.base_serializer import BaseSerializer
 from core.models import WorkOrderStatusControls
 from tenant_users.platforms.base.serializers import TenantUserBaseSerializer
@@ -13,8 +15,8 @@ class WorkOrderBaseSerializer(BaseSerializer):
     
     def to_representation(self, instance):
         response = super().to_representation(instance)
-        asset = Equipment.objects.get(asset_ptr=instance.asset)
-        response['asset'] = EquipmentBaseSerializer(asset).data
+        asset = get_object_by_content_type_and_id(instance.content_type.id, instance.object_id)
+        response['asset'] = get_asset_serializer(asset).data
         response['status'] = WorkOrderStatusNamesBaseSerializer(instance.status).data
         return response
 

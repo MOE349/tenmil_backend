@@ -13,9 +13,18 @@ DEBUG = env.bool("DEBUG", True)
 # DEBUG = False
 enviroment = "STAGE_" if DEBUG else "PROD_"
 # SECURITY WARNING: don't run with debug turned on in production!
-SECRET_KEY = env(f"{enviroment}DJANGO_SECRET_KEY")
+SECRET_KEY = env(f"{enviroment}DJANGO_SECRET_KEY", default="unsafe-secret") 
 
-ALLOWED_HOSTS = ["*"]
+
+if DEBUG:
+    ALLOWED_HOSTS = ["*"]
+else:
+    ALLOWED_HOSTS = [
+        "api.alfrih.com",
+        ".alfrih.com",
+        ".vercel.app"
+    ]
+
 # ALLOWED_HOSTS = ["localhost", ".localhost", "127.0.0.1", "0.0.0.0", "alfrih.com", ".alfrih.com", '.vercel.app']
 ENVIROMENT = env(f"{enviroment}ENVIROMENT")
 
@@ -124,3 +133,17 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# LOGGING = {
+#     'version': 1,
+#     'handlers': {
+#         'console': {
+#             'class': 'logging.StreamHandler',
+#         },
+#     },
+#     'loggers': {
+#         'django.db.backends': {
+#             'level': 'DEBUG',
+#             'handlers': ['console'],
+#         },
+#     },
+# }

@@ -8,5 +8,10 @@ class EquipmentApiSerializer(EquipmentBaseSerializer):
 class AttachmentApiSerializer(AttachmentBaseSerializer):
     pass
 
+
 class EquipmentCategoryApiSerializer(EquipmentCategoryBaseSerializer):
+    pass
+
+
+class AssetMoveApiSerializer(AssetMoveBaseSerializer):
     pass

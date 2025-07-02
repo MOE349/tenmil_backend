@@ -20,6 +20,7 @@ api_urls = [
     path('financial-reports/', include('financial_reports.platforms.api.urls')),
     path('meter-readings/', include('meter_readings.platforms.api.urls')),
     path('work-orders/', include('work_orders.platforms.api.urls')),
+    path('scheduled-maintenance/', include('scheduled_maintenance.platforms.api.urls')),
     path('dashboard', DashboardApiView.as_view(), name='dashboard'),
 ]
 # dashboard_urls = [
@@ -29,6 +30,7 @@ api_urls = [
 #     path('financial-reports/', include('financial_reports.platforms.dashboard.urls')),
 #     path('meter-readings/', include('meter_readings.platforms.dashboard.urls')),
 #     path('work-orders/', include('work_orders.platforms.dashboard.urls')),
+#     path('scheduled-maintenance/', include('scheduled_maintenance.platforms.dashboard.urls')),
 # ]
 
 # mobile_urls = [
@@ -38,6 +40,7 @@ api_urls = [
 #     path('financial-reports/', include('financial_reports.platforms.mobile.urls')),
 #     path('meter-readings/', include('meter_readings.platforms.mobile.urls')),
 #     path('work-orders/', include('work_orders.platforms.mobile.urls')),
+#     path('scheduled-maintenance/', include('scheduled_maintenance.platforms.mobile.urls')),
 # ]
 v1_urlpatterns = [
     path('api/', include(api_urls)),

@@ -1,15 +1,16 @@
 from rest_framework.views import APIView
-from configurations.base_features.error_translation import ERRORS
+from assets.models import Attachment, Equipment
+from assets.services import get_assets_by_gfk, get_content_type_and_asset_id
+from configurations import settings
 from configurations.base_features.exceptions.base_exceptions import LocalBaseException
 from configurations.base_features.helpers.text_helpers import snake_to_title
-from configurations.base_features.views.auth_mixin import AuthMixin
 from configurations.base_features.views.base_exception_handler import BaseExceptionHandlerMixin
 from configurations.base_features.views.base_response import ResponseFormatterMixin
 from tenant_users.auth_backend import TenantUserAuthBackend
 from tenant_users.auth_jwt import TenantJWTAuthentication
 from tenant_users.permissions import IsTenantAuthenticated
-# from configurations.base_features.views.auth_mixin import AuthMixin
-
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.db.models import ForeignKey, ManyToManyField, QuerySet
 
 class BaseAPIView(TenantUserAuthBackend, BaseExceptionHandlerMixin, APIView, ResponseFormatterMixin):
     """
@@ -34,7 +35,7 @@ class BaseAPIView(TenantUserAuthBackend, BaseExceptionHandlerMixin, APIView, Res
     """
     model_class = None
     serializer_class = None
-    http_method_names = ["get", "post", "put", "patch", "delete"]
+    http_method_names = ["get", "post", "put", "patch", "delete", "head", "options"]
     # authentication_classes = [AuthMixin]
     permission_classes = [IsTenantAuthenticated]
     authentication_classes = [TenantJWTAuthentication]
@@ -43,10 +44,9 @@ class BaseAPIView(TenantUserAuthBackend, BaseExceptionHandlerMixin, APIView, Res
 
     def get_request_user(self, request):
         """Get the request user, if not authenticated raise BaseException"""
-        user = request.user
-        if not user.is_authenticated:
-            raise LocalBaseException(
-                exception_type="not_authenticated", status_code=401)
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            raise LocalBaseException("not_authenticated", status_code=401)
         return user
 
     def get_user_role(self, user):
@@ -68,7 +68,7 @@ class BaseAPIView(TenantUserAuthBackend, BaseExceptionHandlerMixin, APIView, Res
         # if "*" not in allowed_roles and not set(user_role) & set(allowed_roles):
         #     raise LocalBaseException(exception_type="not_authorized", status_code=401)
         # return user, user_role
-        
+
 
     def get_field_properities(self, data=None):
         """Get the field properties"""
@@ -103,6 +103,7 @@ class BaseAPIView(TenantUserAuthBackend, BaseExceptionHandlerMixin, APIView, Res
                 sorted_fields.insert(1, field)
 
         return sorted_fields
+    
     def modify_params(self, old_params):
         params = {}
         for field in old_params.keys():
@@ -122,8 +123,11 @@ class BaseAPIView(TenantUserAuthBackend, BaseExceptionHandlerMixin, APIView, Res
             q_params = params.pop("Q")
         else:
             q_params = []
-        instances = self.model_class.objects.filter(
-            *q_params, **params)
+        if hasattr(self.model_class, "asset") and "asset" in params:
+            asset_id = params.pop('asset')
+            instances = get_assets_by_gfk(self.model_class, asset_id, *q_params, **params)
+        else:
+            instances = self.model_class.objects.filter(*q_params, **params)
         if ordering:
             instances = instances.order_by(ordering)
         else:
@@ -136,7 +140,11 @@ class BaseAPIView(TenantUserAuthBackend, BaseExceptionHandlerMixin, APIView, Res
             params = {}
         if pk:
             params["id"] = pk
-        instance = self.model_class.objects.get_object_or_404(
+        if hasattr(self.model_class, "asset") and "asset" in params:
+            asset_id = params.pop('asset')
+            instance = self.get_queryset_by_gfk(asset_id, [Equipment, Attachment], **params).first()
+        else:
+            instance = self.model_class.objects.get_object_or_404(
             raise_exception=True, **params)
         return instance
 
@@ -146,16 +154,33 @@ class BaseAPIView(TenantUserAuthBackend, BaseExceptionHandlerMixin, APIView, Res
         return serializer.data
 
     def get_request_params(self, request):
-        """Get the request params"""
+        """
+        Converts query params into Django filter kwargs,
+        skipping FK, M2M, and GFK fields from being wrapped in `__icontains`.
+        """
+        model_fields = {f.name: f for f in self.model_class._meta.get_fields()}
+        gfk_field_names = {
+            f.name for f in self.model_class._meta.private_fields
+            if isinstance(f, GenericForeignKey)
+        }
+
         params = {}
-        request_params = request.query_params
-        for key in request_params.keys():
-            params[f"{key}__icontains"] = request_params.get(key)
-        bad_keys = ['_end', '_start']
-        for key in bad_keys:
-            if key in params:
-                del params[key]
-        
+        for key, value in request.query_params.items():
+            if key in ['_end', '_start']:
+                continue
+
+            field_name = key.split("__")[0]  # e.g., 'category__name' → 'category'
+            field = model_fields.get(field_name)
+
+            is_gfk = key in gfk_field_names
+            is_fk = isinstance(field, ForeignKey) if field else False
+            is_m2m = isinstance(field, ManyToManyField) if field else False
+
+            if is_fk or is_m2m or is_gfk:
+                params[key] = value
+            else:
+                params[f"{key}__icontains"] = value
+
         return params
 
     def clear_paginations_params(self, params):
@@ -181,7 +206,8 @@ class BaseAPIView(TenantUserAuthBackend, BaseExceptionHandlerMixin, APIView, Res
             if params is None:
                 params = self.get_request_params(request)
             params = self.clear_paginations_params(params)
-            print(pk)
+            if settings.DEBUG:
+                print(f"[{self.__class__.__name__}] GET pk: {pk}")
             if pk:
                 return self.retrieve(pk, params,  *args, **kwargs)
             else:
@@ -221,12 +247,11 @@ class BaseAPIView(TenantUserAuthBackend, BaseExceptionHandlerMixin, APIView, Res
     
     def handle_post_data(self, request):
         data = request.data.copy()
+        if "asset" in data:
+            asset = data.pop("asset")
+            data['content_type'], data['object_id'] = get_content_type_and_asset_id(asset)
         return data
     
-    def handle_update_data(self, request):
-        data = request.data.copy()
-        return data
-
     def post(self, request, allow_unauthenticated_user=False, *args, **kwargs):
         """
             :param allow_unauthenticated_user: Allow unauthenticated user to access this endpoint
@@ -252,6 +277,10 @@ class BaseAPIView(TenantUserAuthBackend, BaseExceptionHandlerMixin, APIView, Res
             return instance, serializer.data
         return self.format_response(data=serializer.data, status_code=201)
 
+    def handle_update_data(self, request):
+        data = request.data.copy()
+        return data
+    
     def put(self, request, pk, partial=False,  allow_unauthenticated_user=False, *args, **kwargs):
         """
             :param pk : Primary key of the object to be updated

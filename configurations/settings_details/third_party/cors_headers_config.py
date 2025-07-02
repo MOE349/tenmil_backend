@@ -1,12 +1,12 @@
-CORS_ALLOW_ALL_ORIGINS = True # If this is used then `CORS_ALLOWED_ORIGINS` will not have any effect
-CORS_ALLOW_CREDENTIALS = True
+from django.conf import settings
+
+CORS_ALLOW_ALL_ORIGINS = settings.DEBUG  # True for dev, False for prod
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
     "https://alfrih.com",
     "https://www.alfrih.com"
 ]
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost",
-    "https://alfrih.com",
-    "https://www.alfrih.com"
-]
+CORS_ALLOW_CREDENTIALS = True
+
+CSRF_TRUSTED_ORIGINS = [origin.replace("http", "https") for origin in CORS_ALLOWED_ORIGINS if "localhost" not in origin]

@@ -10,10 +10,21 @@ class Tenant(TenantMixin, BaseModel):
     auto_create_schema = True
     paid_until = models.DateField(null=True, blank=True)
     on_trial = models.BooleanField(default=True)
+    
+    def __str__(self):
+        return self.name
 
 
 class Domain(DomainMixin, BaseModel):
-    pass
+    def __str__(self):
+        return self.domain
 
 class WorkOrderStatusControls(BaseModel):
-    name = models.CharField(max_length=50)
+    key = models.SlugField(max_length=50, unique=True)  # e.g., "in_progress"
+    name = models.CharField(max_length=100)             # e.g., "In Progress"
+    color = models.CharField(max_length=20, null=True, blank=True)  # optional UI color
+    order = models.PositiveSmallIntegerField(default=0)  # display/order priority
+    
+    
+    def __str__(self):
+        return self.name
