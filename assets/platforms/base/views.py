@@ -24,7 +24,7 @@ class EquipmentCategoryBaseView(BaseAPIView):
 class AssetBaseMoveView(BaseAPIView):
     serializer_class = AssetMoveBaseSerializer
     model_class = AssetMovementLog
-    http_method_names = ["post"]
+    http_method_names = ["post", "get"]
 
     def create(self, request, *args, **kwargs):
         model = kwargs.get("model")

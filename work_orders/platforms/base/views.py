@@ -22,7 +22,7 @@ class WorkOrderBaseView(BaseAPIView):
     
     def create(self, data, params, return_instance=False, *args, **kwargs):
         if "status" not in data:
-            data['status'] = WorkOrderStatusNames.objects.get(name="Created").pk
+            data['status'] = WorkOrderStatusNames.objects.get(name="Active").pk
         data['code'] =  f"WO_{WorkOrder.objects.count() + 1}"
         instance, response = super().create(data, params, return_instance=True, *args, **kwargs)
         WorkOrderLog.objects.create(work_order=instance, amount=0, log_type=WorkOrderLog.LogTypeChoices.CREATED, user=params['user'], description="Work Order Created")
@@ -35,8 +35,11 @@ class WorkOrderBaseView(BaseAPIView):
     def update(self, data, params,  pk, partial,  *args, **kwargs):
         amount = data.pop('amount', 0)
         status = data.pop('status', None)
-        status_instance, errors, status_code = WorkOrderStatusNames.objects.get_object_or_404(id=status, raise_exception=False)
-        status = status_instance.control.name if status_instance else ""
+        if status:
+            status_instance = WorkOrderStatusNames.objects.get_object_or_404(id=status, raise_exception=True)
+        else:
+            status_instance = WorkOrderStatusNames.objects.get_object_or_404(name="Active", raise_exception=True)
+        status = status_instance.control.name if status_instance else "Active"
         if status == "Closed":
             if 'completion_meter_reading' not in data:
                 raise LocalBaseException(exception={"completion_meter_reading": "this field is required"})
@@ -44,8 +47,7 @@ class WorkOrderBaseView(BaseAPIView):
         elif status == 'Active':
             if 'completion_meter_reading' in data:
                 raise LocalBaseException(exception={"completion_meter_reading": "this field is not allowed"})
-            if 'starting_meter_reading' not in data:
-                raise LocalBaseException(exception={"starting_meter_reading": "this field is required"})
+            
 
         """Update an object"""
         user_lang = params.pop('lang', 'en')
@@ -63,7 +65,7 @@ class WorkOrderBaseView(BaseAPIView):
             WorkOrderLog.objects.create(work_order=instance, amount=amount, log_type=WorkOrderLog.LogTypeChoices.COMPLETED, user=params['user'], description="Work Order Closed")
         else:
             instance.is_closed = False
-            instance.status = WorkOrderStatusNames.objects.get(name="Updated")
+            instance.status = status_instance
             instance.save()
             if is_closed:
                 WorkOrderLog.objects.create(work_order=instance, amount=amount, log_type=WorkOrderLog.LogTypeChoices.REOPENED, user=params['user'], description="Work Order Reopened")                
@@ -102,6 +104,15 @@ class WorkOrderStatusNamesBaseView(BaseAPIView):
 class WorkOrderStatusControlsBaseView(BaseAPIView):
     serializer_class = WorkOrderStatusControlsBaseSerializer
     model_class = WorkOrderStatusControls
+
+    def destroy(self, request, pk, *args, **kwargs):
+        params = self.get_request_params(request)
+        user_lang = params.pop('lang', 'en')
+        instance = self.get_instance(pk)
+        if instance.is_system_level:
+            raise LocalBaseException(exception="System level status cannot be deleted")
+        instance.delete()
+        return self.format_response(data={}, status_code=204)
     
 
 class WorkOrderCompletionNoteBaseView(BaseAPIView):

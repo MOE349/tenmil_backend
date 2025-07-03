@@ -8,8 +8,9 @@ from django.contrib.contenttypes.models import ContentType
 
 
 class WorkOrderStatusNames(BaseModel):
-    name = models.CharField(max_length=50)
+    name = models.CharField(max_length=50, unique=True)
     control = models.ForeignKey("core.WorkOrderStatusControls", on_delete=models.CASCADE)
+    is_system_level = models.BooleanField(default=False)
 
 
 class WorkOrder(BaseModel):
@@ -17,12 +18,12 @@ class WorkOrder(BaseModel):
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     object_id = models.UUIDField()
     asset = GenericForeignKey("content_type", "object_id")
-    status = models.ForeignKey(WorkOrderStatusNames, on_delete=models.CASCADE)
-    maint_type = models.CharField(max_length=50)
-    priority = models.CharField(max_length=50)
+    status = models.ForeignKey(WorkOrderStatusNames, on_delete=models.PROTECT)
+    maint_type = models.CharField(max_length=50,null=True, blank=True)
+    priority = models.CharField(max_length=50,null=True, blank=True)
     suggested_start_date = models.DateField(null=True, blank=True)
     completion_end_date = models.DateField(null=True, blank=True)
-    description = models.TextField()
+    description = models.TextField(null=True, blank=True)
     is_closed = models.BooleanField(default=False)
     completion_meter_reading = models.IntegerField(null=True, blank=True)
     ittiration_cycle = models.ForeignKey('scheduled_maintenance.SmIttirationCycle', on_delete=models.CASCADE, null=True, blank=True)

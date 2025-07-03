@@ -105,16 +105,3 @@ class AssetMovementLog(BaseModel):
         return f"{self.asset} moved to {self.to_location} @ {self.timestamp}"
 
 
-class AttachmentCompatibility(BaseModel):
-    equipment_category = models.ForeignKey(
-        EquipmentCategory, on_delete=models.CASCADE, related_name="compatible_attachments"
-    )
-    attachment_category = models.ForeignKey(
-        AttachmentCategory, on_delete=models.CASCADE, related_name="compatible_equipments"
-    )
-
-    class Meta:
-        unique_together = ("equipment_category", "attachment_category")
-
-    def __str__(self):
-        return f"{self.attachment_category} ⇄ {self.equipment_category}"

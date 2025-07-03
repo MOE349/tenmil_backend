@@ -1,8 +1,10 @@
 from configurations.base_features.views.base_api_view import BaseAPIView
-from meter_readings.helpers import get_old_meter_reading
+from meter_readings.helpers import get_old_meter_reading, get_previous_meter_reading
 from meter_readings.models import *
 from meter_readings.platforms.base.serializers import *
 from configurations.base_features.exceptions.base_exceptions import LocalBaseException
+from django.utils import timezone
+from datetime import timedelta
 
 class MeterReadingBaseView(BaseAPIView):
     serializer_class = MeterReadingBaseSerializer
@@ -11,10 +13,16 @@ class MeterReadingBaseView(BaseAPIView):
     def validate_data(self, data):
         asset_id = data.get('object_id')
         reading = float(data.get('meter_reading'))
-        old_meter_reading = get_old_meter_reading(asset_id)
-        
+        previous_instance = get_previous_meter_reading(asset_id)
+        old_meter_reading = previous_instance.meter_reading if previous_instance else 0
+        last_meter_reading_date = previous_instance.created_at if previous_instance else None
+
         if old_meter_reading >= reading:
             raise LocalBaseException(exception='old meter reading cannot be greater than new meter reading', status_code=400)
+        
+        if last_meter_reading_date and (last_meter_reading_date + timedelta(hours=reading - old_meter_reading)) >= timezone.now():            
+            raise LocalBaseException(exception='Hours entered exceeds limit', status_code=400)
+        
         data['old_meter_reading'] = old_meter_reading
         return data
     

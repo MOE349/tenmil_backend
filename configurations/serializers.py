@@ -17,7 +17,6 @@ class DashboardApiSerializer(Serializer):
                 wo.save()
                 number += 1
         top_assets = list(equipments[:5]) + list(attachments[:5])
-        print("top assets", top_assets)
         utilization = [ 60, 15, 80, 25, 90]
         top_assets_utilization =  []
         for asset, util in zip(equipments[:5], utilization):
