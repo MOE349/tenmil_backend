@@ -7,7 +7,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
     "https://alfrih.com",
     "https://*.alfrih.com",
-    "https://preview--groovy-new-beginnings-flow.lovable.app/assets"
+    "https://preview--groovy-new-beginnings-flow.lovable.app"
 ]
 CORS_ALLOW_CREDENTIALS = True
 
