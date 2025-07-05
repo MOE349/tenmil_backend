@@ -53,6 +53,12 @@ class EquipmentCategoryBaseSerializer(BaseSerializer):
         fields = '__all__'
 
 
+class AttachmentCategoryBaseSerializer(BaseSerializer):
+    class Meta:
+        model = AttachmentCategory
+        fields = '__all__'
+
+
 class AssetMoveBaseSerializer(BaseSerializer):
     to_location = serializers.UUIDField()
     notes = serializers.CharField(required=False, allow_blank=True)

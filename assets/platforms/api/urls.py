@@ -10,5 +10,7 @@ urlpatterns = [
     path('attachments/<str:pk>', AttachmentApiView.as_view(), name='Attachment'),
     path('equipment_category', EquipmentCategoryApiView.as_view(), name="Equipment Category"),
     path('equipment_category/<str:pk>', EquipmentCategoryApiView.as_view(), name="Equipment Category"),
+    path('attachment_category', AttachmentCategoryApiView.as_view(), name="Attachment Category"),
+    path('attachment_category/<str:pk>', AttachmentCategoryApiView.as_view(), name="Attachment Category"),
 
 ]

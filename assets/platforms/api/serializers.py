@@ -13,5 +13,9 @@ class EquipmentCategoryApiSerializer(EquipmentCategoryBaseSerializer):
     pass
 
 
+class AttachmentCategoryApiSerializer(AttachmentCategoryBaseSerializer):
+    pass
+
+
 class AssetMoveApiSerializer(AssetMoveBaseSerializer):
     pass
