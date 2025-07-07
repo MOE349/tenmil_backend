@@ -7,6 +7,8 @@ enviroment = "STAGE_" if settings.DEBUG else "PROD_"
 import os
 import dj_database_url
 
+
+CONN_HEALTH_CHECKS = True
 DATABASES = {
     'default': dj_database_url.config(
         default=os.getenv("DATABASE_URL"),  # safe default if running locally
