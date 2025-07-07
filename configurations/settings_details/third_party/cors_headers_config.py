@@ -6,8 +6,11 @@ CORS_ALLOWED_ORIGINS = [
     "http://*.localhost:3000",
     "http://127.0.0.1:3000",
     "https://alfrih.com",
-    "https://*.alfrih.com",
-    "https://preview--groovy-new-beginnings-flow.lovable.app"
+    "https://lovable.app"
+]
+CORS_ORIGIN_REGEX_WHITELIST = [
+    r"^https:\/\/([a-zA-Z0-9_-]+\.)*alfrih\.com$",  # matches any subdomain like *.alfrih.com
+    r"^https:\/\/([a-zA-Z0-9_-]+\.)*lovable\.app$",  # matches any subdomain like *.alfrih.com
 ]
 CORS_ALLOW_CREDENTIALS = True
 
