@@ -18,7 +18,7 @@ class ScheduledMaintenance(BaseModel):
     object_id = models.UUIDField()
     asset = GenericForeignKey("content_type", "object_id")
     trigger_type = models.CharField(max_length=50, choices=TriggerTypeChoices.choices, default=TriggerTypeChoices.METER_READING)
-    trigger_at = models.JSONField(default=dict({"meter_reading": 500}))
+    trigger_at = models.JSONField(default=dict)
     starting_at = models.DateField()
 
 

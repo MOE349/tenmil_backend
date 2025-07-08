@@ -13,7 +13,7 @@ class BaseCronJobModel(BaseModel):
 
     trigger_type = models.CharField(
         max_length=255, choices=TRIGGER_TYPE_CHOICES)
-    trigger_args = models.JSONField()
+    trigger_args = models.JSONField(default=dict)
     is_active = models.BooleanField(default=True)
 
     class Meta:
