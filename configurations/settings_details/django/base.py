@@ -26,7 +26,7 @@ else:
     ]
 
 # ALLOWED_HOSTS = ["localhost", ".localhost", "127.0.0.1", "0.0.0.0", "alfrih.com", ".alfrih.com", '.vercel.app']
-ENVIROMENT = env(f"{enviroment}ENVIROMENT")
+# ENVIROMENT = env(f"{enviroment}ENVIROMENT")
 
 AUTH_USER_MODEL = 'admin_users.AdminUser'
 
