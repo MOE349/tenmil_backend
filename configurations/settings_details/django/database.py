@@ -1,24 +1,33 @@
 from configurations.settings_details.env import env
 from django.conf import settings
-import dj_database_url
 
 enviroment = "STAGE_" if settings.DEBUG else "PROD_"
 # Database
 import os
-import dj_database_url
+# import dj_database_url
 
 
 CONN_HEALTH_CHECKS = True
 DATABASES = {
-    'default': dj_database_url.config(
-        default=os.getenv("DATABASE_URL"),  # safe default if running locally
-        conn_max_age=600,
-        ssl_require=True
-    )
+    'default': {
+        'ENGINE': "django_tenants.postgresql_backend",
+        'NAME': env('POSTGRES_DB'),
+        'USER': env('POSTGRES_USER'),
+        'PASSWORD': env('POSTGRES_PASSWORD'),
+        'HOST': env('POSTGRES_HOST', "db"),
+        'PORT': env('POSTGRES_PORT', 5432),
+    }
 }
+# DATABASES = {
+#     'default': dj_database_url.config(
+#         default=os.getenv("DATABASE_URL"),  # safe default if running locally
+#         conn_max_age=600,
+#         ssl_require=True
+#     )
+# }
 
-# Required for django-tenants to work
-DATABASES['default']['ENGINE'] = 'django_tenants.postgresql_backend'
+# # Required for django-tenants to work
+# DATABASES['default']['ENGINE'] = 'django_tenants.postgresql_backend'
 
     # 'default': {
     #     'ENGINE': env(f"{enviroment}DATABASE_ENGINE"),
