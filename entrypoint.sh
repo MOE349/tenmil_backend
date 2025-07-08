@@ -15,5 +15,5 @@ python3 manage.py migrate --noinput
 echo "collect statics"
 python3 manage.py collectstatic --noinput
 
-echo "Starting Gunicorn..."
-exec gunicorn configurations.wsgi:application --bind 0.0.0.0:8000
+echo "Starting Server..."
+exec python manage.py runserver 0.0.0.0:8000
