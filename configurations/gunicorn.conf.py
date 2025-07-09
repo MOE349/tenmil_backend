@@ -21,5 +21,6 @@ def when_ready(server):
     django.setup()
 
     print("[Gunicorn] Running system_start_checks()")
-    from configurations.system_start_checks import system_start_checks
+    from configurations.system_start_checks import system_start_checks, Tenant
     system_start_checks()
+    print(f"tenants count = {Tenant.objects.count()}")
