@@ -3,6 +3,9 @@ FROM python:3.11-slim
 # Set working dir
 WORKDIR /app
 
+# django setting module
+ENV DJANGO_SETTINGS_MODULE=configurations.settings
+
 # Install deps
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
