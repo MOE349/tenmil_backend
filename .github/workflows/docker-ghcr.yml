@@ -42,11 +42,19 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ca-central-1
 
+      - name: Render task definition
+        id: render-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ecs/task-def.json
+          container-name: tenmil-backend
+          image: ghcr.io/${{ github.repository_owner }}/tenmil-backend:latest
+
       - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
           cluster: tenmil-cluster
           service: tenmil-backend-service
-          task-definition-family: tenmil-backend-task
-          force-new-deployment: true
+          task-definition: ${{ steps.render-task-def.outputs.task-definition }}
+
 
