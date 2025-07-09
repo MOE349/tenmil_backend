@@ -25,9 +25,10 @@ if DEBUG:
 else:
     ALLOWED_HOSTS = [
         "api.alfrih.com",
+        ".api.alfrih.com",
+        "alfrih.com",
         ".alfrih.com",
         ".vercel.app",
-        "alfrih.com",
         ".lovaple.app",
     ]
 
