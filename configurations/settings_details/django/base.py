@@ -26,7 +26,9 @@ else:
     ALLOWED_HOSTS = [
         "api.alfrih.com",
         ".alfrih.com",
-        ".vercel.app"
+        ".vercel.app",
+        "alfrih.com",
+        ".lovaple.app",
     ]
 
 # ALLOWED_HOSTS = ["localhost", ".localhost", "127.0.0.1", "0.0.0.0", "alfrih.com", ".alfrih.com", '.vercel.app']
