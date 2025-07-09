@@ -1,8 +1,8 @@
 from django.db import connection
-from django_tenants.models import Domain
-from django_tenants.models import TenantMixin
 from django.http import HttpResponse
 import logging
+
+from core.models import Domain, TenantMixin
 
 logger = logging.getLogger("django")
 
