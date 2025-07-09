@@ -27,8 +27,8 @@ class SubdomainTenantMiddleware(MiddlewareMixin):
         if host == settings.BASE_DOMAIN:
             logger.error("Admin subdomain found in request")
             # api.alfrih.com → public schema
-            request.tenant = Tenant.objects.get(schema_name="public")
-            
+            tenant = Tenant.objects.get(schema_name="public")
+            request.tenant = tenant
             logger.error(f"schema {tenant.schema_name}")
             request.schema_name = tenant.schema_name
             connection.set_tenant(tenant)
