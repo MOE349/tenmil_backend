@@ -11,7 +11,8 @@ from configurations.settings_details.django.installed_apps import (
 TENANT_MODEL = "core.Client" # app.Model
 TENANT_DOMAIN_MODEL = "core.Domain"  # app.Model
 DATABASE_ROUTERS = ['django_tenants.routers.TenantSyncRouter']
-PUBLIC_SCHEMA_URLCONF = "configurations.urls"
+PUBLIC_SCHEMA_URLCONF = 'core.urls'
+TENANT_URLCONF  = "configurations.urls"
 
 DEBUG = env.bool("DEBUG", True)
 # DEBUG = False
