@@ -7,14 +7,16 @@ from configurations.settings_details.django.installed_apps import (
     TENANT_APPS,
     
 )
+# Import BASE_DOMAIN
+from configurations.settings_details.django.project_data import BASE_DOMAIN
 
-TENANT_MODEL = "core.Client" # app.Model
+TENANT_MODEL = "core.Tenant" # app.Model
 TENANT_DOMAIN_MODEL = "core.Domain"  # app.Model
 DATABASE_ROUTERS = ['django_tenants.routers.TenantSyncRouter']
 PUBLIC_SCHEMA_URLCONF = 'core.urls'
 TENANT_URLCONF  = "configurations.urls"
 
-DEBUG = env.bool("DEBUG", True)
+DEBUG = env.bool("DEBUG")
 # DEBUG = False
 enviroment = "STAGE_" if DEBUG else "PROD_"
 # SECURITY WARNING: don't run with debug turned on in production!
@@ -53,9 +55,9 @@ INSTALLED_APPS = [
 
 
 MIDDLEWARE = [
+    'django_tenants.middleware.main.TenantMainMiddleware',  # Move this to the top
     'configurations.base_features.middlewares.subdomain_middleware.SubdomainTenantMiddleware',
     "corsheaders.middleware.CorsMiddleware",
-    'django_tenants.middleware.main.TenantMainMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',

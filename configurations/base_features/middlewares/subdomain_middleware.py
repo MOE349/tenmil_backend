@@ -1,34 +1,56 @@
-from django.db import connection
-from django.http import HttpResponse
-import logging
 from django.conf import settings
-
-from core.models import Domain, TenantMixin
+from django.utils.deprecation import MiddlewareMixin
+from django.http import HttpResponse
+from core.models import Tenant
+import logging
 
 logger = logging.getLogger("django")
 
-class SubdomainTenantMiddleware:
-    def __init__(self, get_response):
-        self.get_response = get_response
+class SubdomainTenantMiddleware(MiddlewareMixin):
+    """
+    Middleware that extracts the tenant from the request's subdomain.
+    Sets:
+      - request.tenant
+      - request.schema_name
+      - request.is_admin_subdomain
+      - request.tenant_features (optional future use)
+    
+    Let django-tenants handle the schema switching automatically.
+    """
 
-    def __call__(self, request):
+    def process_request(self, request):
         host = request.get_host().split(":")[0]
-        print("Host:", host)
+        subdomain = host.split(".")[0]
+
+        # Determine if admin or main/base domain
+        request.is_admin_subdomain = (
+            host == settings.BASE_DOMAIN or host.endswith(f".{settings.BASE_DOMAIN}")
+        )
+
+        if request.is_admin_subdomain:
+            request.tenant = None
+            request.schema_name = "public"
+            return
 
         try:
-            domain_name = host.split(".")[0]
-            if domain_name == "api":
-                domain = Domain.objects.select_related("tenant").get(domain=settings.BASE_DOMAIN)
-            else:
-                domain = Domain.objects.select_related("tenant").get(domain=domain_name)
-            tenant = domain.tenant
-            print("Resolved tenant:", tenant, "schema:", tenant.schema_name)
-            print("Is instance of TenantMixin:", isinstance(tenant, TenantMixin))
-            
-            connection.set_tenant(tenant)
-            print("Set tenant:", getattr(connection, "tenant", "Not set"))
-        except Domain.DoesNotExist:
-            connection.set_schema_to_public()
-            return HttpResponse("Tenant not found", status=404)
+            tenant = Tenant.objects.get(schema_name=subdomain)
+            request.tenant = tenant
+            request.schema_name = tenant.schema_name
 
-        return self.get_response(request)
+            # Let django-tenants handle the schema switching
+            # Remove manual connection.set_schema(tenant) call
+
+            # Optional: preload tenant feature flags or limits
+            request.tenant_features = {
+                "enable_reports": True,
+                "max_users": 10,
+                # optionally fetch from DB later
+            }
+
+        except Tenant.DoesNotExist:
+            logger.warning(f"[MultiTenancy] Invalid subdomain: '{subdomain}' from host '{host}'")
+            return HttpResponse("Invalid tenant subdomain.", status=404)
+
+        except Exception as e:
+            logger.exception(f"[MultiTenancy] Tenant resolution error for host '{host}': {str(e)}")
+            return HttpResponse("Internal server error.", status=500)
