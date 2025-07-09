@@ -1,50 +1,39 @@
-from django.conf import settings
-from django.utils.deprecation import MiddlewareMixin
 from django.http import HttpResponse
-from core.models import Tenant
 from django.db import connection
+from django_tenants.models import Domain
 import logging
 
 logger = logging.getLogger("django")
 
-class SubdomainTenantMiddleware(MiddlewareMixin):
-    """
-    Middleware that extracts the tenant from the request's subdomain.
-    Sets:
-      - request.tenant
-      - request.schema_name
-      - request.is_admin_subdomain
-      - request.tenant_features (optional future use)
+class SubdomainTenantMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
 
-    Also applies schema switching (if not handled by django-tenants).
-    """
+    def __call__(self, request):
+        host = request.get_host().split(":")[0]  # strip port if any
 
-    def process_request(self, request):
-        host = request.get_host().split(":")[0]
-        subdomain_parts = host.replace(settings.BASE_DOMAIN, "").rstrip(".").split(".")
-        
-        if host == settings.BASE_DOMAIN:
-            # api.alfrih.com → public schema
+        PUBLIC_DOMAINS = ["api.alfrih.com"]
+
+        if host in PUBLIC_DOMAINS:
+            # Treat as shared/public tenant
             request.tenant = None
             request.schema_name = "public"
             connection.set_schema_to_public()
-            return
+            logger.info(f"[MultiTenancy] '{host}' using public schema")
+            return self.get_response(request)
 
-        if host.endswith(f".{settings.BASE_DOMAIN}"):
-            # e.g. client1.api.alfrih.com → subdomain = "client1"
-            subdomain = subdomain_parts[0]
+        try:
+            domain = Domain.objects.select_related("tenant").get(domain=host)
+            tenant = domain.tenant
+            connection.set_tenant(tenant)
+            request.tenant = tenant
+            request.schema_name = tenant.schema_name
+            logger.info(f"[MultiTenancy] '{host}' resolved to tenant '{tenant.schema_name}'")
+        except Domain.DoesNotExist:
+            logger.warning(f"[MultiTenancy] No tenant found for host '{host}'")
+            connection.set_schema_to_public()
+            request.tenant = None
+            request.schema_name = "public"
+            return HttpResponse("Tenant not found", status=404)
 
-            try:
-                tenant = Tenant.objects.get(schema_name=subdomain)
-                request.tenant = tenant
-                request.schema_name = tenant.schema_name
-                connection.set_tenant(tenant)
-                return
-            except Tenant.DoesNotExist:
-                logger.warning(f"[MultiTenancy] Invalid subdomain: '{subdomain}' from host '{host}'")
-                return HttpResponse("Invalid tenant subdomain.", status=404)
-
-        # fallback
-        connection.set_schema_to_public()
-        request.tenant = None
-        request.schema_name = "public"
+        return self.get_response(request)
