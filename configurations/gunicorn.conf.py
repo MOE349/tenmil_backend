@@ -17,7 +17,7 @@ def when_ready(server):
     from django.conf import settings
 
     print("[Gunicorn] Initializing Django...")
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.prod")  # adjust this!
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'configurations.settings')
     django.setup()
 
     print("[Gunicorn] Running system_start_checks()")
