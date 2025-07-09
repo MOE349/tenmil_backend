@@ -1,6 +1,7 @@
 from django.db import connection
 from django.http import HttpResponse
 import logging
+from django.conf import settings
 
 from core.models import Domain, TenantMixin
 
@@ -16,7 +17,10 @@ class SubdomainTenantMiddleware:
 
         try:
             domain_name = host.split(".")[0]
-            domain = Domain.objects.select_related("tenant").get(domain=domain_name)
+            if domain_name == "api":
+                domain = Domain.objects.select_related("tenant").get(domain=settings.BASE_DOMAIN)
+            else:
+                domain = Domain.objects.select_related("tenant").get(domain=domain_name)
             tenant = domain.tenant
             print("Resolved tenant:", tenant, "schema:", tenant.schema_name)
             print("Is instance of TenantMixin:", isinstance(tenant, TenantMixin))
