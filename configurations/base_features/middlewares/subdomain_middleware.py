@@ -31,8 +31,16 @@ class SubdomainTenantMiddleware(MiddlewareMixin):
             request.tenant = tenant
             logger.error(f"schema {tenant.schema_name}")
             request.schema_name = tenant.schema_name
-            connection.set_tenant(tenant)
+            connection.set_tenant(tenant)   # REQUIRED!
             connection.set_schema_to_public()
+            # Get current schema name (always works)
+            current_schema = connection.schema_name
+
+            # Get current tenant object (only available if set via set_tenant)
+            current_tenant = getattr(connection, "tenant", None)
+
+            print("Current schema:", current_schema)
+            print("Current tenant:", current_tenant)
             return
 
         if host.endswith(f".{settings.BASE_DOMAIN}"):
@@ -45,8 +53,16 @@ class SubdomainTenantMiddleware(MiddlewareMixin):
                 logger.error(f"schema {tenant.schema_name}")
                 request.tenant = tenant
                 request.schema_name = tenant.schema_name
-                connection.set_tenant(tenant)
+                connection.set_tenant(tenant)   # REQUIRED!
                 connection.set_schema(tenant.schema_name)
+                # Get current schema name (always works)
+                current_schema = connection.schema_name
+
+                # Get current tenant object (only available if set via set_tenant)
+                current_tenant = getattr(connection, "tenant", None)
+
+                print("Current schema:", current_schema)
+                print("Current tenant:", current_tenant)
                 return
             except Tenant.DoesNotExist:
                 logger.warning(f"[MultiTenancy] Invalid subdomain: '{subdomain}' from host '{host}'")
