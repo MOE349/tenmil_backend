@@ -48,6 +48,3 @@ DATABASES = {
 #         'PORT': "5433",
 #     }
 # }
-DATABASE_ROUTERS = ['django_tenants.routers.TenantSyncRouter']
-
-PUBLIC_SCHEMA_URLCONF = "configurations.urls"
