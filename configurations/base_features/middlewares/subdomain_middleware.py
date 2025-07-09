@@ -78,10 +78,8 @@ class SubdomainTenantMiddleware(MiddlewareMixin):
         Returns:
             True if admin subdomain, False otherwise
         """
-        return (
-            host == settings.BASE_DOMAIN or 
-            host.endswith(f".{settings.BASE_DOMAIN}")
-        )
+        # Only the exact BASE_DOMAIN is admin, not subdomains of it
+        return host == settings.BASE_DOMAIN
     
     def _get_tenant_features(self, tenant: Tenant) -> Dict[str, Any]:
         """
