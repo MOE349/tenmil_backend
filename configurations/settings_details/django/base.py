@@ -13,7 +13,7 @@ DEBUG = env.bool("DEBUG", True)
 # DEBUG = False
 enviroment = "STAGE_" if DEBUG else "PROD_"
 # SECURITY WARNING: don't run with debug turned on in production!
-SECRET_KEY = env(f"{enviroment}DJANGO_SECRET_KEY", default="unsafe-secret") 
+SECRET_KEY = env('DJANGO_SECRET_KEY')
 
 
 if DEBUG:
