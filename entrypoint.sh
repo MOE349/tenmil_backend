@@ -16,5 +16,7 @@ echo "collect statics"
 python3 manage.py collectstatic --noinput
 
 echo "Starting Server..."
+export DJANGO_SETTINGS_MODULE=configurations.settings
+export DJANGO_CONFIGURATION=Production  # or Dev, Staging, etc.
 exec gunicorn configurations.wsgi:application --bind 0.0.0.0:8000
 
