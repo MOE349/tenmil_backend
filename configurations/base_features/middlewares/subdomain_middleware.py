@@ -48,7 +48,7 @@ class SubdomainTenantMiddleware(MiddlewareMixin):
                 "max_users": 10,
                 # optionally fetch from DB later
             }
-
+            print(f"Tenant found: {tenant.name} on subdomain{subdomain}")
         except Tenant.DoesNotExist:
             logger.warning(f"[MultiTenancy] Invalid subdomain: '{subdomain}' from host '{host}'")
             return HttpResponse("Invalid tenant subdomain.", status=404)
