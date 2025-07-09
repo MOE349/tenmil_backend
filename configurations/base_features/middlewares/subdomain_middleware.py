@@ -21,38 +21,34 @@ class SubdomainTenantMiddleware(MiddlewareMixin):
 
     def process_request(self, request):
         host = request.get_host().split(":")[0]
-        subdomain = host.split(".")[0]
-
-        # Determine if admin or main/base domain
-        request.is_admin_subdomain = (
-            host == settings.BASE_DOMAIN or host.endswith(f".{settings.BASE_DOMAIN}")
-        )
-
-        if request.is_admin_subdomain:
+        subdomain_parts = host.replace(settings.BASE_DOMAIN, "").rstrip(".").split(".")
+        
+        logger.error(f"is {host} base domain = {host == settings.BASE_DOMAIN}")
+        if host == settings.BASE_DOMAIN:
+            logger.error("Admin subdomain found in request")
+            # api.alfrih.com → public schema
             request.tenant = None
             request.schema_name = "public"
             connection.set_schema_to_public()
             return
 
-        try:
-            tenant = Tenant.objects.get(schema_name=subdomain)
-            request.tenant = tenant
-            request.schema_name = tenant.schema_name
+        if host.endswith(f".{settings.BASE_DOMAIN}"):
+            logger.error("Tenant subdomain found in request")
+            # e.g. client1.api.alfrih.com → subdomain = "client1"
+            subdomain = subdomain_parts[0]
 
-            # Optional: apply schema manually if you're not using django-tenants middleware
-            connection.set_schema(tenant)
+            try:
+                tenant = Tenant.objects.get(schema_name=subdomain)
+                request.tenant = tenant
+                request.schema_name = tenant.schema_name
+                connection.set_tenant(tenant)
+                connection.set_schema(tenant.schema_name)
+                return
+            except Tenant.DoesNotExist:
+                logger.warning(f"[MultiTenancy] Invalid subdomain: '{subdomain}' from host '{host}'")
+                return HttpResponse("Invalid tenant subdomain.", status=404)
 
-            # Optional: preload tenant feature flags or limits
-            request.tenant_features = {
-                "enable_reports": True,
-                "max_users": 10,
-                # optionally fetch from DB later
-            }
-
-        except Tenant.DoesNotExist:
-            logger.warning(f"[MultiTenancy] Invalid subdomain: '{subdomain}' from host '{host}'")
-            return HttpResponse("Invalid tenant subdomain.", status=404)
-
-        except Exception as e:
-            logger.exception(f"[MultiTenancy] Tenant resolution error for host '{host}': {str(e)}")
-            return HttpResponse("Internal server error.", status=500)
+        # fallback
+        connection.set_schema_to_public()
+        request.tenant = None
+        request.schema_name = "public"
