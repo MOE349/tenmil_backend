@@ -19,6 +19,6 @@ echo "collect statics"
 python3 manage.py collectstatic --noinput
 
 echo "Starting Server..."
-exec python3 manage.py runserver 0.0.0.0:8000
-# exec gunicorn configurations.wsgi:application -c configurations/gunicorn.conf.py
+# exec python3 manage.py runserver 0.0.0.0:8000
+exec gunicorn configurations.wsgi:application -c configurations/gunicorn.conf.py
 
