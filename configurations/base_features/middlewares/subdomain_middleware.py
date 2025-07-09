@@ -15,7 +15,8 @@ class SubdomainTenantMiddleware:
         print("Host:", host)
 
         try:
-            domain = Domain.objects.select_related("tenant").get(domain=host)
+            domain_name = host.split(".")[0]
+            domain = Domain.objects.select_related("tenant").get(domain=domain_name)
             tenant = domain.tenant
             print("Resolved tenant:", tenant, "schema:", tenant.schema_name)
             print("Is instance of TenantMixin:", isinstance(tenant, TenantMixin))
