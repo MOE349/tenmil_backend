@@ -11,8 +11,8 @@ from configurations.settings_details.third_party.tenants import *  # noqa
 from configurations.settings_details.third_party.rest_framework import *  # noqa
 
 # import base django settings
-from configurations.settings_details.django.base import *  # noqa
-from configurations.settings_details.django.database import *  # noqa
 from configurations.settings_details.django.project_data import *  # noqa
+from configurations.settings_details.django.database import *  # noqa
+from configurations.settings_details.django.base import *  # noqa
 
 
