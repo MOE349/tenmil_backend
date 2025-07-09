@@ -40,7 +40,7 @@ class SubdomainTenantMiddleware(MiddlewareMixin):
             request.schema_name = tenant.schema_name
 
             # Optional: apply schema manually if you're not using django-tenants middleware
-            connection.set_schema(tenant)
+            connection.set_tenant(tenant)
 
             # Optional: preload tenant feature flags or limits
             request.tenant_features = {
