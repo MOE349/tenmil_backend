@@ -27,8 +27,11 @@ class SubdomainTenantMiddleware(MiddlewareMixin):
         if host == settings.BASE_DOMAIN:
             logger.error("Admin subdomain found in request")
             # api.alfrih.com → public schema
-            request.tenant = None
-            request.schema_name = "public"
+            request.tenant = Tenant.objects.get(schema_name="public")
+            
+            logger.error(f"schema {tenant.schema_name}")
+            request.schema_name = tenant.schema_name
+            connection.set_tenant(tenant)
             connection.set_schema_to_public()
             return
 
@@ -39,6 +42,7 @@ class SubdomainTenantMiddleware(MiddlewareMixin):
 
             try:
                 tenant = Tenant.objects.get(schema_name=subdomain)
+                logger.error(f"schema {tenant.schema_name}")
                 request.tenant = tenant
                 request.schema_name = tenant.schema_name
                 connection.set_tenant(tenant)
