@@ -53,5 +53,5 @@ jobs:
         run: |
           aws ecs update-service \
             --cluster tenmil-cluster \
-            --service tenmil-backend-service \
+            --service tenmil-backend-task-service-gu0tn1fs \
             --force-new-deployment
