@@ -24,7 +24,7 @@ def when_ready(server):
     print("[Gunicorn] Running system_start_checks()")
     from configurations.system_start_checks import system_start_checks, Tenant
     system_start_checks()
-    print(f"tenant names: {Tenant.objects.all().values_list('name', flat=True)}")
+    print(f"tenant names: {Tenant.objects.all().values_list('schema_name', flat=True)}")
     print({
         "ping": "pong",
         "schema": connection.schema_name,
