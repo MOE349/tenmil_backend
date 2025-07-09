@@ -1,21 +1,16 @@
 from django.conf import settings
 from django.utils.deprecation import MiddlewareMixin
 from django.http import HttpResponse
-from core.models import Tenant
+from core.models import Tenant, Domain
+from django_tenants.utils import get_tenant
 import logging
 
 logger = logging.getLogger("django")
 
 class SubdomainTenantMiddleware(MiddlewareMixin):
     """
-    Middleware that extracts the tenant from the request's subdomain.
-    Sets:
-      - request.tenant
-      - request.schema_name
-      - request.is_admin_subdomain
-      - request.tenant_features (optional future use)
-    
-    Let django-tenants handle the schema switching automatically.
+    Middleware that validates tenant access and sets custom request attributes.
+    This runs AFTER django-tenants middleware has already set the tenant.
     """
 
     def process_request(self, request):
@@ -28,17 +23,27 @@ class SubdomainTenantMiddleware(MiddlewareMixin):
         )
 
         if request.is_admin_subdomain:
+            # For admin domain, ensure we're in public schema
             request.tenant = None
             request.schema_name = "public"
             return
 
+        # Get the tenant that django-tenants has already set
         try:
-            tenant = Tenant.objects.get(schema_name=subdomain)
+            tenant = get_tenant(request)
+            
+            # Check if tenant exists and validate it matches the subdomain
+            if tenant is None:
+                logger.warning(f"[MultiTenancy] No tenant found for subdomain: '{subdomain}' from host '{host}'")
+                return HttpResponse("Invalid tenant subdomain.", status=404)
+            
+            if tenant.schema_name != subdomain:
+                logger.warning(f"[MultiTenancy] Tenant mismatch: expected '{subdomain}', got '{tenant.schema_name}' from host '{host}'")
+                return HttpResponse("Invalid tenant subdomain.", status=404)
+            
+            # Set additional request attributes
             request.tenant = tenant
             request.schema_name = tenant.schema_name
-
-            # Let django-tenants handle the schema switching
-            # Remove manual connection.set_schema(tenant) call
 
             # Optional: preload tenant feature flags or limits
             request.tenant_features = {
@@ -47,10 +52,6 @@ class SubdomainTenantMiddleware(MiddlewareMixin):
                 # optionally fetch from DB later
             }
 
-        except Tenant.DoesNotExist:
-            logger.warning(f"[MultiTenancy] Invalid subdomain: '{subdomain}' from host '{host}'")
-            return HttpResponse("Invalid tenant subdomain.", status=404)
-
         except Exception as e:
-            logger.exception(f"[MultiTenancy] Tenant resolution error for host '{host}': {str(e)}")
+            logger.exception(f"[MultiTenancy] Tenant validation error for host '{host}': {str(e)}")
             return HttpResponse("Internal server error.", status=500)
