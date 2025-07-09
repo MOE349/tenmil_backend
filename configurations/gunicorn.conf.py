@@ -16,7 +16,7 @@ def when_ready(server):
     import django
     from django.conf import settings
     from django.db import connection
-    
+
     print("[Gunicorn] Initializing Django...")
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'configurations.settings')
     django.setup()
@@ -24,6 +24,7 @@ def when_ready(server):
     print("[Gunicorn] Running system_start_checks()")
     from configurations.system_start_checks import system_start_checks, Tenant
     system_start_checks()
+    print(f"tenant names: {Tenant.objects.all().values_list('name', flat=True)}")
     print({
         "ping": "pong",
         "schema": connection.schema_name,
