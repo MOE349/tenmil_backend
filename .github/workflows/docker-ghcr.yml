@@ -42,10 +42,11 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ca-central-1
 
-      - name: Force ECS Service Deployment
+      - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
           cluster: tenmil-cluster
           service: tenmil-backend-service
-          task-definition: tenmil-backend-task
+          task-definition-family: tenmil-backend-task
           force-new-deployment: true
+
