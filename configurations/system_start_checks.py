@@ -106,6 +106,6 @@ def system_start_checks():
         work_order_status_actions_check()
         ittiration_cycle_checklist()
         system_user()
-        print("system_start_checks succeed")
+        print("system_start_checks Succeed")
     except:
-        pass
+        print("system_start_checks Failed")
