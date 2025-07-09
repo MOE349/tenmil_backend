@@ -52,5 +52,5 @@ DATABASE_ROUTERS = ['django_tenants.routers.TenantSyncRouter']
 
 PUBLIC_SCHEMA_URLCONF = "configurations.urls"
 
-TENANT_MODEL = "core.Client" # app.Model
-TENANT_DOMAIN_MODEL = "core.Domain"  # app.Model
+# TENANT_MODEL = "core.Client" # app.Model
+# TENANT_DOMAIN_MODEL = "core.Domain"  # app.Model
