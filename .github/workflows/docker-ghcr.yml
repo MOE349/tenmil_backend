@@ -34,3 +34,5 @@ jobs:
           IMAGE_NAME=ghcr.io/${{ github.repository_owner }}/tenmil-backend
           IMAGE_NAME=$(echo $IMAGE_NAME | tr '[:upper:]' '[:lower:]')
           docker push $IMAGE_NAME:latest
+
+          
