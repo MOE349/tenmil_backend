@@ -28,20 +28,15 @@ class CapitalCostBaseSerializer(BaseSerializer):
         operational_cost_per_hr = operational_cost_per_year / expected_hours
         total_cost_per_hr = operational_cost_per_hr + maintnance_cost_per_hr + capital_cost_per_hr
         response['table'] = {
-            "Hi Severity Exp Hours":expected_hours,
-            "Purchase Cost": f"{purchase_cost}$",
-            "Resale Cost Low Sev": f"{instance.resale_cost}$",
-            "FINANCE YEARS": finance_years,
-            "Monthly payment":f"{round(monthly_payment, 2)}$",
-            "Interest amount":f"{ round(interst_amount, 2)}$",
-            "Interest rate": f"{interest_rate}%",
-            "Captial Work Cost": capital_work_cost,
-            "Operational Cost/ Year": f"{operational_cost_per_year}$",
-            "Yearly Hours": yearly_hours,
-            "Capital Cost/Hr": f"{round(capital_cost_per_hr, 2)}$",
-            "Maintenance Cost/Hr": f"{maintnance_cost_per_hr}$",
-            "Operational Cost/Hr":f"{ round(operational_cost_per_hr, 2)}$",
-            "Total Cost/Hr": f"{round(total_cost_per_hr, 2)}$"
+            "expected_hours":expected_hours,
+            "monthly_payment":f"{round(monthly_payment, 2)}$",
+            "interst_amount":f"{ round(interst_amount, 2)}$",
+            "operational_cost_per_year": f"{operational_cost_per_year}$",
+            "yearly_hours": yearly_hours,
+            "capital_cost_per_hr": f"{round(capital_cost_per_hr, 2)}$",
+            "maintnance_cost_per_hr": f"{maintnance_cost_per_hr}$",
+            "operational_cost_per_hr":f"{ round(operational_cost_per_hr, 2)}$",
+            "total_cost_per_hr": f"{round(total_cost_per_hr, 2)}$"
         }
 
         return response
