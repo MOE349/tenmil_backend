@@ -142,7 +142,7 @@ class BaseAPIView(TenantUserAuthBackend, BaseExceptionHandlerMixin, APIView, Res
             params["id"] = pk
         if hasattr(self.model_class, "asset") and "asset" in params:
             asset_id = params.pop('asset')
-            instance = self.get_queryset_by_gfk(asset_id, [Equipment, Attachment], **params).first()
+            instance = get_assets_by_gfk(self.model_class, asset_id, **params).first()
         else:
             instance = self.model_class.objects.get_object_or_404(
             raise_exception=True, **params)
@@ -304,8 +304,7 @@ class BaseAPIView(TenantUserAuthBackend, BaseExceptionHandlerMixin, APIView, Res
         """Update an object"""
         user_lang = params.pop('lang', 'en')
         instance = self.get_instance(pk)
-        serializer = self.serializer_class(
-            instance, data=data, partial=partial)
+        serializer = self.serializer_class(instance, data=data, partial=partial)
         serializer.is_valid(raise_exception=True)
         serializer.save()
         response = serializer.data

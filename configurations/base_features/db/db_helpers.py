@@ -29,7 +29,8 @@ def get_object_by_content_type_and_id(content_type_id: int, object_id: str) -> M
 def get_content_type_and_object_id(
     obj_or_id: Union[Model, str],
     candidate_models: list[Type[Model]],
-    return_ct_instance=False
+    return_ct_instance=False,
+    return_instance=False
 ) -> tuple[int, str]:
     """
     Given a model instance or ID, resolve its content_type ID and object ID.
@@ -50,9 +51,9 @@ def get_content_type_and_object_id(
         instance = model.objects.filter(pk=obj_or_id).first()
         if instance:
             ct = ContentType.objects.get_for_model(model)
-            if return_ct_instance:
-                return ct , str(instance.pk)
-            return ct.pk, str(instance.pk)
+            res_ct = ct if return_ct_instance else ct.pk
+            res_obj_id = instance if return_instance else instance.pk
+            return res_ct, res_obj_id
     raise LocalBaseException(exception="Invalid ID or related model")
 
 def get_objects_by_gfk(model_class: Model, id: str, related_models: list, *q_params, **params):

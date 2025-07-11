@@ -22,7 +22,8 @@ def get_assets_by_gfk(model_class, id, *q_params, **params):
 
 def get_content_type_and_asset_id(
     obj_or_id: Union[Model, str],
-    return_ct_instance=False
+    return_ct_instance=False,
+    return_instance=False
 ) -> tuple[int, str]:
     return get_content_type_and_object_id(obj_or_id, [Equipment, Attachment], return_ct_instance=return_ct_instance)
 

@@ -1,3 +1,4 @@
+from assets.services import get_content_type_and_asset_id
 from configurations.base_features.exceptions.base_exceptions import LocalBaseException
 from configurations.base_features.views.base_api_view import BaseAPIView
 from assets.models import *
@@ -18,6 +19,10 @@ class AssetBaseView(BaseAPIView):
         attachments = list(AttachmentBaseSerializer(attachments_instance, many=True).data)
         response = sorted(equipments + attachments, key=lambda x: x['created_at'], reverse=True)
         return self.format_response(data=response, status_code=200)
+
+    def get_instance(self, pk=None, params=None):
+        instance= get_content_type_and_asset_id(pk, return_ct_instance=True, return_instance=True)[1]
+        return instance
         
 
 
