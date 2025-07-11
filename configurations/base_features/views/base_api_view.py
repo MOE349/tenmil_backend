@@ -279,6 +279,9 @@ class BaseAPIView(TenantUserAuthBackend, BaseExceptionHandlerMixin, APIView, Res
 
     def handle_update_data(self, request):
         data = request.data.copy()
+        if "asset" in data:
+            asset = data.pop("asset")
+            data['content_type'], data['object_id'] = get_content_type_and_asset_id(asset)
         return data
     
     def put(self, request, pk, partial=False,  allow_unauthenticated_user=False, *args, **kwargs):
