@@ -20,10 +20,16 @@ class AssetBaseView(BaseAPIView):
         response = sorted(equipments + attachments, key=lambda x: x['created_at'], reverse=True)
         return self.format_response(data=response, status_code=200)
 
-    def get_instance(self, pk=None, params=None):
-        instance= get_content_type_and_asset_id(pk, return_ct_instance=True, return_instance=True)[1]
+    def get_instance(self, pk, params=None):
+        ct, instance= get_content_type_and_asset_id(pk, return_ct_instance=True, return_instance=True)
+        if ct == ContentType.objects.get_for_model(Equipment):
+            self.serializer_class = EquipmentBaseSerializer
+        elif ct == ContentType.objects.get_for_model(Attachment):
+            self.serializer_class = AttachmentBaseSerializer
+        else:
+            raise LocalBaseException(exception="Invalid asset type.")
         return instance
-        
+    
 
 
 class EquipmentBaseView(BaseAPIView):
