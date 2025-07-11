@@ -34,18 +34,18 @@ class WorkOrderBaseView(BaseAPIView):
 
     def update(self, data, params,  pk, partial,  *args, **kwargs):
         amount = data.pop('amount', 0)
-        status = data.pop('status', None)
+        status = data.get('status', None)
         if status:
             status_instance = WorkOrderStatusNames.objects.get_object_or_404(id=status, raise_exception=True)
         else:
             status_instance = WorkOrderStatusNames.objects.get_object_or_404(name="Active", raise_exception=True)
         status = status_instance.control.name if status_instance else "Active"
         if status == "Closed":
-            if 'completion_meter_reading' not in data:
+            if 'completion_meter_reading' not in data  and data['completion_meter_reading'] is None:
                 raise LocalBaseException(exception={"completion_meter_reading": "this field is required"})
             
         elif status == 'Active':
-            if 'completion_meter_reading' in data:
+            if 'completion_meter_reading' in data and data['completion_meter_reading'] is not None:
                 raise LocalBaseException(exception={"completion_meter_reading": "this field is not allowed"})
             
 
