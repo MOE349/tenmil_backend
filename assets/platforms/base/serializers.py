@@ -36,16 +36,27 @@ class AssetBaseSerializer(BaseSerializer):
             response['equipment'] = EquipmentBaseSerializer(instance.equipment).data
         return response
 
+
 class EquipmentBaseSerializer(AssetBaseSerializer):
     class Meta:
         model = Equipment
-        fields = '__all__'    
-        
+        fields = '__all__'
+
+    def to_representation(self, instance): 
+        response = super().to_representation(instance)
+        response['type'] = 'equipment'
+        return response
+
 
 class AttachmentBaseSerializer(AssetBaseSerializer):
     class Meta:
         model = Attachment
         fields = '__all__'
+
+    def to_representation(self, instance): 
+        response = super().to_representation(instance)
+        response['type'] = 'attachment'
+        return response
 
 
 class EquipmentCategoryBaseSerializer(BaseSerializer):
