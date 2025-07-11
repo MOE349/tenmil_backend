@@ -13,9 +13,9 @@ class AssetBaseView(BaseAPIView):
 
     def list(self, request, *args, **kwargs):
         equipments_instance = Equipment.objects.all()
-        equipments = list(self.serializer_class(equipments_instance, many=True).data)
+        equipments = list(EquipmentBaseSerializer(equipments_instance, many=True).data)
         attachments_instance = Attachment.objects.all()
-        attachments = list(self.serializer_class(attachments_instance, many=True).data)
+        attachments = list(AttachmentBaseSerializer(attachments_instance, many=True).data)
         response = sorted(equipments + attachments, key=lambda x: x['created_at'], reverse=True)
         return self.format_response(data=response, status_code=200)
         
