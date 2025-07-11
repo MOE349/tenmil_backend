@@ -14,6 +14,7 @@ from django.conf import settings
 
 
 api_urls = [
+    path('dashboard', DashboardApiView.as_view(), name='dashboard'),
     path('users/', include('tenant_users.platforms.api.urls')),
     path('company/', include('company.platforms.api.urls')),
     path('assets/', include('assets.platforms.api.urls')),
@@ -21,7 +22,7 @@ api_urls = [
     path('meter-readings/', include('meter_readings.platforms.api.urls')),
     path('work-orders/', include('work_orders.platforms.api.urls')),
     path('scheduled-maintenance/', include('scheduled_maintenance.platforms.api.urls')),
-    path('dashboard', DashboardApiView.as_view(), name='dashboard'),
+    path('fault-codes/', include('fault_codes.platforms.api.urls')),
 ]
 # dashboard_urls = [
 #     # path('users/', include('users.platforms.dashboard.urls')),

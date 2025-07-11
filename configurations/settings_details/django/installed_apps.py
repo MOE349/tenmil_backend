@@ -28,4 +28,5 @@ TENANT_APPS = [
     'meter_readings.apps.MeterReadingsConfig',
     'work_orders.apps.WorkOrdersConfig',
     "scheduled_maintenance.apps.ScheduledMaintenanceConfig",
+    "fault_codes.apps.FaultCodesConfig",
 ]
