@@ -109,14 +109,14 @@ class SubdomainTenantMiddleware(MiddlewareMixin):
             request: Django request object
             host: Full host string
         """
-        request.is_admin_subdomain = True
-        request.tenant = None
-        request.schema_name = "public"
-        request.tenant_features = {
+        setattr(request, 'is_admin_subdomain', True)
+        setattr(request, 'tenant', None)
+        setattr(request, 'schema_name', "public")
+        setattr(request, 'tenant_features', {
             "is_admin": True,
             "enable_reports": True,
             "max_users": 1000,  # Higher limits for admin
-        }
+        })
         
         logger.debug(f"Admin subdomain detected: {host}")
     
@@ -140,7 +140,7 @@ class SubdomainTenantMiddleware(MiddlewareMixin):
             if tenant is None:
                 logger.warning(f"No tenant found for subdomain: '{subdomain}' from host '{host}'")
                 return HttpResponse(
-                    "Invalid tenant subdomain.", 
+                    b"Invalid tenant subdomain.", 
                     status=404,
                     content_type="text/plain"
                 )
@@ -152,16 +152,16 @@ class SubdomainTenantMiddleware(MiddlewareMixin):
                     f"from host '{host}'"
                 )
                 return HttpResponse(
-                    "Invalid tenant subdomain.", 
+                    b"Invalid tenant subdomain.", 
                     status=404,
                     content_type="text/plain"
                 )
             
             # Set request attributes
-            request.tenant = tenant
-            request.schema_name = tenant.schema_name
-            request.is_admin_subdomain = False
-            request.tenant_features = self._get_tenant_features(tenant)
+            setattr(request, 'tenant', tenant)
+            setattr(request, 'schema_name', tenant.schema_name)
+            setattr(request, 'is_admin_subdomain', False)
+            setattr(request, 'tenant_features', self._get_tenant_features(tenant))
             
             logger.debug(f"Tenant validated: {tenant.schema_name} for host: {host}")
             return None
@@ -169,7 +169,7 @@ class SubdomainTenantMiddleware(MiddlewareMixin):
         except Exception as e:
             logger.exception(f"Tenant validation error for host '{host}': {str(e)}")
             return HttpResponse(
-                "Internal server error.", 
+                b"Internal server error.", 
                 status=500,
                 content_type="text/plain"
             )
