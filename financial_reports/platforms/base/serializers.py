@@ -27,7 +27,8 @@ class CapitalCostBaseSerializer(BaseSerializer):
         maintnance_cost_per_hr = self.calculate_maint_coast_per_hour()
         operational_cost_per_hr = operational_cost_per_year / expected_hours
         total_cost_per_hr = operational_cost_per_hr + maintnance_cost_per_hr + capital_cost_per_hr
-        response['table'] = {
+        response = {
+            **response,
             "expected_hours":expected_hours,
             "monthly_payment":f"{round(monthly_payment, 2)}$",
             "interst_amount":f"{ round(interst_amount, 2)}$",
