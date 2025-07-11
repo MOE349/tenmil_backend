@@ -40,8 +40,6 @@ class MeterReadingBaseView(BaseAPIView):
         if meter_reading:
             if return_instance:
                 return meter_reading
-            else:
-                raise LocalBaseException(exception='Meter reading already exists', status_code=400)
         
         return super().create(data, params, return_instance, *args, **kwargs)
 
