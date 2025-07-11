@@ -25,7 +25,7 @@ def get_content_type_and_asset_id(
     return_ct_instance=False,
     return_instance=False
 ) -> tuple[int, str]:
-    return get_content_type_and_object_id(obj_or_id, [Equipment, Attachment], return_ct_instance=return_ct_instance)
+    return get_content_type_and_object_id(obj_or_id, [Equipment, Attachment], return_ct_instance=return_ct_instance, return_instance=return_instance)
 
 
 def move_asset(asset, to_location, notes=None, user=None):
