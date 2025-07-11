@@ -11,14 +11,14 @@ class WorkOrderBaseView(BaseAPIView):
 
     def handle_post_data(self, request):        
         data =  super().handle_post_data(request)
-        data = self.validate_post_data(data)
+        # data = self.validate_post_data(data)
         return data
     
-    def validate_post_data(self, data):
-        opened_work_orders = WorkOrder.objects.filter(status__control__name='Active', object_id=data.get('object_id'))
-        if opened_work_orders.exists():
-            raise LocalBaseException(exception="There is an opened work order, please close it first")
-        return data
+    # def validate_post_data(self, data):
+    #     opened_work_orders = WorkOrder.objects.filter(status__control__name='Active', object_id=data.get('object_id'))
+    #     if opened_work_orders.exists():
+    #         raise LocalBaseException(exception="There is an opened work order, please close it first")
+    #     return data
     
     def create(self, data, params, return_instance=False, *args, **kwargs):
         if "status" not in data:

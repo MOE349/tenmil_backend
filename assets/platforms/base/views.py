@@ -6,6 +6,21 @@ from django.utils.translation import gettext_lazy as _
 from django.contrib.contenttypes.models import ContentType
 
 
+class AssetBaseView(BaseAPIView):
+    serializer_class = AssetBaseSerializer
+    model_class = Equipment
+    http_method_names = ["get"]
+
+    def list(self, request, *args, **kwargs):
+        equipments_instance = Equipment.objects.all()
+        equipments = list(self.serializer_class(equipments_instance, many=True).data)
+        attachments_instance = Attachment.objects.all()
+        attachments = list(self.serializer_class(attachments_instance, many=True).data)
+        response = sorted(equipments + attachments, key=lambda x: x['created_at'], reverse=True)
+        return self.format_response(data=response, status_code=200)
+        
+
+
 class EquipmentBaseView(BaseAPIView):
     serializer_class = EquipmentBaseSerializer
     model_class = Equipment

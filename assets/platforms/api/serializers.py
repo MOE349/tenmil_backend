@@ -1,6 +1,10 @@
 from assets.platforms.base.serializers import *
 
 
+class AssetApiSerializer(AssetBaseSerializer):
+    pass
+
+
 class EquipmentApiSerializer(EquipmentBaseSerializer):
     pass
 

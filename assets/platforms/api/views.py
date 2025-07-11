@@ -2,6 +2,10 @@ from assets.platforms.base.views import *
 from assets.platforms.api.serializers import *
 
 
+class AssetApiView(AssetBaseView):
+    serializer_class = AssetApiSerializer
+
+
 class EquipmentApiView(EquipmentBaseView):
     serializer_class = EquipmentApiSerializer
 

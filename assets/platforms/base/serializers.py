@@ -40,6 +40,7 @@ class EquipmentBaseSerializer(AssetBaseSerializer):
     class Meta:
         model = Equipment
         fields = '__all__'    
+        
 
 class AttachmentBaseSerializer(AssetBaseSerializer):
     class Meta:
