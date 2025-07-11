@@ -32,7 +32,7 @@ class CapitalCostBaseSerializer(BaseSerializer):
             "expected_hours":expected_hours,
             "monthly_payment":f"{round(monthly_payment, 2)}$",
             "interst_amount":f"{ round(interst_amount, 2)}$",
-            "yearly_hours": yearly_hours,
+            "yearly_hours": f"{yearly_hours} hrs",
             "capital_cost_per_hr": f"{round(capital_cost_per_hr, 2)}$",
             "maintnance_cost_per_hr": f"{maintnance_cost_per_hr}$",
             "operational_cost_per_hr":f"{ round(operational_cost_per_hr, 2)}$",
