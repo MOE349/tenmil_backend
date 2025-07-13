@@ -30,13 +30,13 @@ class CapitalCostBaseSerializer(BaseSerializer):
         response = {
             **response,
             "expected_hours":expected_hours,
-            "monthly_payment":f"{round(monthly_payment, 2)} $/month",
-            "interst_amount":f"{ round(interst_amount, 2)} $",
+            "monthly_payment":f"{round(monthly_payment, 2)}$",
+            "interst_amount":f"{ round(interst_amount, 2)}$",
             "yearly_hours": f"{yearly_hours} hrs",
-            "capital_cost_per_hr": f"{round(capital_cost_per_hr, 2)} $/hr",
-            "maintnance_cost_per_hr": f"{maintnance_cost_per_hr} $/hr",
-            "operational_cost_per_hr":f"{ round(operational_cost_per_hr, 2)} $/hr",
-            "total_cost_per_hr": f"{round(total_cost_per_hr, 2)} $/hr"
+            "capital_cost_per_hr": f"{round(capital_cost_per_hr, 2)}$",
+            "maintnance_cost_per_hr": f"{maintnance_cost_per_hr}$",
+            "operational_cost_per_hr":f"{ round(operational_cost_per_hr, 2)}$",
+            "total_cost_per_hr": f"{round(total_cost_per_hr, 2)}$"
         }
 
         return response
