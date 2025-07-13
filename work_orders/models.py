@@ -25,7 +25,7 @@ class WorkOrder(BaseModel):
     completion_end_date = models.DateField(null=True, blank=True)
     description = models.TextField(null=True, blank=True)
     is_closed = models.BooleanField(default=False)
-    completion_meter_reading = models.IntegerField(null=True, blank=True)fix pm
+    completion_meter_reading = models.IntegerField(null=True, blank=True)
     
 
 class WorkOrderChecklist(BaseModel):
