@@ -1,5 +1,6 @@
 from django.utils import timezone
 from django.contrib.contenttypes.models import ContentType
+from django.db import connection
 from pm_automation.models import PMSettings, PMTrigger, PMUnitChoices
 from work_orders.models import WorkOrder, WorkOrderStatusNames
 from tenant_users.models import TenantUser
@@ -117,10 +118,11 @@ class PMAutomationService:
     def _create_pm_work_order(pm_settings, trigger_value, user):
         """Create a PM work order and log the creation with the system admin as user"""
         asset = pm_settings.asset
-        # Get the system admin user for the tenant
+        # Get the system admin user for the current tenant using connection.schema_name
         try:
+            current_schema = connection.schema_name
             system_admin = TenantUser.objects.get(
-                email=f'Sys_Admin@{asset.tenant.schema_name}.tenmil.ca'
+                email=f'Sys_Admin@{current_schema}.tenmil.ca'
             )
         except TenantUser.DoesNotExist:
             system_admin = user
