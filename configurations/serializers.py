@@ -29,7 +29,6 @@ class DashboardApiSerializer(Serializer):
             {"id":wo.id, "code": wo.code, "status":f"{wo.status.name}-{wo.status.control.name}"} 
             for wo in work_orders.order_by("status__control__name")[:8]
             ]
-        response['scheduled_maintenance_count'] = 0
         
         response['unassigned_taskes_count'] = work_order_checklist.count()
         response['upcomming_maintenance'] = ["Under constraction"]

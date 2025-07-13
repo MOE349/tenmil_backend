@@ -1,7 +1,7 @@
 from configurations.base_features.db.db_choices import TriggerTypeChoices
 from meter_readings.helpers import get_old_meter_reading
+
 from meter_readings.platforms.base.views import MeterReadingBaseView
-from scheduled_maintenance.models import ScheduledMaintenance, SmIttirationCycle
 from tenant_users.models import TenantUser
 from work_orders.platforms.base.views import WorkOrderBaseView
 
@@ -39,16 +39,4 @@ from work_orders.platforms.base.views import WorkOrderBaseView
 #             if int(old_meter_reading) < ittiration.ittiration <= int(meter_reading):
                 
 #                 user = TenantUser.objects.get(tenant=tenant, email=f'Sys_Admin@{tenant.schema_name}.tenmil.ca')
-#                 wo_data = {
-#                    "user": user,
-#                    "object_id": asset_id,
-#                    "maint_type": "hd",
-#                    "priority": "high",
-#                    "description": f"Meter Reading Triggered for {asset_id}",
-#                    "starting_meter_reading": int(meter_reading),
-#                 }
-#                 wo_params={
-#                     "user":user
-#                 }
-#                 WorkOrderBaseView().create(wo_data, params=wo_params)
-#         return None, None
+#          

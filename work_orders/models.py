@@ -26,7 +26,6 @@ class WorkOrder(BaseModel):
     description = models.TextField(null=True, blank=True)
     is_closed = models.BooleanField(default=False)
     completion_meter_reading = models.IntegerField(null=True, blank=True)
-    ittiration_cycle = models.ForeignKey('scheduled_maintenance.SmIttirationCycle', on_delete=models.CASCADE, null=True, blank=True)
     
 
 class WorkOrderChecklist(BaseModel):

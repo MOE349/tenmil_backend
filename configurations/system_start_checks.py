@@ -2,7 +2,6 @@
 
 from django.conf import settings
 from core.models import Domain, Tenant, WorkOrderStatusControls
-from scheduled_maintenance.models import SmIttirationCycleChecklist
 from django_tenants.utils import schema_context
 
 from tenant_users.models import TenantUser
@@ -78,11 +77,8 @@ def work_order_status_actions_check():
 def ittiration_cycle_checklist():
     """
     """
-    default_checklist = ['Checklist Item 1', 'Checklist Item 2', 'Checklist Item 3', 'Checklist Item 4']
-    for checklist in default_checklist:
-        for tenant in Tenant.objects.exclude(schema_name='public'):
-            with schema_context(tenant.schema_name):
-                SmIttirationCycleChecklist.objects.get_or_create(name=checklist)
+    # Function disabled since scheduled_maintenance is removed
+    pass
 
 def system_user():
     tenants = Tenant.objects.all()
