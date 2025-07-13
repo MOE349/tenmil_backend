@@ -20,8 +20,8 @@ class MeterReadingBaseView(BaseAPIView):
         if old_meter_reading >= reading:
             raise LocalBaseException(exception='old meter reading cannot be greater than new meter reading', status_code=400)
         
-        if last_meter_reading_date and (last_meter_reading_date + timedelta(hours=reading - old_meter_reading)) >= timezone.now():            
-            raise LocalBaseException(exception='Hours entered exceeds limit', status_code=400)
+        # if last_meter_reading_date and (last_meter_reading_date + timedelta(hours=reading - old_meter_reading)) >= timezone.now():            
+        #     raise LocalBaseException(exception='Hours entered exceeds limit', status_code=400)
         
         data['old_meter_reading'] = old_meter_reading
         return data

@@ -7,7 +7,7 @@ from rest_framework_simplejwt.views import (
     TokenVerifyView
 )
 
-from configurations.system_start_checks import system_start_checks
+# from configurations.system_start_checks import system_start_checks
 from configurations.views import *
 from django.conf.urls.static import static
 from django.conf import settings
@@ -21,7 +21,7 @@ api_urls = [
     path('financial-reports/', include('financial_reports.platforms.api.urls')),
     path('meter-readings/', include('meter_readings.platforms.api.urls')),
     path('work-orders/', include('work_orders.platforms.api.urls')),
-    path('scheduled-maintenance/', include('scheduled_maintenance.platforms.api.urls')),
+    # path('scheduled-maintenance/', include('scheduled_maintenance.platforms.api.urls')),
     path('fault-codes/', include('fault_codes.platforms.api.urls')),
 ]
 # dashboard_urls = [
