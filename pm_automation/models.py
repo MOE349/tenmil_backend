@@ -58,7 +58,6 @@ class PMSettings(BaseModel):
     last_handled_trigger = models.FloatField(_("Last Handled Trigger"), null=True, blank=True)
     
     class Meta:
-        unique_together = ['content_type', 'object_id']
         verbose_name = _("PM Settings")
         verbose_name_plural = _("PM Settings")
     

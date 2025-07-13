@@ -4,6 +4,7 @@ from pm_automation.models import PMSettings, PMTrigger, PMUnitChoices
 from work_orders.models import WorkOrder, WorkOrderStatusNames
 from tenant_users.models import TenantUser
 from assets.services import get_content_type_and_asset_id
+from work_orders.models import WorkOrderLog
 
 
 class PMAutomationService:
@@ -114,16 +115,20 @@ class PMAutomationService:
     
     @staticmethod
     def _create_pm_work_order(pm_settings, trigger_value, user):
-        """Create a PM work order"""
+        """Create a PM work order and log the creation with the system admin as user"""
         asset = pm_settings.asset
-        
+        # Get the system admin user for the tenant
+        try:
+            system_admin = TenantUser.objects.get(
+                email=f'Sys_Admin@{asset.tenant.schema_name}.tenmil.ca'
+            )
+        except TenantUser.DoesNotExist:
+            system_admin = user
         # Get active status
         active_status = WorkOrderStatusNames.objects.filter(
             control__name='Active'
         ).first()
-        
         if not active_status:
-            # Create default active status if it doesn't exist
             from core.models import WorkOrderStatusControls
             active_control = WorkOrderStatusControls.objects.filter(key='active').first()
             if not active_control:
@@ -137,18 +142,23 @@ class PMAutomationService:
                 name='Active',
                 control=active_control
             )
-        
-        # Create work order
+        # Create work order (do NOT set created_by)
         work_order = WorkOrder.objects.create(
             content_type=pm_settings.content_type,
             object_id=pm_settings.object_id,
             status=active_status,
             maint_type='PM',
             priority='medium',
-            description=f"Meter-driven PM for {asset.name} at {trigger_value} {pm_settings.interval_unit}",
-            created_by=user
+            description=f"Meter-driven PM for {asset.name} at {trigger_value} {pm_settings.interval_unit}"
         )
-        
+        # Log creation with system admin as user
+        WorkOrderLog.objects.create(
+            work_order=work_order,
+            amount=0,
+            log_type=WorkOrderLog.LogTypeChoices.CREATED,
+            user=system_admin,
+            description="Work Order Created (PM Automation)"
+        )
         return work_order
     
     @staticmethod
