@@ -15,8 +15,8 @@ class PMSettingsBaseSerializer(BaseSerializer):
         # Exclude self in case of update
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
-        if qs.exists():
-            raise serializers.ValidationError('PM settings already exist for this asset. Each asset can have only one PM automation configuration.')
+        if qs.count() >= 5:  # Allow up to 5 PM settings per asset
+            raise serializers.ValidationError('Each asset can have at most 5 PM automation configurations.')
         return data
 
 

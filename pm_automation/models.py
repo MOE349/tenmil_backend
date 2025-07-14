@@ -60,7 +60,6 @@ class PMSettings(BaseModel):
     class Meta:
         verbose_name = _("PM Settings")
         verbose_name_plural = _("PM Settings")
-        unique_together = ['content_type', 'object_id']
     
     def __str__(self):
         return f"PM Settings for {self.asset} - Every {self.interval_value} {self.interval_unit}"

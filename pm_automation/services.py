@@ -29,37 +29,40 @@ class PMAutomationService:
         logger.info(f"Processing meter reading for asset {asset_id}: {meter_reading_value} {meter_reading_unit}")
         
         # Get PM settings for this asset
-        pm_settings = PMAutomationService._get_pm_settings(asset_id)
-        if not pm_settings:
+        pm_settings_list = PMAutomationService._get_pm_settings(asset_id)
+        if not pm_settings_list.exists():
             logger.info(f"No PM settings found for asset {asset_id}")
             return None
         
-        if not pm_settings.is_active:
-            logger.info(f"PM settings inactive for asset {asset_id}")
-            return None
+        logger.info(f"Found {pm_settings_list.count()} active PM settings for asset {asset_id}")
         
-        logger.info(f"Found active PM settings for asset {asset_id}: interval={pm_settings.interval_value} {pm_settings.interval_unit}, start_threshold={pm_settings.start_threshold_value} {pm_settings.start_threshold_unit}, lead_time={pm_settings.lead_time_value} {pm_settings.lead_time_unit}")
+        # Process each PM setting
+        all_created_work_orders = []
+        for pm_settings in pm_settings_list:
+            logger.info(f"Processing PM Settings ID {pm_settings.id}: interval={pm_settings.interval_value} {pm_settings.interval_unit}, start_threshold={pm_settings.start_threshold_value} {pm_settings.start_threshold_unit}, lead_time={pm_settings.lead_time_value} {pm_settings.lead_time_unit}")
+            
+            # Check if units match
+            if pm_settings.interval_unit != meter_reading_unit:
+                logger.warning(f"Unit mismatch for PM Settings {pm_settings.id}: PM settings use {pm_settings.interval_unit}, meter reading uses {meter_reading_unit}")
+                continue
+            
+            # Calculate next triggers
+            triggers = PMAutomationService._calculate_next_triggers(pm_settings, meter_reading_value)
+            logger.info(f"Calculated {len(triggers)} triggers for PM Settings {pm_settings.id}: {triggers}")
+            
+            # Check for early-create windows
+            created_work_orders = []
+            for trigger_value in triggers:
+                work_order = PMAutomationService._check_and_create_work_order(
+                    pm_settings, trigger_value, meter_reading_value, user
+                )
+                if work_order:
+                    created_work_orders.append(work_order)
+                    logger.info(f"Created PM work order {work_order.id} for PM Settings {pm_settings.id} at trigger {trigger_value}")
+            
+            all_created_work_orders.extend(created_work_orders)
         
-        # Check if units match
-        if pm_settings.interval_unit != meter_reading_unit:
-            logger.warning(f"Unit mismatch: PM settings use {pm_settings.interval_unit}, meter reading uses {meter_reading_unit}")
-            return None
-        
-        # Calculate next triggers
-        triggers = PMAutomationService._calculate_next_triggers(pm_settings, meter_reading_value)
-        logger.info(f"Calculated {len(triggers)} triggers for asset {asset_id}: {triggers}")
-        
-        # Check for early-create windows
-        created_work_orders = []
-        for trigger_value in triggers:
-            work_order = PMAutomationService._check_and_create_work_order(
-                pm_settings, trigger_value, meter_reading_value, user
-            )
-            if work_order:
-                created_work_orders.append(work_order)
-                logger.info(f"Created PM work order {work_order.id} for asset {asset_id} at trigger {trigger_value}")
-        
-        return created_work_orders
+        return all_created_work_orders
     
     @staticmethod
     def _get_pm_settings(asset_id):
@@ -72,17 +75,18 @@ class PMAutomationService:
                 content_type=content_type,
                 object_id=object_id,
                 is_active=True
-            ).first()
+            )
             
-            if pm_settings:
-                logger.debug(f"Found PM settings: {pm_settings}")
+            if pm_settings.exists():
+                logger.debug(f"Found {pm_settings.count()} PM settings")
+                return pm_settings
             else:
                 logger.debug(f"No PM settings found for content_type={content_type}, object_id={object_id}")
             
             return pm_settings
         except Exception as e:
             logger.error(f"Error getting PM settings for asset {asset_id}: {e}")
-            return None
+            return PMSettings.objects.none()
     
     @staticmethod
     def _calculate_next_triggers(pm_settings, current_meter_reading):
@@ -262,28 +266,35 @@ class PMAutomationService:
         """
         Get PM status for an asset including next triggers and active settings
         """
-        pm_settings = PMAutomationService._get_pm_settings(asset_id)
-        if not pm_settings:
+        pm_settings_list = PMAutomationService._get_pm_settings(asset_id)
+        if not pm_settings_list.exists():
             return None
         
-        # Get open PM work orders
-        open_work_orders = WorkOrder.objects.filter(
-            content_type=pm_settings.content_type,
-            object_id=pm_settings.object_id,
-            maint_type='PM',
-            is_closed=False
-        )
+        # Get open PM work orders for all PM settings
+        open_work_orders = WorkOrder.objects.none()
+        pending_triggers = PMTrigger.objects.none()
         
-        # Get pending triggers
-        pending_triggers = PMTrigger.objects.filter(
-            pm_settings=pm_settings,
-            is_handled=False
-        )
+        for pm_settings in pm_settings_list:
+            # Get open PM work orders for this PM setting
+            pm_work_orders = WorkOrder.objects.filter(
+                content_type=pm_settings.content_type,
+                object_id=pm_settings.object_id,
+                maint_type='PM',
+                is_closed=False
+            )
+            open_work_orders = open_work_orders.union(pm_work_orders)
+            
+            # Get pending triggers for this PM setting
+            pm_triggers = PMTrigger.objects.filter(
+                pm_settings=pm_settings,
+                is_handled=False
+            )
+            pending_triggers = pending_triggers.union(pm_triggers)
         
         return {
-            'pm_settings': pm_settings,
-            'next_trigger': pm_settings.get_next_trigger(),
+            'pm_settings': pm_settings_list,
+            'pm_settings_count': pm_settings_list.count(),
             'open_work_orders': open_work_orders,
             'pending_triggers': pending_triggers,
-            'is_active': pm_settings.is_active
+            'has_active_settings': pm_settings_list.filter(is_active=True).exists()
         } 
