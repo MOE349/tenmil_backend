@@ -36,7 +36,10 @@ class MeterReadingBaseView(BaseAPIView):
         asset_id = data.get('asset')
         reading = float(data.get('meter_reading'))
         data = self.validate_data(data)
-        meter_reading, error, code = self.model_class.objects.get_object_or_404(asset=asset_id, meter_reading=reading, raise_exception=False)
+        # Use content_type and object_id instead of asset for filtering
+        content_type_id = data.get('content_type')
+        object_id = data.get('object_id')
+        meter_reading, error, code = self.model_class.objects.get_object_or_404(content_type_id=content_type_id, object_id=object_id, meter_reading=reading, raise_exception=False)
         if meter_reading:
             if return_instance:
                 return meter_reading

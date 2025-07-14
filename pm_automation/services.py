@@ -67,6 +67,32 @@ class PMAutomationService:
     def _get_active_pm_settings(asset_id):
         """Get active PM settings for an asset"""
         try:
+            # Handle asset_id in format "app_label.model.uuid"
+            if isinstance(asset_id, str) and '.' in asset_id:
+                parts = asset_id.split('.')
+                if len(parts) >= 3:
+                    app_label = parts[0]
+                    model_name = parts[1]
+                    object_id = '.'.join(parts[2:])  # Handle UUIDs with hyphens
+                    
+                    # Get content type
+                    content_type = ContentType.objects.get(app_label=app_label, model=model_name)
+                    logger.debug(f"Looking for active PM settings with content_type={content_type}, object_id={object_id}")
+                    
+                    pm_settings = PMSettings.objects.filter(
+                        content_type=content_type,
+                        object_id=object_id,
+                        is_active=True
+                    )
+                    
+                    if pm_settings.exists():
+                        logger.debug(f"Found {pm_settings.count()} active PM settings")
+                    else:
+                        logger.debug(f"No active PM settings found for content_type={content_type}, object_id={object_id}")
+                    
+                    return pm_settings
+            
+            # Fallback to original method
             content_type, object_id = get_content_type_and_asset_id(asset_id)
             logger.debug(f"Looking for active PM settings with content_type={content_type}, object_id={object_id}")
             
