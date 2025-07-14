@@ -32,8 +32,8 @@ class WorkOrder(BaseModel):
             # Use database transaction to avoid race conditions
             from django.db import transaction
             with transaction.atomic():
-                # Get the highest code number
-                highest_code = self.objects.filter(
+                # Get the highest code number using the model class
+                highest_code = WorkOrder.objects.filter(
                     code__startswith='WO_'
                 ).order_by('-code').values_list('code', flat=True).first()
                 
