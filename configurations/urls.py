@@ -21,7 +21,6 @@ api_urls = [
     path('financial-reports/', include('financial_reports.platforms.api.urls')),
     path('meter-readings/', include('meter_readings.platforms.api.urls')),
     path('work-orders/', include('work_orders.platforms.api.urls')),
-    path('pm-automation/', include('pm_automation.platforms.api.urls')),
     # path('scheduled-maintenance/', include('scheduled_maintenance.platforms.api.urls')),
     path('fault-codes/', include('fault_codes.platforms.api.urls')),
 ]
