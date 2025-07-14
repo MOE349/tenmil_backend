@@ -25,6 +25,8 @@ class WorkOrder(BaseModel):
     completion_end_date = models.DateField(null=True, blank=True)
     description = models.TextField(null=True, blank=True)
     is_closed = models.BooleanField(default=False)
+    is_auto_generated = models.BooleanField(default=False)
+    is_reopened = models.BooleanField(default=False)
     completion_meter_reading = models.IntegerField(null=True, blank=True)
 
     def save(self, *args, force_insert=False, force_update=False, using=None, update_fields=None):

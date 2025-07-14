@@ -40,22 +40,23 @@ class WorkOrderBaseView(BaseAPIView):
         else:
             status_instance = WorkOrderStatusNames.objects.get_object_or_404(name="Active", raise_exception=True)
         status = status_instance.control.name if status_instance else "Active"
+        
+        """Update an object"""
+        user_lang = params.pop('lang', 'en')
+        instance = self.get_instance(pk)
+
         if status == "Closed":
             # Check if completion meter reading is provided
-            if 'completion_meter_reading' not in data or data.get('completion_meter_reading') is None:
+            if ('completion_meter_reading' not in data or data.get('completion_meter_reading') is None) and not instance.completion_meter_reading:
                 # We'll handle this after getting the instance
                 needs_meter_reading = True
             else:
                 needs_meter_reading = False
             
-        elif status == 'Active':
-            if 'completion_meter_reading' in data and data['completion_meter_reading'] is not None:
-                raise LocalBaseException(exception="completion_meter_reading field is not allowed for Active status")
-            
-
-        """Update an object"""
-        user_lang = params.pop('lang', 'en')
-        instance = self.get_instance(pk)
+        elif status != 'Closed' and instance.status.control.name == "Closed":
+            instance.is_reopened = True
+            instance.save()
+            WorkOrderLog.objects.create(work_order=instance, amount=amount, log_type=WorkOrderLog.LogTypeChoices.REOPENED, user=params['user'], description="Work Order Reopened")
         
         # Handle completion meter reading for closed status
         if status == "Closed" and needs_meter_reading:
@@ -84,9 +85,7 @@ class WorkOrderBaseView(BaseAPIView):
         else:
             instance.is_closed = False
             instance.status = status_instance
-            instance.save()
-            if is_closed:
-                WorkOrderLog.objects.create(work_order=instance, amount=amount, log_type=WorkOrderLog.LogTypeChoices.REOPENED, user=params['user'], description="Work Order Reopened")                
+            instance.save()               
             WorkOrderLog.objects.create(work_order=instance, amount=amount, log_type=WorkOrderLog.LogTypeChoices.UPDATED, user=params['user'], description="Work Order Updated")
         response['status'] = WorkOrderStatusNamesBaseSerializer(instance.status).data
         return self.format_response(data=response, status_code=200)
