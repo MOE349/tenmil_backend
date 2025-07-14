@@ -29,25 +29,7 @@ class WorkOrder(BaseModel):
 
     def save(self, *args, force_insert=False, force_update=False, using=None, update_fields=None):
         if not self.code:
-            # Use database transaction to avoid race conditions
-            from django.db import transaction
-            with transaction.atomic():
-                # Get the highest code number using the model class
-                highest_code = WorkOrder.objects.filter(
-                    code__startswith='WO_'
-                ).order_by('-code').values_list('code', flat=True).first()
-                
-                if highest_code:
-                    # Extract number from highest code (e.g., "WO_123" -> 123)
-                    try:
-                        next_number = int(highest_code.split('_')[1]) + 1
-                    except (IndexError, ValueError):
-                        next_number = 1
-                else:
-                    next_number = 1
-                
-                self.code = f"WO_{next_number}"
-        
+            self.code = f"WO_{WorkOrder.objects.count() + 1}"
         return super().save(*args, force_insert=force_insert, force_update=force_update, using=using, update_fields=update_fields)
     
 
