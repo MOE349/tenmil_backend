@@ -192,9 +192,10 @@ class PMAutomationService:
         logger.info(f"Creating PM work order for trigger {trigger_value}")
         
         # Get the asset using the GenericForeignKey
+        asset = None
         try:
             asset = pm_settings.asset
-            logger.debug(f"Retrieved asset: {asset}")
+            logger.debug(f"Retrieved asset: {asset}, type: {type(asset)}")
         except Exception as e:
             logger.error(f"Error accessing asset from pm_settings: {e}")
             # Try to get the asset using content_type and object_id
@@ -202,9 +203,22 @@ class PMAutomationService:
                 content_type = pm_settings.content_type
                 model_class = content_type.model_class()
                 asset = model_class.objects.get(pk=pm_settings.object_id)
-                logger.debug(f"Retrieved asset using direct lookup: {asset}")
+                logger.debug(f"Retrieved asset using direct lookup: {asset}, type: {type(asset)}")
             except Exception as e2:
                 logger.error(f"Error accessing asset using direct lookup: {e2}")
+                return None
+        
+        # Ensure we have a valid asset object
+        if not asset or hasattr(asset, 'all'):  # RelatedManager has 'all' method
+            logger.error(f"Invalid asset object: {asset}, type: {type(asset)}")
+            # Try one more time with direct lookup
+            try:
+                content_type = pm_settings.content_type
+                model_class = content_type.model_class()
+                asset = model_class.objects.get(pk=pm_settings.object_id)
+                logger.debug(f"Retrieved asset using final direct lookup: {asset}, type: {type(asset)}")
+            except Exception as e3:
+                logger.error(f"Final attempt to get asset failed: {e3}")
                 return None
         
         # Get the system admin user for the current tenant using connection.schema_name
@@ -239,6 +253,14 @@ class PMAutomationService:
             )
             logger.debug(f"Created active status: {active_status}")
         
+        # Create work order description with fallback
+        try:
+            asset_code = asset.code if asset and hasattr(asset, 'code') else f"{pm_settings.content_type.app_label}.{pm_settings.content_type.model}"
+            description = f"Meter-driven PM for {asset_code} at {trigger_value} {pm_settings.interval_unit}"
+        except Exception as e:
+            logger.error(f"Error creating work order description: {e}")
+            description = f"Meter-driven PM at {trigger_value} {pm_settings.interval_unit}"
+        
         # Create work order (do NOT set created_by)
         work_order = WorkOrder.objects.create(
             content_type=pm_settings.content_type,
@@ -246,7 +268,7 @@ class PMAutomationService:
             status=active_status,
             maint_type='PM',
             priority='medium',
-            description=f"Meter-driven PM for {asset.code} at {trigger_value} {pm_settings.interval_unit}"
+            description=description
         )
         
         logger.info(f"Created work order {work_order.id}: {work_order.description}")
