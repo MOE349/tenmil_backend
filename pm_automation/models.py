@@ -69,19 +69,22 @@ class PMSettings(BaseModel):
             return f"PM Settings for {self.content_type.app_label}.{self.content_type.model}.{self.object_id} - Every {self.interval_value} {self.interval_unit}"
     
     def save(self, *args, **kwargs):
-        # Set next trigger on first save or when start threshold changes
+        # Set initial next trigger on first save
         if not self.next_trigger_value:
-            self.next_trigger_value = self.start_threshold_value
+            # Initial trigger: start_threshold_value + interval_value
+            self.next_trigger_value = self.start_threshold_value + self.interval_value
         super().save(*args, **kwargs)
     
     def get_next_trigger(self):
         """Calculate the next trigger value"""
         if not self.next_trigger_value:
-            return self.start_threshold_value
+            # Initial trigger: start_threshold_value + interval_value
+            return self.start_threshold_value + self.interval_value
         return self.next_trigger_value
     
     def update_next_trigger(self, closing_value):
-        """Update next trigger after work order completion"""
+        """Update next trigger after work order completion - Floating system"""
+        # Floating trigger: completion_meter_reading + interval_value
         self.next_trigger_value = closing_value + self.interval_value
         self.last_handled_trigger = closing_value
         self.save()

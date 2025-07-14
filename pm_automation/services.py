@@ -114,18 +114,19 @@ class PMAutomationService:
     
     @staticmethod
     def _calculate_next_triggers(pm_settings, current_meter_reading):
-        """Calculate the next trigger values"""
+        """Calculate the next trigger values for floating trigger system"""
         triggers = []
         next_trigger = pm_settings.get_next_trigger()
         
         logger.debug(f"Calculating triggers: current_reading={current_meter_reading}, next_trigger={next_trigger}, interval={pm_settings.interval_value}")
         
-        # Keep adding interval until we exceed the current meter reading
-        while next_trigger <= current_meter_reading:
+        # For floating trigger system, we only create one trigger at a time
+        # Check if the next trigger should fire based on current meter reading
+        if next_trigger <= current_meter_reading:
+            # Only add trigger if it hasn't been handled yet
             if pm_settings.last_handled_trigger is None or next_trigger > pm_settings.last_handled_trigger:
                 triggers.append(next_trigger)
-                logger.debug(f"Added trigger: {next_trigger}")
-            next_trigger += pm_settings.interval_value
+                logger.debug(f"Added floating trigger: {next_trigger}")
         
         return triggers
     

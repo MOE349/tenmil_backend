@@ -17,13 +17,15 @@ class PMSettingsAdmin(admin.ModelAdmin):
             'fields': ('interval_value', 'interval_unit')
         }),
         ('Starting Threshold', {
-            'fields': ('start_threshold_value', 'start_threshold_unit')
+            'fields': ('start_threshold_value', 'start_threshold_unit'),
+            'description': 'Initial trigger = start_threshold_value + interval_value'
         }),
         ('Lead Time Settings', {
             'fields': ('lead_time_value', 'lead_time_unit')
         }),
-        ('Status', {
-            'fields': ('is_active', 'next_trigger_value', 'last_handled_trigger')
+        ('Floating Trigger Status', {
+            'fields': ('is_active', 'next_trigger_value', 'last_handled_trigger'),
+            'description': 'Next trigger = completion_meter_reading + interval_value'
         }),
     )
 
