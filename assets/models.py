@@ -52,6 +52,7 @@ class Asset(BaseModel):
     capital_costs = GenericRelation("financial_reports.CapitalCost", **gr_params)
     meter_readings = GenericRelation("meter_readings.MeterReading", **gr_params)
     work_orders = GenericRelation("work_orders.WorkOrder", **gr_params)
+    pm_settings = GenericRelation("pm_automation.PMSettings", **gr_params)
 
 
 

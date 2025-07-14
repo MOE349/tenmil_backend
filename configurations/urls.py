@@ -23,6 +23,7 @@ api_urls = [
     path('work-orders/', include('work_orders.platforms.api.urls')),
     # path('scheduled-maintenance/', include('scheduled_maintenance.platforms.api.urls')),
     path('fault-codes/', include('fault_codes.platforms.api.urls')),
+    path('pm-automation/', include('pm_automation.platforms.api.urls')),
 ]
 # dashboard_urls = [
 #     # path('users/', include('users.platforms.dashboard.urls')),

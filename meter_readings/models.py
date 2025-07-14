@@ -14,6 +14,10 @@ class MeterReading(BaseModel):
     created_by = models.ForeignKey(User, on_delete=models.CASCADE)
 
     def __str__(self):
-        return f"{self.asset.name} - {self.meter_reading}"
+        try:
+            asset_name = self.asset.name if self.asset else f"{self.content_type.app_label}.{self.content_type.model}.{self.object_id}"
+            return f"{asset_name} - {self.meter_reading}"
+        except Exception:
+            return f"{self.content_type.app_label}.{self.content_type.model}.{self.object_id} - {self.meter_reading}"
 
 
