@@ -26,6 +26,29 @@ class WorkOrder(BaseModel):
     description = models.TextField(null=True, blank=True)
     is_closed = models.BooleanField(default=False)
     completion_meter_reading = models.IntegerField(null=True, blank=True)
+
+    def save(self, *args, force_insert=False, force_update=False, using=None, update_fields=None):
+        if not self.code:
+            # Use database transaction to avoid race conditions
+            from django.db import transaction
+            with transaction.atomic():
+                # Get the highest code number
+                highest_code = self.objects.filter(
+                    code__startswith='WO_'
+                ).order_by('-code').values_list('code', flat=True).first()
+                
+                if highest_code:
+                    # Extract number from highest code (e.g., "WO_123" -> 123)
+                    try:
+                        next_number = int(highest_code.split('_')[1]) + 1
+                    except (IndexError, ValueError):
+                        next_number = 1
+                else:
+                    next_number = 1
+                
+                self.code = f"WO_{next_number}"
+        
+        return super().save(*args, force_insert=force_insert, force_update=force_update, using=using, update_fields=update_fields)
     
 
 class WorkOrderChecklist(BaseModel):

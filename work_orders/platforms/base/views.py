@@ -23,7 +23,7 @@ class WorkOrderBaseView(BaseAPIView):
     def create(self, data, params, return_instance=False, *args, **kwargs):
         if "status" not in data:
             data['status'] = WorkOrderStatusNames.objects.get(name="Active").pk
-        data['code'] =  f"WO_{WorkOrder.objects.count() + 1}"
+        # Code will be auto-generated in the model's save method
         instance, response = super().create(data, params, return_instance=True, *args, **kwargs)
         WorkOrderLog.objects.create(work_order=instance, amount=0, log_type=WorkOrderLog.LogTypeChoices.CREATED, user=params['user'], description="Work Order Created")
         return self.format_response(data=response, status_code=201)
@@ -41,17 +41,35 @@ class WorkOrderBaseView(BaseAPIView):
             status_instance = WorkOrderStatusNames.objects.get_object_or_404(name="Active", raise_exception=True)
         status = status_instance.control.name if status_instance else "Active"
         if status == "Closed":
-            if 'completion_meter_reading' not in data  and data['completion_meter_reading'] is None:
-                raise LocalBaseException(exception={"completion_meter_reading": "this field is required"})
+            # Check if completion meter reading is provided
+            if 'completion_meter_reading' not in data or data.get('completion_meter_reading') is None:
+                # We'll handle this after getting the instance
+                needs_meter_reading = True
+            else:
+                needs_meter_reading = False
             
         elif status == 'Active':
             if 'completion_meter_reading' in data and data['completion_meter_reading'] is not None:
-                raise LocalBaseException(exception={"completion_meter_reading": "this field is not allowed"})
+                raise LocalBaseException(exception="completion_meter_reading field is not allowed for Active status")
             
 
         """Update an object"""
         user_lang = params.pop('lang', 'en')
         instance = self.get_instance(pk)
+        
+        # Handle completion meter reading for closed status
+        if status == "Closed" and needs_meter_reading:
+            from meter_readings.models import MeterReading
+            latest_meter_reading = MeterReading.objects.filter(
+                content_type=instance.content_type,
+                object_id=instance.object_id
+            ).order_by('-created_at').first()
+            
+            if latest_meter_reading:
+                data['completion_meter_reading'] = latest_meter_reading.meter_reading
+                print(f"Auto-filled completion meter reading: {latest_meter_reading.meter_reading}")
+            else:
+                raise LocalBaseException(exception="No meter readings found for this asset")
         
         is_closed = instance.is_closed
         serializer = self.serializer_class(instance, data=data, partial=partial)
