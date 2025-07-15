@@ -37,6 +37,7 @@ class PMSettingsBaseSerializer(BaseSerializer):
                 'object_id': str(instance.object_id)
             }
         return response
+        
 
 
 class PMTriggerBaseSerializer(BaseSerializer):
