@@ -14,7 +14,7 @@ path('controls/<str:pk>', WorkOrderControlsApiView.as_view(), name='WorkOrder Co
 
 # WorkOrderChecklist endpoints
 path('work_orders/checklists', WorkOrderChecklistApiView.as_view(), name='WorkOrderChecklist'),
-path('work_order/checklists/<str:pk>', WorkOrderChecklistApiView.as_view(), name='WorkOrderChecklist'), 
+path('work_orders/checklists/<str:pk>', WorkOrderChecklistApiView.as_view(), name='WorkOrderChecklist'), 
 
 path('work_order_log', WorkOrderLogApiView.as_view(), name='WorkOrderLog'),
 path('work_order_log/<str:pk>', WorkOrderLogApiView.as_view(), name='WorkOrderLog'),
