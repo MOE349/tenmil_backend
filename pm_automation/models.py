@@ -70,11 +70,36 @@ class PMSettings(BaseModel):
             return f"PM Settings for {self.content_type.app_label}.{self.content_type.model}.{self.object_id} - Every {self.interval_value} {self.interval_unit}"
     
     def save(self, *args, **kwargs):
-        # Set initial next trigger on first save
-        if not self.next_trigger_value:
-            # Initial trigger: start_threshold_value + interval_value
-            self.next_trigger_value = self.start_threshold_value + self.interval_value
+        # Check if this is a new record or if key fields have changed
+        if self.pk:  # This is an update
+            try:
+                # Get the original instance from database
+                original = PMSettings.objects.get(pk=self.pk)
+                # Check if key fields that affect trigger calculation have changed
+                if (original.start_threshold_value != self.start_threshold_value or 
+                    original.interval_value != self.interval_value):
+                    # Recalculate next trigger value
+                    self.recalculate_next_trigger()
+            except Exception:
+                # This shouldn't happen, but if it does, just recalculate
+                self.recalculate_next_trigger()
+        else:  # This is a new record
+            # Set initial next trigger on first save
+            if not self.next_trigger_value:
+                self.recalculate_next_trigger()
+        
         super().save(*args, **kwargs)
+    
+    def recalculate_next_trigger(self):
+        """Recalculate the next trigger value based on current settings"""
+        if self.last_handled_trigger:
+            # If we have a last handled trigger, use floating system
+            # Next trigger = last handled + interval
+            self.next_trigger_value = float(self.last_handled_trigger) + float(self.interval_value)
+        else:
+            # If no last handled trigger, use initial system
+            # Next trigger = start threshold + interval
+            self.next_trigger_value = float(self.start_threshold_value) + float(self.interval_value)
     
     def get_next_trigger(self):
         """Calculate the next trigger value"""
