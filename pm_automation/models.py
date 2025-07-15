@@ -61,8 +61,6 @@ class PMSettings(BaseModel):
     class Meta:
         verbose_name = _("PM Settings")
         verbose_name_plural = _("PM Settings")
-        # Allow multiple PM settings per asset by making name part of unique constraint
-        unique_together = [['content_type', 'object_id', 'name']]
     
     def __str__(self):
         try:
