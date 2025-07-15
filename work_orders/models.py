@@ -37,16 +37,10 @@ class WorkOrder(BaseModel):
 
 class WorkOrderChecklist(BaseModel):
     work_order = models.ForeignKey(WorkOrder, on_delete=models.CASCADE)
-    description = models.TextField(null=True, blank=True)
-
-    assigned_to = models.ForeignKey(User, on_delete=models.CASCADE, related_name="WorkOrderChecklist_AssignedTo", null=True, blank=True)
-    start_date = models.DateTimeField(null=True, blank=True)
-    hrs_estimated = models.IntegerField(null=True, blank=True)
-    
+    description = models.TextField(null=True, blank=True)    
     completed_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name="WorkOrderChecklist_CompletedBy", null=True, blank=True)
     completion_date = models.DateTimeField(null=True, blank=True)
     hrs_spent = models.IntegerField(null=True, blank=True)
-    notes = models.TextField(null=True, blank=True)
 
 
 class WorkOrderMiscCost(BaseModel):

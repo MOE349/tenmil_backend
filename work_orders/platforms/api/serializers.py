@@ -6,9 +6,10 @@ class WorkOrderApiSerializer(WorkOrderBaseSerializer):
 
 
 class WorkOrderChecklistApiSerializer(WorkOrderChecklistBaseSerializer):
+    """API Serializer for WorkOrderChecklist with validation"""
     pass
-
-
+    
+    
 class WorkOrderLogApiSerializer(WorkOrderLogBaseSerializer):
     pass
 

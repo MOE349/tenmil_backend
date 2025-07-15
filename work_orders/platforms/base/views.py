@@ -95,6 +95,52 @@ class WorkOrderChecklistBaseView(BaseAPIView):
     serializer_class = WorkOrderChecklistBaseSerializer
     model_class = WorkOrderChecklist
 
+    def get_queryset(self):
+        """Get checklists for a specific work order"""
+        work_order_id = self.kwargs.get('work_order_pk')
+        if work_order_id:
+            return WorkOrderChecklist.objects.filter(work_order_id=work_order_id)
+        return WorkOrderChecklist.objects.all()
+    
+    def list(self, request, work_order_pk=None):
+        """GET /work_orders/:work_order_id/checklists"""
+        checklists = self.get_queryset()
+        serializer = self.serializer_class(checklists, many=True)
+        return self.format_response(serializer.data)
+
+    def handle_post_data(self, request):
+        data = super().handle_post_data(request)
+
+    
+    def create(self, data, params, return_instance=False, work_order_pk=None, *args, **kwargs):
+        """POST /work_orders/:work_order_id/checklists"""
+        # Verify work order exists
+        work_order = get_object_or_404(WorkOrder, pk=work_order_pk)
+        
+        # Add work_order to request data
+        data['work_order'] = work_order_pk        
+        serializer = self.serializer_class(data=data)
+        if serializer.is_valid():
+            checklist = serializer.save()
+            return self.format_response(serializer.data, status_code=201)
+        return self.format_response(serializer.errors, status_code=400)
+    
+    def update(self, request, pk=None):
+        """PUT /work_order_checklists/:checklist_id"""
+        checklist = get_object_or_404(WorkOrderChecklist, pk=pk)
+        serializer = self.serializer_class(checklist, data=request.data, partial=True)
+        
+        if serializer.is_valid():
+            updated_checklist = serializer.save()
+            return self.format_response(serializer.data)
+        return self.format_response(errors=serializer.errors, status_code=400)
+    
+    def destroy(self, request, pk=None):
+        """DELETE /work_order_checklists/:checklist_id"""
+        checklist = get_object_or_404(WorkOrderChecklist, pk=pk)
+        checklist.delete()
+        return self.format_response(data={"message": "Checklist deleted successfully"}, status_code=204)
+
 
 class WorkOrderLogBaseView(BaseAPIView):
     serializer_class = WorkOrderLogBaseSerializer

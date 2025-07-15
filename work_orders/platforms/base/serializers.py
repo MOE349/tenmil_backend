@@ -6,6 +6,9 @@ from configurations.base_features.serializers.base_serializer import BaseSeriali
 from core.models import WorkOrderStatusControls
 from tenant_users.platforms.base.serializers import TenantUserBaseSerializer
 from work_orders.models import *
+from django.shortcuts import get_object_or_404
+from rest_framework import serializers
+from django.utils import timezone
 
 
 class WorkOrderBaseSerializer(BaseSerializer):
@@ -26,12 +29,25 @@ class WorkOrderChecklistBaseSerializer(BaseSerializer):
         model = WorkOrderChecklist
         fields = '__all__'
 
+    def validate_hrs_spent(self, value):
+        """Validate that hrs_spent is numeric and positive"""
+        if value is not None and (not isinstance(value, (int, float)) or value < 0):
+            raise serializers.ValidationError("hrs_spent must be a positive number")
+        return value
+    
+    def validate_completion_date(self, value):
+        """Validate completion_date is not in the future"""
+        if value and value > timezone.now():
+            raise serializers.ValidationError("completion_date cannot be in the future")
+        return value
 
     def to_representation(self, instance):
         response = super().to_representation(instance)
         response['work_order'] = WorkOrderBaseSerializer(instance.work_order).data
-        response['assigned_to'] =  TenantUserBaseSerializer(instance.assigned_to).data
-        response['completed_by'] =  TenantUserBaseSerializer(instance.completed_by).data
+        if instance.completed_by:
+            response['completed_by'] = TenantUserBaseSerializer(instance.completed_by).data
+        else:
+            response['completed_by'] = None
         return response
 
 class WorkOrderLogBaseSerializer(BaseSerializer):
