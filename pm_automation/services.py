@@ -118,15 +118,20 @@ class PMAutomationService:
         triggers = []
         next_trigger = pm_settings.get_next_trigger()
         
-        logger.debug(f"Calculating triggers: current_reading={current_meter_reading}, next_trigger={next_trigger}, interval={pm_settings.interval_value}")
+        logger.debug(f"Calculating triggers: current_reading={current_meter_reading}, next_trigger={next_trigger}, interval={pm_settings.interval_value}, lead_time={pm_settings.lead_time_value}")
+        
+        # Calculate the early-create window
+        early_create_window = next_trigger - pm_settings.lead_time_value
+        
+        logger.debug(f"Early create window: {early_create_window} (next_trigger {next_trigger} - lead_time {pm_settings.lead_time_value})")
         
         # For floating trigger system, we only create one trigger at a time
-        # Check if the next trigger should fire based on current meter reading
-        if next_trigger <= current_meter_reading:
+        # Check if we're in the early-create window
+        if current_meter_reading >= early_create_window:
             # Only add trigger if it hasn't been handled yet
             if pm_settings.last_handled_trigger is None or next_trigger > pm_settings.last_handled_trigger:
                 triggers.append(next_trigger)
-                logger.debug(f"Added floating trigger: {next_trigger}")
+                logger.debug(f"Added floating trigger: {next_trigger} (current reading {current_meter_reading} >= early window {early_create_window})")
         
         return triggers
     
