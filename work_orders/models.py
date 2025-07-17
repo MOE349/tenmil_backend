@@ -23,6 +23,7 @@ class WorkOrder(BaseModel):
     priority = models.CharField(max_length=50,null=True, blank=True)
     suggested_start_date = models.DateField(null=True, blank=True)
     completion_end_date = models.DateField(null=True, blank=True)
+    suggested_completion_date = models.DateField(null=True, blank=True)
     description = models.TextField(null=True, blank=True)
     is_closed = models.BooleanField(default=False)
     is_auto_generated = models.BooleanField(default=False)
