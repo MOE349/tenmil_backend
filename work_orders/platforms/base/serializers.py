@@ -93,6 +93,7 @@ class WorkOrderCompletionNoteBaseSerializer(BaseSerializer):
         checklists = WorkOrderChecklist.objects.filter(work_order=instance.work_order)
         hrs_spent = sum(checklist.hrs_spent for checklist in checklists)
         response['total_hrs_spent'] = hrs_spent
-        completed_by = [checklist.completed_by for checklist in checklists]
-        response['completed_by'] = TenantUserBaseSerializer(completed_by, many =True).data
+        completed_by = [checklist.completed_by.full_name for checklist in checklists]
+        completed_by = list(set(completed_by))
+        response['completed_by'] = completed_by
         return response
