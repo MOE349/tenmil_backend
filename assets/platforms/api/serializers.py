@@ -23,3 +23,7 @@ class AttachmentCategoryApiSerializer(AttachmentCategoryBaseSerializer):
 
 class AssetMoveApiSerializer(AssetMoveBaseSerializer):
     pass
+
+
+class EquipmentWeightClassApiSerializer(EquipmentWeightClassBaseSerializer):
+    pass

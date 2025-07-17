@@ -31,6 +31,10 @@ class AssetBaseView(BaseAPIView):
         return instance
     
 
+class EquipmentWeightClassBaseView(BaseAPIView):
+    serializer_class = EquipmentWeightClassBaseSerializer
+    model_class = EquipmentWeightClass
+
 
 class EquipmentBaseView(BaseAPIView):
     serializer_class = EquipmentBaseSerializer
@@ -46,9 +50,11 @@ class EquipmentCategoryBaseView(BaseAPIView):
     serializer_class = EquipmentCategoryBaseSerializer
     model_class = EquipmentCategory
 
+
 class AttachmentCategoryBaseView(BaseAPIView):
     serializer_class = AttachmentCategoryBaseSerializer
     model_class = AttachmentCategory
+
 
 class AssetBaseMoveView(BaseAPIView):
     serializer_class = AssetMoveBaseSerializer

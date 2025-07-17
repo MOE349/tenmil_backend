@@ -14,5 +14,7 @@ urlpatterns = [
     path('equipment_category/<str:pk>', EquipmentCategoryApiView.as_view(), name="Equipment Category"),
     path('attachment_category', AttachmentCategoryApiView.as_view(), name="Attachment Category"),
     path('attachment_category/<str:pk>', AttachmentCategoryApiView.as_view(), name="Attachment Category"),
+    path('equipment_weight_class', EquipmentWeightClassApiView.as_view(), name="Equipment Weight Class"),
+    path('equipment_weight_class/<str:pk>', EquipmentWeightClassApiView.as_view(), name="Equipment Weight Class"),
 
 ]

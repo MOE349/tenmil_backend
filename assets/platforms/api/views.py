@@ -24,3 +24,6 @@ class AttachmentCategoryApiView(AttachmentCategoryBaseView):
 
 class AssetMoveApiView(AssetBaseMoveView):
     serializer_class = AssetMoveApiSerializer
+
+class EquipmentWeightClassApiView(EquipmentWeightClassBaseView):
+    serializer_class = EquipmentWeightClassApiSerializer

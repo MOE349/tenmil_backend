@@ -37,6 +37,12 @@ class AssetBaseSerializer(BaseSerializer):
         return response
 
 
+class EquipmentWeightClassBaseSerializer(BaseSerializer):
+    class Meta:
+        model = EquipmentWeightClass
+        fields = '__all__'
+        
+
 class EquipmentBaseSerializer(AssetBaseSerializer):
     class Meta:
         model = Equipment
