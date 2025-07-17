@@ -86,7 +86,7 @@ class WorkOrderBaseView(BaseAPIView):
             instance.is_closed = False
             instance.status = status_instance
             instance.save()               
-            WorkOrderLog.objects.create(work_order=instance, amount=amount, log_type=WorkOrderLog.LogTypeChoices.UPDATED, user=params['user'], description="Work Order Updated")
+            WorkOrderLog.objects.create(work_order=instance, amount=amount, log_type=WorkOrderLog.LogTypeChoices.UPDATED, user=params['user'], description=" ".join(list(data.keys())))
         response['status'] = WorkOrderStatusNamesBaseSerializer(instance.status).data
         return self.format_response(data=response, status_code=200)
     
@@ -158,4 +158,8 @@ class WorkOrderCompletionNoteBaseView(BaseAPIView):
             return super().patch(request, instance.pk, *args, **kwargs)
         except:
             return super().post(request, allow_unauthenticated_user, *args, **kwargs)
-       
+    
+    def update(self, data, params, pk, partial, return_instance=True, *args, **kwargs):
+        instance, response = super().update(data, params, pk, partial, return_instance, *args, **kwargs)
+        WorkOrderLog.objects.create(work_order=instance.work_order, amount=0, log_type=WorkOrderLog.LogTypeChoices.UPDATED, user=params['user'], description=" ".join(list(data.keys())))
+        return self.format_response(data=response, status_code=200)

@@ -1,2 +1,2 @@
-
-print(dict({"meter":500}))
+list = ['a','b','c']
+print(" ".join(list))
