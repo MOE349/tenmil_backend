@@ -51,6 +51,7 @@ class EquipmentBaseSerializer(AssetBaseSerializer):
     def to_representation(self, instance): 
         response = super().to_representation(instance)
         response['type'] = 'equipment'
+        response['weight_class'] = EquipmentWeightClassBaseSerializer(instance.weight_class).data
         return response
 
 
