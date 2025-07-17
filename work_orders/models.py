@@ -67,7 +67,7 @@ class WorkOrderLog(BaseModel):
 class WorkOrderCompletionNote(BaseModel):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     work_order = models.OneToOneField(WorkOrder, on_delete=models.CASCADE)
-    completion_notes = models.TextField()
+    completion_notes = models.TextField(null=True, blank=True)
     problem = models.TextField(null=True, blank=True)
     root_cause = models.TextField(null=True, blank=True)
     solution = models.TextField(null=True, blank=True)
