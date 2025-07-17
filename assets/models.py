@@ -28,7 +28,16 @@ class EquipmentCategory(Category):
 class AttachmentCategory(Category):
     pass
 
+class AssetWeightClass(BaseModel):
+    name = models.CharField(_("Name"), max_length=255)
+    weight = models.FloatField(_("Weight"))
 
+    class Meta:
+        abstract = True
+
+class EquipmentWeightClass(AssetWeightClass):
+    pass
+    
 
 class Asset(BaseModel):
     code = models.CharField(_("Code"), max_length=255, unique=True)
@@ -40,6 +49,8 @@ class Asset(BaseModel):
     purchase_date = models.DateField(_("Purchase Date"), null=True, blank=True)
     is_online = models.BooleanField(_("Is Online"), default=True)
     location = models.ForeignKey("company.Location", on_delete=models.CASCADE)
+    year = models.IntegerField(_("Year"), null=True, blank=True)
+
 
     objects = AssetManager()
 
@@ -64,6 +75,7 @@ class Asset(BaseModel):
 
 class Equipment(Asset):
     category = models.ForeignKey(EquipmentCategory, on_delete=models.PROTECT, related_name="equipment")
+    weight_class = models.ForeignKey(EquipmentWeightClass, on_delete=models.SET_NULL, related_name="equipment", null=True, blank=True)
 
     
 class Attachment(Asset):
