@@ -30,7 +30,7 @@ class AttachmentCategory(Category):
 
 class AssetWeightClass(BaseModel):
     name = models.CharField(_("Name"), max_length=255)
-    weight = models.FloatField(_("Weight"))
+    weight = models.CharField(_("Weight"))
 
     class Meta:
         abstract = True
