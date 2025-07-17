@@ -10,7 +10,6 @@ class WorkOrdersConfig(AppConfig):
     name = 'work_orders'
 
     def ready(self):
-        from work_orders.models import WorkOrder
         from .signals import create_default_status_names, create_work_order_completion_note  # noqa
         post_migrate.connect(create_default_status_names, sender=self)
-        post_save.connect(create_work_order_completion_note, sender=WorkOrder, dispatch_uid='create_work_order_completion_note')
+        post_save.connect(create_work_order_completion_note, sender=self, dispatch_uid='create_work_order_completion_note')
