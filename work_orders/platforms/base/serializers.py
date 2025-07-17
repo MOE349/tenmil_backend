@@ -21,6 +21,7 @@ class WorkOrderBaseSerializer(BaseSerializer):
         asset = get_object_by_content_type_and_id(instance.content_type.id, instance.object_id)
         response['asset'] = get_asset_serializer(asset).data
         response['status'] = WorkOrderStatusNamesBaseSerializer(instance.status).data
+        response['completion_note'] = str(WorkOrderCompletionNote.objects.get_or_create(work_order=instance).id)
         return response
 
 
