@@ -97,7 +97,7 @@ class WorkOrderChecklistBaseView(BaseAPIView):
 
     def create(self, data, params, return_instance=True, *args, **kwargs):
         instance, response = super().create(data, params, return_instance, *args, **kwargs)
-        WorkOrderLog.objects.create(work_order=instance.work_order, amount=0, log_type=WorkOrderLog.LogTypeChoices.UPDATED, user=params['user'], description=" ".join(list(data.keys())))
+        WorkOrderLog.objects.create(work_order=instance.work_order, amount=0, log_type=WorkOrderLog.LogTypeChoices.UPDATED, user=params['user'], description="Checklist item added")
         return self.format_response(data=response, status_code=200)
 
 
@@ -119,7 +119,7 @@ class WorkOrderMiscCostBaseView(BaseAPIView):
 
     def create(self, data, params,  return_instance=True, *args, **kwargs):
         instance, response = super().create(data, params,  return_instance, *args, **kwargs)
-        WorkOrderLog.objects.create(work_order=instance.work_order, amount=0, log_type=WorkOrderLog.LogTypeChoices.UPDATED, user=params['user'], description=" ".join(list(data.keys())))
+        WorkOrderLog.objects.create(work_order=instance.work_order, amount=0, log_type=WorkOrderLog.LogTypeChoices.UPDATED, user=params['user'], description="Third party service added")
         return self.format_response(data=response, status_code=200)
 
 
