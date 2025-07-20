@@ -133,6 +133,7 @@ class BaseAPIView(TenantUserAuthBackend, BaseExceptionHandlerMixin, APIView, Res
             if params:
                 instances = instances.filter(**params)
         else:
+            print(f"get_queryset: q_params: {q_params}, params: {params}")
             instances = self.model_class.objects.filter(*q_params, **params)
         
         if ordering:
