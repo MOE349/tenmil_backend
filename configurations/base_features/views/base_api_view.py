@@ -164,8 +164,14 @@ class BaseAPIView(TenantUserAuthBackend, BaseExceptionHandlerMixin, APIView, Res
             if isinstance(f, GenericForeignKey)
         }
 
+        # Handle both DRF and regular Django requests
+        if hasattr(request, 'query_params'):
+            query_params = request.query_params
+        else:
+            query_params = request.GET
+
         params = {}
-        for key, value in request.query_params.items():
+        for key, value in query_params.items():
             if key in ['_end', '_start']:
                 continue
 
