@@ -27,7 +27,8 @@ class BaseExceptionHandlerMixin:
                 status_code = e.status
             else:
                 status_code = 500
-            print("status_code", status_code)
+            if not isinstance(status_code, int):
+                status_code = 500
             if isinstance(error, dict) or isinstance(error, list):
                 return self.format_response(errors=error, status_code=status_code)
             else:
