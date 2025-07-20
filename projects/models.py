@@ -15,7 +15,6 @@ class Project(BaseModel):
 
 
 class AccountCode(BaseModel):
-    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='account_codes')
     name = models.CharField(_("Name"), max_length=255)
     
     class Meta:
@@ -23,11 +22,10 @@ class AccountCode(BaseModel):
         verbose_name_plural = _("Account Codes")
     
     def __str__(self):
-        return f"{self.name} ({self.project.name})"
+        return self.name
 
 
 class JobCode(BaseModel):
-    account_code = models.ForeignKey(AccountCode, on_delete=models.CASCADE, related_name='job_codes')
     name = models.CharField(_("Name"), max_length=255)
     
     class Meta:
@@ -35,11 +33,10 @@ class JobCode(BaseModel):
         verbose_name_plural = _("Job Codes")
     
     def __str__(self):
-        return f"{self.name} ({self.account_code.name})"
+        return self.name
 
 
 class AssetStatus(BaseModel):
-    job_code = models.ForeignKey(JobCode, on_delete=models.CASCADE, related_name='asset_statuses')
     name = models.CharField(_("Name"), max_length=255)
     
     class Meta:
@@ -47,6 +44,6 @@ class AssetStatus(BaseModel):
         verbose_name_plural = _("Asset Statuses")
     
     def __str__(self):
-        return f"{self.name} ({self.job_code.name})"
+        return self.name
 
 
