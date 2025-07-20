@@ -95,7 +95,10 @@ class WorkOrderChecklistBaseView(BaseAPIView):
     serializer_class = WorkOrderChecklistBaseSerializer
     model_class = WorkOrderChecklist
 
-
+    def create(self, data, params, pk, partial, return_instance=True, *args, **kwargs):
+        instance, response = super().create(data, params, pk, partial, return_instance, *args, **kwargs)
+        WorkOrderLog.objects.create(work_order=instance.work_order, amount=0, log_type=WorkOrderLog.LogTypeChoices.UPDATED, user=params['user'], description=" ".join(list(data.keys())))
+        return self.format_response(data=response, status_code=200)
 
 
 class WorkOrderLogBaseView(BaseAPIView):
@@ -113,6 +116,11 @@ class WorkOrderLogBaseView(BaseAPIView):
 class WorkOrderMiscCostBaseView(BaseAPIView):
     serializer_class = WorkOrderMiscCostBaseSerializer
     model_class = WorkOrderMiscCost
+
+    def create(self, data, params, pk, partial, return_instance=True, *args, **kwargs):
+        instance, response = super().create(data, params, pk, partial, return_instance, *args, **kwargs)
+        WorkOrderLog.objects.create(work_order=instance.work_order, amount=0, log_type=WorkOrderLog.LogTypeChoices.UPDATED, user=params['user'], description=" ".join(list(data.keys())))
+        return self.format_response(data=response, status_code=200)
 
 
 class WorkOrderStatusNamesBaseView(BaseAPIView):
