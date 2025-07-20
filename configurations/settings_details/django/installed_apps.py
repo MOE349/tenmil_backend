@@ -12,6 +12,7 @@ THIRD_PARTY_APPS = [
     'rest_framework',
     "corsheaders",
     'rest_framework_simplejwt',
+    "django_extensions",
     # "rest_framework_simplejwt.token_blacklist",
 
 ]
@@ -29,4 +30,5 @@ TENANT_APPS = [
     'work_orders.apps.WorkOrdersConfig',
     "fault_codes.apps.FaultCodesConfig",
     "pm_automation.apps.PmAutomationConfig",
+    "projects.apps.ProjectsConfig",
 ]

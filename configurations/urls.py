@@ -24,6 +24,7 @@ api_urls = [
     # path('scheduled-maintenance/', include('scheduled_maintenance.platforms.api.urls')),
     path('fault-codes/', include('fault_codes.platforms.api.urls')),
     path('pm-automation/', include('pm_automation.platforms.api.urls')),
+    path('projects/', include('projects.platforms.api.urls')),
 ]
 # dashboard_urls = [
 #     # path('users/', include('users.platforms.dashboard.urls')),
@@ -40,13 +41,13 @@ api_urls = [
 #     path('company/', include('company.platforms.mobile.urls')),
 #     path('assets/', include('assets.platforms.mobile.urls')),
 #     path('financial-reports/', include('financial_reports.platforms.mobile.urls')),
-#     path('meter-readings/', include('meter_readings.platforms.mobile.urls')),
+#     path('meter-readings/', include('meter_readings.platforms.dashboard.urls')),
 #     path('work-orders/', include('work_orders.platforms.mobile.urls')),
 #     path('scheduled-maintenance/', include('scheduled_maintenance.platforms.mobile.urls')),
 # ]
 v1_urlpatterns = [
     path('api/', include(api_urls)),
-    # path('mobile/', include(mobile_urls)),
+ 
     # path('dashboard/', include(dashboard_urls)),
 ]
 
