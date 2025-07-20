@@ -169,7 +169,13 @@ class BaseAPIView(TenantUserAuthBackend, BaseExceptionHandlerMixin, APIView, Res
             if key in ['_end', '_start']:
                 continue
 
-            field_name = key.split("__")[0]  # e.g., 'category__name' → 'category'
+            # Check if this is a nested lookup (contains multiple __)
+            if '__' in key:
+                # For nested lookups, pass them through as-is
+                params[key] = value
+                continue
+
+            field_name = key  # e.g., 'category'
             field = model_fields.get(field_name)
 
             is_gfk = key in gfk_field_names
