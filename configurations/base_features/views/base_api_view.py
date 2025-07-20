@@ -123,11 +123,18 @@ class BaseAPIView(TenantUserAuthBackend, BaseExceptionHandlerMixin, APIView, Res
             q_params = params.pop("Q")
         else:
             q_params = []
+        
+        # Handle asset filtering separately from other filters
         if hasattr(self.model_class, "asset") and "asset" in params:
             asset_id = params.pop('asset')
-            instances = get_assets_by_gfk(self.model_class, asset_id, *q_params, **params)
+            # First get the base queryset filtered by asset
+            instances = get_assets_by_gfk(self.model_class, asset_id)
+            # Then apply additional filters if any
+            if params:
+                instances = instances.filter(**params)
         else:
             instances = self.model_class.objects.filter(*q_params, **params)
+        
         if ordering:
             instances = instances.order_by(ordering)
         else:
