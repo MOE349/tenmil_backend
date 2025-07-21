@@ -186,8 +186,25 @@ class BaseAPIView(TenantUserAuthBackend, BaseExceptionHandlerMixin, APIView, Res
 
             # Check if this is a nested lookup (contains multiple __)
             if '__' in key:
-                # For nested lookups, pass them through as-is
-                params[key] = value
+                # Handle __in lookups by splitting comma-separated values into lists
+                if key.endswith('__in'):
+                    params[key] = [v.strip() for v in value.split(',')]
+                # Handle __isnull lookups
+                elif key.endswith('__isnull'):
+                    params[key] = value.lower() in ['true', '1', 'yes']
+                # Handle __range lookups (expects two comma-separated values)
+                elif key.endswith('__range'):
+                    range_vals = [v.strip() for v in value.split(',')]
+                    if len(range_vals) == 2:
+                        params[key] = range_vals
+                    else:
+                        params[key] = value
+                # Handle __date, __year, __month, __day lookups (pass as-is, but strip whitespace)
+                elif key.endswith(('__date', '__year', '__month', '__day')):
+                    params[key] = value.strip()
+                else:
+                    # For other nested lookups, pass them through as-is
+                    params[key] = value
                 continue
 
             field_name = key  # e.g., 'category'
@@ -197,7 +214,11 @@ class BaseAPIView(TenantUserAuthBackend, BaseExceptionHandlerMixin, APIView, Res
             is_fk = isinstance(field, ForeignKey) if field else False
             is_m2m = isinstance(field, ManyToManyField) if field else False
 
-            if is_fk or is_m2m or is_gfk:
+            # Handle boolean values for non-nested fields
+            if isinstance(value, str) and value.lower() in ['true', 'false']:
+                bool_val = value.lower() == 'true'
+                params[key] = bool_val
+            elif is_fk or is_m2m or is_gfk:
                 params[key] = value
             else:
                 params[f"{key}__icontains"] = value
