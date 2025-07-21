@@ -48,6 +48,12 @@ class EquipmentBaseView(BaseAPIView):
     serializer_class = EquipmentBaseSerializer
     model_class = Equipment
 
+    def handle_update_data(self, request):
+        data = super().handle_update_data(request)
+        if "location" in data:
+            data["location"] = Location.objects.get(id=data["location"])
+        return data
+
     def update(self, data, params,  pk, partial, *args, **kwargs):
         user_lang = params.pop('lang', 'en')
         instance = self.get_instance(pk)
