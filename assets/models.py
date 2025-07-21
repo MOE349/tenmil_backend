@@ -51,10 +51,10 @@ class Asset(BaseModel):
     is_online = models.BooleanField(_("Is Online"), default=True)
     location = models.ForeignKey("company.Location", on_delete=models.CASCADE)
     year = models.IntegerField(_("Year"), null=True, blank=True)
-    # project = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True, related_name="%(class)s_projects")
-    # account_code = models.ForeignKey(AccountCode, on_delete=models.SET_NULL, null=True, blank=True, related_name="%(class)s_account_codes")
-    # job_code = models.ForeignKey(JobCode, on_delete=models.SET_NULL, null=True, blank=True, related_name="%(class)s_job_codes")
-    # asset_status = models.ForeignKey(AssetStatus, on_delete=models.SET_NULL, null=True, blank=True, related_name="%(class)s_asset_statuses")
+    project = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True, related_name="%(class)s_projects")
+    account_code = models.ForeignKey(AccountCode, on_delete=models.SET_NULL, null=True, blank=True, related_name="%(class)s_account_codes")
+    job_code = models.ForeignKey(JobCode, on_delete=models.SET_NULL, null=True, blank=True, related_name="%(class)s_job_codes")
+    asset_status = models.ForeignKey(AssetStatus, on_delete=models.SET_NULL, null=True, blank=True, related_name="%(class)s_asset_statuses")
 
 
     objects = AssetManager()
