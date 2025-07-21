@@ -10,7 +10,7 @@ from django.contrib.contenttypes.models import ContentType
 class AssetBaseView(BaseAPIView):
     serializer_class = AssetBaseSerializer
     model_class = Equipment
-    http_method_names = ["get"]
+    http_method_names = ["get", "patch", "put", "post", "delete"]
 
     def list(self, request, *args, **kwargs):
         equipments_instance = Equipment.objects.all()
