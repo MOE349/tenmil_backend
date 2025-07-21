@@ -48,11 +48,7 @@ class EquipmentBaseView(BaseAPIView):
     serializer_class = EquipmentBaseSerializer
     model_class = Equipment
 
-    def handle_update_data(self, request):
-        data = super().handle_update_data(request)
-        if "location" in data:
-            data["location"] = Location.objects.get(id=data["location"])
-        return data
+    
 
     def update(self, data, params,  pk, partial, *args, **kwargs):
         user_lang = params.pop('lang', 'en')
@@ -63,7 +59,8 @@ class EquipmentBaseView(BaseAPIView):
         serializer.save()
         response = serializer.data
         if "location" in data:
-            move_asset(asset=instance, from_location=location, to_location=data["location"], user=self.get_request_user(self.request))
+            to_location = Location.objects.get(id=data["location"])
+            move_asset(asset=instance, from_location=location, to_location=to_location, user=self.get_request_user(self.request))
         return self.format_response(data=serializer.data, status_code=200)
             
 
