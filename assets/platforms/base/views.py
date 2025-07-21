@@ -31,12 +31,12 @@ class AssetBaseView(BaseAPIView):
         return instance
 
     def update(self, data, params,  pk, partial, *args, **kwargs):
-        print(f"update data: {data}")        
+        print(f"Asset update data: {data}")
+        instance, response = super().update(data, params,  pk, partial, *args, **kwargs)    
         if "location" in data:
             print(f"update location: {data['location']}")
-            instance = self.get_instance(pk)
             move_asset(asset=instance, to_location=data["location"], user=self.get_request_user(self.request))
-        return super().update(data, params,  pk, partial, *args, **kwargs)
+        return self.format_response(data=response, status_code=200)
     
 
 class EquipmentWeightClassBaseView(BaseAPIView):
@@ -44,12 +44,11 @@ class EquipmentWeightClassBaseView(BaseAPIView):
     model_class = EquipmentWeightClass
 
 
-class EquipmentBaseView(BaseAPIView):
+class EquipmentBaseView(AssetBaseView):
     serializer_class = EquipmentBaseSerializer
     model_class = Equipment
 
-
-class AttachmentBaseView(BaseAPIView):
+class AttachmentBaseView(AssetBaseView):
     serializer_class = AttachmentBaseSerializer
     model_class = Attachment
 
