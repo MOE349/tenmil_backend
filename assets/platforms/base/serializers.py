@@ -1,6 +1,7 @@
 from company.models import Location
 from configurations.base_features.serializers.base_serializer import BaseSerializer
 from assets.models import *
+from projects.platforms.base.serializers import ProjectBaseSerializer, AccountCodeBaseSerializer, JobCodeBaseSerializer, AssetStatusBaseSerializer
 
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
@@ -29,6 +30,19 @@ class AssetBaseSerializer(BaseSerializer):
             "slug": instance.category.slug,
             "end_point": "/assets/category"
         }
+        # Use serializers for project, account_code, job_code, asset_status
+        response['project'] = None
+        if getattr(instance, 'project', None):
+            response['project'] = ProjectBaseSerializer(instance.project).data
+        response['account_code'] = None
+        if getattr(instance, 'account_code', None):
+            response['account_code'] = AccountCodeBaseSerializer(instance.account_code).data
+        response['job_code'] = None
+        if getattr(instance, 'job_code', None):
+            response['job_code'] = JobCodeBaseSerializer(instance.job_code).data
+        response['asset_status'] = None
+        if getattr(instance, 'asset_status', None):
+            response['asset_status'] = AssetStatusBaseSerializer(instance.asset_status).data
         response['created_at'] = instance.created_at
         response['updated_at'] = instance.updated_at
         response['purchase_date'] = instance.purchase_date
