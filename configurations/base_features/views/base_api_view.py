@@ -117,7 +117,7 @@ class BaseAPIView(TenantUserAuthBackend, BaseExceptionHandlerMixin, APIView, Res
     
     def get_queryset(self, params=None, ordering=None):
         """Get the queryset based on the given params"""
-        # params = self.modify_params(params)
+        params = self.modify_params(params)
         if params is None:
             params = {}
         if "Q" in params:
