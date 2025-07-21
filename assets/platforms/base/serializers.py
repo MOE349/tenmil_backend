@@ -1,10 +1,13 @@
 from company.models import Location
+from company.platforms.base.serializers import LocationBaseSerializer
 from configurations.base_features.serializers.base_serializer import BaseSerializer
 from assets.models import *
 from projects.platforms.base.serializers import ProjectBaseSerializer, AccountCodeBaseSerializer, JobCodeBaseSerializer, AssetStatusBaseSerializer
 
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
+
+from tenant_users.platforms.base.serializers import TenantUserBaseSerializer
 
 class AssetBaseSerializer(BaseSerializer):
     # def mod_create(self, validated_data):
@@ -96,3 +99,10 @@ class AssetMoveBaseSerializer(BaseSerializer):
     class Meta:
         model = AssetMovementLog
         fields = '__all__'
+
+    def to_representation(self, instance):
+        response = super().to_representation(instance)
+        response['from_location'] = LocationBaseSerializer(instance.from_location).data
+        response['to_location'] = LocationBaseSerializer(instance.to_location).data
+        response['moved_by'] = TenantUserBaseSerializer(instance.moved_by).data
+        return response

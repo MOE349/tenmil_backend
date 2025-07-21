@@ -40,6 +40,5 @@ def move_asset(asset, from_location, to_location, user=None):
         to_location=to_location,
         moved_by=user,
     )
-    print(f"move_asset from {log.from_location} to {log.to_location}")
     return log
 
