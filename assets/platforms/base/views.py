@@ -10,7 +10,7 @@ from django.contrib.contenttypes.models import ContentType
 class AssetBaseView(BaseAPIView):
     serializer_class = AssetBaseSerializer
     model_class = Equipment
-    http_method_names = ["get", "patch", "put", "post", "delete"]
+    http_method_names = ["get"]
 
     def list(self, request, *args, **kwargs):
         equipments_instance = Equipment.objects.all()
@@ -32,7 +32,7 @@ class AssetBaseView(BaseAPIView):
 
     def update(self, data, params,  pk, partial, *args, **kwargs):
         print(f"Asset update data: {data}")
-        instance, response = super().update(data, params,  pk, partial, return_instance=True, *args, **kwargs)    
+        instance, response = super().update(data, params,  pk, partial, *args, **kwargs)    
         if "location" in data:
             print(f"update location: {data['location']}")
             move_asset(asset=instance, to_location=data["location"], user=self.get_request_user(self.request))
@@ -43,14 +43,30 @@ class EquipmentWeightClassBaseView(BaseAPIView):
     serializer_class = EquipmentWeightClassBaseSerializer
     model_class = EquipmentWeightClass
 
-
-class EquipmentBaseView(AssetBaseView):
+ 
+class EquipmentBaseView(BaseAPIView):
     serializer_class = EquipmentBaseSerializer
     model_class = Equipment
 
-class AttachmentBaseView(AssetBaseView):
+    def update(self, data, params,  pk, partial, *args, **kwargs):
+        print(f"Asset update data: {data}")
+        instance, response = super().update(data, params,  pk, partial, return_instance=True, *args, **kwargs)    
+        if "location" in data:
+            print(f"update location: {data['location']}")
+            move_asset(asset=instance, to_location=data["location"], user=self.get_request_user(self.request))
+        return self.format_response(data=response, status_code=200)
+
+class AttachmentBaseView(BaseAPIView):
     serializer_class = AttachmentBaseSerializer
     model_class = Attachment
+
+    def update(self, data, params,  pk, partial, *args, **kwargs):
+        print(f"Asset update data: {data}")
+        instance, response = super().update(data, params,  pk, partial, return_instance=True, *args, **kwargs)    
+        if "location" in data:
+            print(f"update location: {data['location']}")
+            move_asset(asset=instance, to_location=data["location"], user=self.get_request_user(self.request))
+        return self.format_response(data=response, status_code=200)
 
 
 class EquipmentCategoryBaseView(BaseAPIView):
