@@ -109,7 +109,8 @@ class BaseAPIView(TenantUserAuthBackend, BaseExceptionHandlerMixin, APIView, Res
         for field in old_params.keys():
             field_type =self.model_class._meta.get_field(field.split('__')[0]).get_internal_type()
             if field_type == 'ForeignKey':
-                params[f"{field.split('__')[0]}__id"] = old_params[field]
+                if "icontains" in field:
+                    params[f"{field.split('__')[0]}__id"] = old_params[field]
             else:
                 params[field] = old_params[field]
         return params
