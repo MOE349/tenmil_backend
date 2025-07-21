@@ -28,15 +28,15 @@ def get_content_type_and_asset_id(
     return get_content_type_and_object_id(obj_or_id, [Equipment, Attachment], return_ct_instance=return_ct_instance, return_instance=return_instance)
 
 
-def move_asset(asset, to_location, user=None):
-    if str(asset.location.id) == to_location:
+def move_asset(asset, from_location, to_location, user=None):
+    if from_location == to_location:
         return
 
     log = AssetMovementLog.objects.create(
         content_type=ContentType.objects.get_for_model(asset),
         object_id=asset.id,
         asset=asset,
-        from_location=asset.location,
+        from_location=from_location,
         to_location=to_location,
         moved_by=user,
     )

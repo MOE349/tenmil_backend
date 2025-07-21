@@ -49,24 +49,33 @@ class EquipmentBaseView(BaseAPIView):
     model_class = Equipment
 
     def update(self, data, params,  pk, partial, *args, **kwargs):
-        print(f"Asset update data: {data}")
-        instance, response = super().update(data, params,  pk, partial, return_instance=True, *args, **kwargs)    
+        user_lang = params.pop('lang', 'en')
+        instance = self.get_instance(pk)
+        location = instance.location
+        serializer = self.serializer_class(instance, data=data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        response = serializer.data
         if "location" in data:
-            print(f"update location: {data['location']}")
-            move_asset(asset=instance, to_location=data["location"], user=self.get_request_user(self.request))
-        return self.format_response(data=response, status_code=200)
+            move_asset(asset=instance, from_location=location, to_location=data["location"], user=self.get_request_user(self.request))
+        return self.format_response(data=serializer.data, status_code=200)
+            
 
 class AttachmentBaseView(BaseAPIView):
     serializer_class = AttachmentBaseSerializer
     model_class = Attachment
 
     def update(self, data, params,  pk, partial, *args, **kwargs):
-        print(f"Asset update data: {data}")
-        instance, response = super().update(data, params,  pk, partial, return_instance=True, *args, **kwargs)    
+        user_lang = params.pop('lang', 'en')
+        instance = self.get_instance(pk)
+        location = instance.location
+        serializer = self.serializer_class(instance, data=data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        response = serializer.data
         if "location" in data:
-            print(f"update location: {data['location']}")
-            move_asset(asset=instance, to_location=data["location"], user=self.get_request_user(self.request))
-        return self.format_response(data=response, status_code=200)
+            move_asset(asset=instance, from_location=location, to_location=data["location"], user=self.get_request_user(self.request))
+        return self.format_response(data=serializer.data, status_code=200)
 
 
 class EquipmentCategoryBaseView(BaseAPIView):
