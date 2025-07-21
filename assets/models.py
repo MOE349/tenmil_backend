@@ -106,7 +106,6 @@ class AssetMovementLog(BaseModel):
         "company.Location", null=True, blank=True, on_delete=models.SET_NULL, related_name="incoming_movements"
     )
     timestamp = models.DateTimeField(auto_now_add=True)
-    notes = models.TextField(blank=True, null=True)
     moved_by = models.ForeignKey(
         TenantUser,
         null=True, blank=True,

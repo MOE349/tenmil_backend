@@ -93,25 +93,6 @@ class AttachmentCategoryBaseSerializer(BaseSerializer):
 
 
 class AssetMoveBaseSerializer(BaseSerializer):
-    to_location = serializers.UUIDField()
-    notes = serializers.CharField(required=False, allow_blank=True)
-
-    def validate(self, attrs):
-        location_id = attrs.get("to_location")
-        location = Location.objects.filter(id=location_id).first()
-
-        if not location:
-            raise serializers.ValidationError({"to_location": _("Invalid location ID")})
-
-        attrs["to_location_obj"] = location
-        return attrs
-
-    def mod_create(self, validated_data):
-        # Should be called from the BaseApiView `create()` method
-        asset = self.context.get("asset")
-        user = self.context.get("request").user
-        to_location = validated_data["to_location_obj"]
-        notes = validated_data.get("notes", "")
-
-        from assets.services import move_asset
-        return move_asset(asset, to_location, notes=notes, user=user)
+    class Meta:
+        model = AssetMovementLog
+        fields = '__all__'

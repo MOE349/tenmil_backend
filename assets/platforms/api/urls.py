@@ -3,7 +3,7 @@ from assets.platforms.api.views import *
 
 
 urlpatterns = [
-    path("move/<str:pk>/", AssetMoveApiView.as_view(), name="assets-move"),
+    path("movement-log", AssetMoveApiView.as_view(), name="assets-move"),
     path('assets', AssetApiView.as_view(), name='Assets'),
     path('assets/<str:pk>', AssetApiView.as_view(), name='Asset details'),
     path('equipments', EquipmentApiView.as_view(), name='Equipments'),

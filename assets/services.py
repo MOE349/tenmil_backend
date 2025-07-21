@@ -28,8 +28,8 @@ def get_content_type_and_asset_id(
     return get_content_type_and_object_id(obj_or_id, [Equipment, Attachment], return_ct_instance=return_ct_instance, return_instance=return_instance)
 
 
-def move_asset(asset, to_location, notes=None, user=None):
-    if asset.location == to_location.id:
+def move_asset(asset, to_location, user=None):
+    if str(asset.location.id) == to_location:
         raise ValueError("Asset is already at the specified location.")
 
     log = AssetMovementLog.objects.create(
@@ -38,13 +38,7 @@ def move_asset(asset, to_location, notes=None, user=None):
         asset=asset,
         from_location=asset.location,
         to_location=to_location,
-        notes=notes or "Moved without additional info",
         moved_by=user,
     )
-
-    asset.location = to_location
-    asset.save()
-
     return log
-
 
