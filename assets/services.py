@@ -30,7 +30,7 @@ def get_content_type_and_asset_id(
 
 def move_asset(asset, to_location, user=None):
     if str(asset.location.id) == to_location:
-        raise ValueError("Asset is already at the specified location.")
+        return
 
     log = AssetMovementLog.objects.create(
         content_type=ContentType.objects.get_for_model(asset),
@@ -40,5 +40,6 @@ def move_asset(asset, to_location, user=None):
         to_location=to_location,
         moved_by=user,
     )
+    print(f"move_asset from {log.from_location} to {log.to_location}")
     return log
 

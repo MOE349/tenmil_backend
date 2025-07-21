@@ -31,7 +31,9 @@ class AssetBaseView(BaseAPIView):
         return instance
 
     def update(self, data, params,  pk, partial, *args, **kwargs):
+        print(f"update data: {data}")        
         if "location" in data:
+            print(f"update location: {data['location']}")
             instance = self.get_instance(pk)
             move_asset(asset=instance, to_location=data["location"], user=self.get_request_user(self.request))
         return super().update(data, params,  pk, partial, *args, **kwargs)
