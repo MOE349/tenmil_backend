@@ -29,6 +29,7 @@ class WorkOrder(BaseModel):
     is_auto_generated = models.BooleanField(default=False)
     is_reopened = models.BooleanField(default=False)
     completion_meter_reading = models.IntegerField(null=True, blank=True)
+    trigger_meter_reading = models.IntegerField(null=True, blank=True)
 
     def save(self, *args, force_insert=False, force_update=False, using=None, update_fields=None):
         if not self.code:

@@ -1,5 +1,6 @@
 from configurations.base_features.exceptions.base_exceptions import LocalBaseException
 from configurations.base_features.views.base_api_view import BaseAPIView
+from meter_readings.models import MeterReading
 from work_orders.models import *
 from work_orders.platforms.base.serializers import *
 
@@ -12,6 +13,10 @@ class WorkOrderBaseView(BaseAPIView):
     def handle_post_data(self, request):        
         data =  super().handle_post_data(request)
         # data = self.validate_post_data(data)
+        data['trigger_meter_reading'] = MeterReading.objects.filter(
+            content_type=data.get('content_type'),
+            object_id=data.get('object_id')
+        ).order_by('-created_at').first().meter_reading
         return data
     
     # def validate_post_data(self, data):
@@ -94,6 +99,10 @@ class WorkOrderBaseView(BaseAPIView):
 class WorkOrderChecklistBaseView(BaseAPIView):
     serializer_class = WorkOrderChecklistBaseSerializer
     model_class = WorkOrderChecklist
+
+    def handle_post_data(self, request):
+        data = super().handle_post_data(request)
+        return data
 
     def create(self, data, params, return_instance=True, *args, **kwargs):
         instance, response = super().create(data, params, return_instance, *args, **kwargs)
