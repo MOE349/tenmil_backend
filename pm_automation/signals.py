@@ -17,9 +17,9 @@ def handle_pm_settings_save(sender, instance, created, **kwargs):
     current_meter_reading = MeterReading.objects.filter(
         content_type=instance.content_type,
         object_id=instance.object_id
-    ).order_by('-created_at').first().meter_reading
+    ).order_by('-created_at').first()
     
-    if current_meter_reading <= instance.next_trigger_value:
+    if current_meter_reading.meter_reading >= instance.next_trigger_value:
         PMAutomationService.process_meter_reading(
             asset_id=instance.object_id,
             meter_reading_value=current_meter_reading.meter_reading,
