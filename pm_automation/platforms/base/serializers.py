@@ -8,7 +8,7 @@ from work_orders.models import WorkOrder
 class PMSettingsChecklistSerializer(BaseSerializer):
     class Meta:
         model = PMSettingsChecklist
-        fields = ['id', 'name']
+        fields = ['id', 'name', 'pm_settings']
 
 
 class PMSettingsBaseSerializer(BaseSerializer):

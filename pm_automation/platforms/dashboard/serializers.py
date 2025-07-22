@@ -10,6 +10,7 @@ class PmtriggerDashboardSerializer(PmtriggerBaseSerializer):
 
 
 class PMSettingsChecklistDashboardSerializer(PMSettingsChecklistSerializer):
-    pass
+    class Meta(PMSettingsChecklistSerializer.Meta):
+        fields = ['id', 'name', 'pm_settings']
 
 
