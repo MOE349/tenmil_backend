@@ -1,12 +1,31 @@
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from meter_readings.models import MeterReading
+from pm_automation.models import PMSettings
 from work_orders.models import WorkOrder
 from pm_automation.services import PMAutomationService
 import logging
 
 # Set up logging
 logger = logging.getLogger(__name__)
+
+@receiver(post_save, sender=PMSettings)
+def handle_pm_settings_save(sender, instance, created, **kwargs):
+    """
+    Handle PM settings saves and trigger PM automation
+    """
+    current_meter_reading = MeterReading.objects.filter(
+        content_type=instance.content_type,
+        object_id=instance.object_id
+    ).order_by('-created_at').first()
+    
+    if current_meter_reading <= instance.next_trigger_value:
+        PMAutomationService.process_meter_reading(
+            asset_id=instance.object_id,
+            meter_reading_value=current_meter_reading.meter_reading,
+            meter_reading_unit=current_meter_reading.unit,
+            user=current_meter_reading.created_by
+        )
 
 
 @receiver(post_save, sender=MeterReading)
