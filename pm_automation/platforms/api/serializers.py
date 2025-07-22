@@ -9,3 +9,7 @@ class PMTriggerApiSerializer(PMTriggerBaseSerializer):
     pass
 
 
+class PMSettingsChecklistApiSerializer(PMSettingsChecklistSerializer):
+    pass
+
+

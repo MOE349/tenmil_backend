@@ -10,3 +10,7 @@ class PmtriggerMobileView(PmtriggerBaseView):
     serializer_class = PmtriggerMobileSerializer
 
 
+class PMSettingsChecklistMobileView(PMSettingsChecklistBaseView):
+    serializer_class = PMSettingsChecklistMobileSerializer
+
+

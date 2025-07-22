@@ -9,3 +9,7 @@ class PmtriggerMobileSerializer(PmtriggerBaseSerializer):
     pass
 
 
+class PMSettingsChecklistMobileSerializer(PMSettingsChecklistSerializer):
+    pass
+
+

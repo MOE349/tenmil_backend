@@ -10,3 +10,7 @@ class PmtriggerDashboardView(PmtriggerBaseView):
     serializer_class = PmtriggerDashboardSerializer
 
 
+class PMSettingsChecklistDashboardView(PMSettingsChecklistBaseView):
+    serializer_class = PMSettingsChecklistDashboardSerializer
+
+
