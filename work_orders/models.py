@@ -43,6 +43,23 @@ class WorkOrderChecklist(BaseModel):
     completed_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name="WorkOrderChecklist_CompletedBy", null=True, blank=True)
     completion_date = models.DateTimeField(null=True, blank=True)
     hrs_spent = models.IntegerField(null=True, blank=True)
+    
+    # New field to track source PM checklist
+    source_pm_checklist = models.ForeignKey(
+        'pm_automation.PMSettingsChecklist', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='work_order_checklists'
+    )
+    is_custom = models.BooleanField(default=False, help_text="True if this is a custom checklist item added by user")
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['work_order']),
+            models.Index(fields=['work_order', 'source_pm_checklist']),
+            models.Index(fields=['is_custom']),
+        ]
 
 
 class WorkOrderMiscCost(BaseModel):

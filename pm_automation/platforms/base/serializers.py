@@ -5,7 +5,15 @@ from rest_framework import serializers
 from work_orders.models import WorkOrder
 
 
+class PMSettingsChecklistSerializer(BaseSerializer):
+    class Meta:
+        model = PMSettingsChecklist
+        fields = ['id', 'name']
+
+
 class PMSettingsBaseSerializer(BaseSerializer):
+    checklist_items = PMSettingsChecklistSerializer(many=True, read_only=True)
+    
     class Meta:
         model = PMSettings
         fields = '__all__'

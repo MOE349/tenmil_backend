@@ -4,6 +4,7 @@ from configurations.base_features.db.base_model import BaseModel
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from tenant_users.models import TenantUser as User
+from work_orders.models import WorkOrderChecklist
 
 
 class PMUnitChoices(models.TextChoices):
@@ -114,6 +115,44 @@ class PMSettings(BaseModel):
         self.next_trigger_value = closing_value + self.interval_value
         self.last_handled_trigger = closing_value
         self.save()
+    
+    def get_checklist_items(self):
+        """Get all checklist items for this PM setting"""
+        return self.checklist_items.all()
+    
+    def add_checklist_item(self, name):
+        """Add a checklist item to this PM setting"""
+        return PMSettingsChecklist.objects.create(
+            pm_settings=self,
+            name=name
+        )
+    
+    def copy_checklist_to_work_order(self, work_order):
+        """Copy preset checklist items to a work order"""
+        checklist_items = self.get_checklist_items()
+        
+        for item in checklist_items:
+            WorkOrderChecklist.objects.create(
+                work_order=work_order,
+                description=item.name,
+                source_pm_checklist=item
+            )
+
+
+class PMSettingsChecklist(BaseModel):
+    """Preset checklist items for PM Settings"""
+    pm_settings = models.ForeignKey(PMSettings, on_delete=models.CASCADE, related_name='checklist_items')
+    name = models.CharField(max_length=255, help_text="Checklist item description")
+    
+    class Meta:
+        verbose_name = _("PM Settings Checklist")
+        verbose_name_plural = _("PM Settings Checklists")
+        indexes = [
+            models.Index(fields=['pm_settings']),
+        ]
+    
+    def __str__(self):
+        return f"{self.pm_settings} - {self.name}"
 
 
 class PMTrigger(BaseModel):

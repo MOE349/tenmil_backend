@@ -1,5 +1,11 @@
 from django.contrib import admin
-from pm_automation.models import PMSettings, PMTrigger, PMUnitChoices
+from pm_automation.models import PMSettings, PMTrigger, PMSettingsChecklist, PMUnitChoices
+
+
+class PMSettingsChecklistInline(admin.TabularInline):
+    model = PMSettingsChecklist
+    extra = 1
+    fields = ['name']
 
 
 @admin.register(PMSettings)
@@ -8,6 +14,7 @@ class PMSettingsAdmin(admin.ModelAdmin):
     list_filter = ('is_active', 'interval_unit', 'start_threshold_unit', 'lead_time_unit')
     search_fields = ('content_type__app_label', 'content_type__model', 'object_id')
     readonly_fields = ('next_trigger_value', 'last_handled_trigger')
+    inlines = [PMSettingsChecklistInline]
     
     fieldsets = (
         ('Asset', {
@@ -51,3 +58,10 @@ class PMTriggerAdmin(admin.ModelAdmin):
             'fields': ('is_handled', 'handled_at')
         }),
     )
+
+
+@admin.register(PMSettingsChecklist)
+class PMSettingsChecklistAdmin(admin.ModelAdmin):
+    list_display = ['name', 'pm_settings']
+    list_filter = ['pm_settings']
+    search_fields = ['name', 'pm_settings__name']
