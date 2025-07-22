@@ -23,7 +23,7 @@ def handle_pm_settings_save(sender, instance, created, **kwargs):
         PMAutomationService.process_meter_reading(
             asset_id=instance.object_id,
             meter_reading_value=current_meter_reading.meter_reading,
-            meter_reading_unit=current_meter_reading.unit,
+            meter_reading_unit='hours',
             user=current_meter_reading.created_by
         )
 
