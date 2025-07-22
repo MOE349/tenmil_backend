@@ -1,6 +1,7 @@
 from django.utils import timezone
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection
+from meter_readings.models import MeterReading
 from pm_automation.models import PMSettings, PMTrigger, PMUnitChoices
 from work_orders.models import WorkOrder, WorkOrderStatusNames, WorkOrderLog
 from tenant_users.models import TenantUser
@@ -268,6 +269,9 @@ class PMAutomationService:
             description = f"Meter-driven PM at {trigger_value} {pm_settings.interval_unit}"
         
         # Create work order (do NOT set created_by)
+        trigger_meter_reading = MeterReading.objects.filter(
+            object_id=asset.id
+        ).order_by('-created_at').first().meter_reading
         work_order = WorkOrder.objects.create(
             content_type=pm_settings.content_type,
             object_id=pm_settings.object_id,
@@ -276,7 +280,7 @@ class PMAutomationService:
             priority='medium',
             description=description,
             is_auto_generated=True,
-            trigger_meter_reading=trigger_value
+            trigger_meter_reading=trigger_meter_reading
         )
         
         logger.info(f"Created work order {work_order.id}: {work_order.description}")
