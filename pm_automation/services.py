@@ -274,7 +274,9 @@ class PMAutomationService:
             status=active_status,
             maint_type='PM',
             priority='medium',
-            description=description
+            description=description,
+            is_auto_generated=True,
+            trigger_meter_reading=trigger_value
         )
         
         logger.info(f"Created work order {work_order.id}: {work_order.description}")
