@@ -8,7 +8,7 @@ from work_orders.models import WorkOrder
 class PMIterationChecklistSerializer(BaseSerializer):
     class Meta:
         model = PMIterationChecklist
-        fields = ['id', 'name', 'iteration']
+        fields = ['id', 'name']
 
 
 class PMIterationSerializer(BaseSerializer):
@@ -20,7 +20,7 @@ class PMIterationSerializer(BaseSerializer):
 
 
 class PMSettingsBaseSerializer(BaseSerializer):
-    iterations = PMIterationSerializer(many=True, read_only=True)
+    iterations = PMIterationSerializer(many=True, read_only=True, source='iterations.all')
     
     class Meta:
         model = PMSettings
