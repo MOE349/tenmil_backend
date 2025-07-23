@@ -10,7 +10,11 @@ class PMTriggerApiView(PMTriggerBaseView):
     serializer_class = PMTriggerApiSerializer
 
 
-class PMSettingsChecklistApiView(PMSettingsChecklistBaseView):
-    serializer_class = PMSettingsChecklistApiSerializer
+class PMIterationApiView(PMIterationBaseView):
+    serializer_class = PMIterationApiSerializer
+
+
+class PMIterationChecklistApiView(PMIterationChecklistBaseView):
+    serializer_class = PMIterationChecklistApiSerializer
 
 

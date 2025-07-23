@@ -5,14 +5,22 @@ from rest_framework import serializers
 from work_orders.models import WorkOrder
 
 
-class PMSettingsChecklistSerializer(BaseSerializer):
+class PMIterationChecklistSerializer(BaseSerializer):
     class Meta:
-        model = PMSettingsChecklist
-        fields = ['id', 'name', 'pm_settings']
+        model = PMIterationChecklist
+        fields = ['id', 'name', 'iteration']
+
+
+class PMIterationSerializer(BaseSerializer):
+    checklist_items = PMIterationChecklistSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = PMIteration
+        fields = ['id', 'interval_value', 'name', 'order', 'pm_settings', 'checklist_items']
 
 
 class PMSettingsBaseSerializer(BaseSerializer):
-    checklist_items = PMSettingsChecklistSerializer(many=True, read_only=True)
+    iterations = PMIterationSerializer(many=True, read_only=True)
     
     class Meta:
         model = PMSettings

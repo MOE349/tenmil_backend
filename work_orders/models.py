@@ -44,9 +44,9 @@ class WorkOrderChecklist(BaseModel):
     completion_date = models.DateTimeField(null=True, blank=True)
     hrs_spent = models.IntegerField(null=True, blank=True)
     
-    # New field to track source PM checklist
-    source_pm_checklist = models.ForeignKey(
-        'pm_automation.PMSettingsChecklist', 
+    # New field to track source PM iteration checklist
+    source_pm_iteration_checklist = models.ForeignKey(
+        'pm_automation.PMIterationChecklist', 
         on_delete=models.SET_NULL, 
         null=True, 
         blank=True,
@@ -57,7 +57,7 @@ class WorkOrderChecklist(BaseModel):
     class Meta:
         indexes = [
             models.Index(fields=['work_order']),
-            models.Index(fields=['work_order', 'source_pm_checklist']),
+            models.Index(fields=['work_order', 'source_pm_iteration_checklist']),
             models.Index(fields=['is_custom']),
         ]
 

@@ -285,12 +285,16 @@ class PMAutomationService:
         
         logger.info(f"Created work order {work_order.id}: {work_order.description}")
         
-        # Copy PM settings checklist to work order
+        # Get current iteration and copy cumulative checklist to work order
         try:
-            pm_settings.copy_checklist_to_work_order(work_order)
-            logger.info(f"Copied {pm_settings.checklist_items.count()} checklist items to work order {work_order.id}")
+            current_iteration = pm_settings.get_current_iteration()
+            if current_iteration:
+                pm_settings.copy_iteration_checklist_to_work_order(work_order, current_iteration)
+                logger.info(f"Copied cumulative checklist for iteration '{current_iteration.name}' to work order {work_order.id}")
+            else:
+                logger.warning(f"No iterations found for PM Settings {pm_settings.id}")
         except Exception as e:
-            logger.error(f"Error copying checklist to work order {work_order.id}: {e}")
+            logger.error(f"Error copying iteration checklist to work order {work_order.id}: {e}")
         
         # Log creation with system admin as user
         WorkOrderLog.objects.create(
@@ -331,6 +335,16 @@ class PMAutomationService:
         # Update PM settings with the closing meter reading
         pm_settings = pm_trigger.pm_settings
         pm_settings.update_next_trigger(closing_meter_reading)
+        
+        # Advance to the next iteration in the cycle
+        try:
+            next_iteration = pm_settings.advance_to_next_iteration()
+            if next_iteration:
+                logger.info(f"Advanced to next iteration: {next_iteration.name}")
+            else:
+                logger.warning(f"No iterations found for PM Settings {pm_settings.id}")
+        except Exception as e:
+            logger.error(f"Error advancing to next iteration for PM Settings {pm_settings.id}: {e}")
         
         logger.info(f"Updated PM settings next trigger to {pm_settings.next_trigger_value}")
     

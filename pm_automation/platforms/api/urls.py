@@ -7,6 +7,8 @@ urlpatterns = [
     path('pm-settings/<str:pk>', PMSettingsApiView.as_view(), name='PM Settings'),
     path('pm-triggers', PMTriggerApiView.as_view(), name='PM Triggers'),
     path('pm-triggers/<str:pk>', PMTriggerApiView.as_view(), name='PM Triggers'),
-    path('pm-settings-checklist', PMSettingsChecklistApiView.as_view(), name='PM Settings Checklist'),
-    path('pm-settings-checklist/<str:pk>', PMSettingsChecklistApiView.as_view(), name='PM Settings Checklist'),
+    path('pm-iterations', PMIterationApiView.as_view(), name='PM Iterations'),
+    path('pm-iterations/<str:pk>', PMIterationApiView.as_view(), name='PM Iterations'),
+    path('pm-iteration-checklist', PMIterationChecklistApiView.as_view(), name='PM Iteration Checklist'),
+    path('pm-iteration-checklist/<str:pk>', PMIterationChecklistApiView.as_view(), name='PM Iteration Checklist'),
 ]

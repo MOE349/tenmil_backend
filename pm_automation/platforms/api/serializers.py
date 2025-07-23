@@ -9,8 +9,11 @@ class PMTriggerApiSerializer(PMTriggerBaseSerializer):
     pass
 
 
-class PMSettingsChecklistApiSerializer(PMSettingsChecklistSerializer):
-    class Meta(PMSettingsChecklistSerializer.Meta):
-        fields = ['id', 'name', 'pm_settings']
+class PMIterationApiSerializer(PMIterationSerializer):
+    pass
+
+
+class PMIterationChecklistApiSerializer(PMIterationChecklistSerializer):
+    pass
 
 

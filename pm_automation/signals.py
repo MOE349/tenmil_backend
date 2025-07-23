@@ -1,7 +1,7 @@
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from meter_readings.models import MeterReading
-from pm_automation.models import PMSettings
+from pm_automation.models import PMSettings, PMIteration
 from work_orders.models import WorkOrder
 from pm_automation.services import PMAutomationService
 import logging
@@ -14,6 +14,19 @@ def handle_pm_settings_save(sender, instance, created, **kwargs):
     """
     Handle PM settings saves and trigger PM automation
     """
+    # If this is a new PM Settings, create the first iteration automatically
+    if created:
+        try:
+            # Create the first iteration with the base interval value
+            first_iteration = PMIteration.objects.create(
+                pm_settings=instance,
+                interval_value=instance.interval_value,
+                name=f"{instance.interval_value} {instance.interval_unit}"
+            )
+            logger.info(f"Created first iteration for PM Settings {instance.id}: {first_iteration.name}")
+        except Exception as e:
+            logger.error(f"Error creating first iteration for PM Settings {instance.id}: {e}")
+    
     current_meter_reading = MeterReading.objects.filter(
         content_type=instance.content_type,
         object_id=instance.object_id

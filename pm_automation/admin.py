@@ -1,11 +1,18 @@
 from django.contrib import admin
-from pm_automation.models import PMSettings, PMTrigger, PMSettingsChecklist, PMUnitChoices
+from pm_automation.models import PMSettings, PMTrigger, PMIteration, PMIterationChecklist, PMUnitChoices
 
 
-class PMSettingsChecklistInline(admin.TabularInline):
-    model = PMSettingsChecklist
+class PMIterationChecklistInline(admin.TabularInline):
+    model = PMIterationChecklist
     extra = 1
     fields = ['name']
+
+
+class PMIterationInline(admin.TabularInline):
+    model = PMIteration
+    extra = 1
+    fields = ['interval_value', 'name']
+    inlines = [PMIterationChecklistInline]
 
 
 @admin.register(PMSettings)
@@ -13,8 +20,8 @@ class PMSettingsAdmin(admin.ModelAdmin):
     list_display = ('id', 'content_type', 'object_id', 'interval_value', 'interval_unit', 'start_threshold_value', 'start_threshold_unit', 'lead_time_value', 'lead_time_unit', 'is_active', 'next_trigger_value')
     list_filter = ('is_active', 'interval_unit', 'start_threshold_unit', 'lead_time_unit')
     search_fields = ('content_type__app_label', 'content_type__model', 'object_id')
-    readonly_fields = ('next_trigger_value', 'last_handled_trigger')
-    inlines = [PMSettingsChecklistInline]
+    readonly_fields = ('next_trigger_value', 'last_handled_trigger', 'current_iteration_index')
+    inlines = [PMIterationInline]
     
     fieldsets = (
         ('Asset', {
@@ -31,7 +38,7 @@ class PMSettingsAdmin(admin.ModelAdmin):
             'fields': ('lead_time_value', 'lead_time_unit')
         }),
         ('Floating Trigger Status', {
-            'fields': ('is_active', 'next_trigger_value', 'last_handled_trigger'),
+            'fields': ('is_active', 'next_trigger_value', 'last_handled_trigger', 'current_iteration_index'),
             'description': 'Next trigger = completion_meter_reading + interval_value'
         }),
     )
@@ -60,8 +67,21 @@ class PMTriggerAdmin(admin.ModelAdmin):
     )
 
 
-@admin.register(PMSettingsChecklist)
-class PMSettingsChecklistAdmin(admin.ModelAdmin):
-    list_display = ['name', 'pm_settings']
+@admin.register(PMIteration)
+class PMIterationAdmin(admin.ModelAdmin):
+    list_display = ['name', 'pm_settings', 'interval_value', 'order']
     list_filter = ['pm_settings']
     search_fields = ['name', 'pm_settings__name']
+    ordering = ['pm_settings', 'interval_value']
+    inlines = [PMIterationChecklistInline]
+
+
+@admin.register(PMIterationChecklist)
+class PMIterationChecklistAdmin(admin.ModelAdmin):
+    list_display = ['name', 'iteration', 'iteration_pm_settings']
+    list_filter = ['iteration__pm_settings']
+    search_fields = ['name', 'iteration__name']
+    
+    def iteration_pm_settings(self, obj):
+        return obj.iteration.pm_settings
+    iteration_pm_settings.short_description = 'PM Settings'

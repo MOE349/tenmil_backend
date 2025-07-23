@@ -13,8 +13,13 @@ class PMTriggerBaseView(BaseAPIView):
     model_class = PMTrigger
 
 
-class PMSettingsChecklistBaseView(BaseAPIView):
-    serializer_class = PMSettingsChecklistSerializer
-    model_class = PMSettingsChecklist
+class PMIterationBaseView(BaseAPIView):
+    serializer_class = PMIterationSerializer
+    model_class = PMIteration
+
+
+class PMIterationChecklistBaseView(BaseAPIView):
+    serializer_class = PMIterationChecklistSerializer
+    model_class = PMIterationChecklist
 
 

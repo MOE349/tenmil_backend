@@ -59,6 +59,9 @@ class PMSettings(BaseModel):
     next_trigger_value = models.FloatField(_("Next Trigger Value"), null=True, blank=True)
     last_handled_trigger = models.FloatField(_("Last Handled Trigger"), null=True, blank=True)
     
+    # Current iteration tracking
+    current_iteration_index = models.PositiveIntegerField(default=0, help_text="Index of current iteration in the cycle")
+    
     class Meta:
         verbose_name = _("PM Settings")
         verbose_name_plural = _("PM Settings")
@@ -116,43 +119,100 @@ class PMSettings(BaseModel):
         self.last_handled_trigger = closing_value
         self.save()
     
-    def get_checklist_items(self):
-        """Get all checklist items for this PM setting"""
-        return self.checklist_items.all()
+    def get_iterations(self):
+        """Get all iterations ordered by interval value"""
+        return self.iterations.all().order_by('interval_value')
     
-    def add_checklist_item(self, name):
-        """Add a checklist item to this PM setting"""
-        return PMSettingsChecklist.objects.create(
-            pm_settings=self,
-            name=name
-        )
+    def get_current_iteration(self):
+        """Get the current iteration based on current_iteration_index"""
+        iterations = list(self.get_iterations())
+        if not iterations:
+            return None
+        return iterations[self.current_iteration_index % len(iterations)]
     
-    def copy_checklist_to_work_order(self, work_order):
-        """Copy preset checklist items to a work order"""
-        checklist_items = self.get_checklist_items()
+    def advance_to_next_iteration(self):
+        """Advance to the next iteration in the cycle"""
+        iterations = list(self.get_iterations())
+        if not iterations:
+            return None
+        
+        self.current_iteration_index = (self.current_iteration_index + 1) % len(iterations)
+        self.save()
+        return self.get_current_iteration()
+    
+    def get_cumulative_checklist_for_iteration(self, iteration):
+        """Get cumulative checklist for a specific iteration"""
+        if not iteration:
+            return []
+        
+        # Get all iterations up to and including the current one
+        all_iterations = list(self.get_iterations())
+        current_index = all_iterations.index(iteration)
+        relevant_iterations = all_iterations[:current_index + 1]
+        
+        # Collect all checklist items from relevant iterations
+        checklist_items = []
+        for iter_item in relevant_iterations:
+            checklist_items.extend(iter_item.checklist_items.all())
+        
+        return checklist_items
+    
+    def copy_iteration_checklist_to_work_order(self, work_order, iteration):
+        """Copy cumulative checklist items for a specific iteration to work order"""
+        checklist_items = self.get_cumulative_checklist_for_iteration(iteration)
         
         for item in checklist_items:
             WorkOrderChecklist.objects.create(
                 work_order=work_order,
                 description=item.name,
-                source_pm_checklist=item
+                source_pm_iteration_checklist=item
             )
 
 
-class PMSettingsChecklist(BaseModel):
-    """Preset checklist items for PM Settings"""
-    pm_settings = models.ForeignKey(PMSettings, on_delete=models.CASCADE, related_name='checklist_items')
-    name = models.CharField(max_length=255, help_text="Checklist item description")
+class PMIteration(BaseModel):
+    """PM Iteration - represents when a PM should occur based on interval"""
+    pm_settings = models.ForeignKey(PMSettings, on_delete=models.CASCADE, related_name='iterations')
+    interval_value = models.FloatField(_("Iteration Interval Value"), help_text="Interval value for this iteration")
+    name = models.CharField(max_length=255, help_text="Iteration name (e.g., '500 Hours')")
+    order = models.PositiveIntegerField(default=0, help_text="Display order")
     
     class Meta:
-        verbose_name = _("PM Settings Checklist")
-        verbose_name_plural = _("PM Settings Checklists")
+        ordering = ['interval_value']
+        verbose_name = _("PM Iteration")
+        verbose_name_plural = _("PM Iterations")
+        unique_together = ['pm_settings', 'interval_value']
         indexes = [
             models.Index(fields=['pm_settings']),
+            models.Index(fields=['pm_settings', 'interval_value']),
         ]
     
     def __str__(self):
         return f"{self.pm_settings} - {self.name}"
+    
+    def save(self, *args, **kwargs):
+        # Auto-assign order if not provided
+        if not self.order:
+            max_order = PMIteration.objects.filter(pm_settings=self.pm_settings).aggregate(
+                max_order=models.Max('order')
+            )['max_order'] or 0
+            self.order = max_order + 1
+        super().save(*args, **kwargs)
+
+
+class PMIterationChecklist(BaseModel):
+    """Checklist items for PM iterations"""
+    iteration = models.ForeignKey(PMIteration, on_delete=models.CASCADE, related_name='checklist_items')
+    name = models.CharField(max_length=255, help_text="Checklist item description")
+    
+    class Meta:
+        verbose_name = _("PM Iteration Checklist")
+        verbose_name_plural = _("PM Iteration Checklists")
+        indexes = [
+            models.Index(fields=['iteration']),
+        ]
+    
+    def __str__(self):
+        return f"{self.iteration} - {self.name}"
 
 
 class PMTrigger(BaseModel):
