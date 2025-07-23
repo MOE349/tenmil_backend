@@ -285,6 +285,13 @@ class PMAutomationService:
         
         logger.info(f"Created work order {work_order.id}: {work_order.description}")
         
+        # Copy PM settings checklist to work order
+        try:
+            pm_settings.copy_checklist_to_work_order(work_order)
+            logger.info(f"Copied {pm_settings.checklist_items.count()} checklist items to work order {work_order.id}")
+        except Exception as e:
+            logger.error(f"Error copying checklist to work order {work_order.id}: {e}")
+        
         # Log creation with system admin as user
         WorkOrderLog.objects.create(
             work_order=work_order,
