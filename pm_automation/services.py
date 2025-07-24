@@ -1,6 +1,7 @@
 from django.utils import timezone
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection
+from django.contrib.auth.models import User
 from meter_readings.models import MeterReading
 from pm_automation.models import PMSettings, PMTrigger, PMUnitChoices
 from work_orders.models import WorkOrder, WorkOrderStatusNames, WorkOrderLog
@@ -195,117 +196,88 @@ class PMAutomationService:
     
     @staticmethod
     def _create_pm_work_order(pm_settings, trigger_value, user):
-        """Create a PM work order and log the creation with the system admin as user"""
+        """
+        Create a PM work order for the given trigger value
+        """
         logger.info(f"Creating PM work order for trigger {trigger_value}")
         
-        # Get the asset using the GenericForeignKey
-        asset = None
-        try:
-            asset = pm_settings.asset
-            logger.debug(f"Retrieved asset: {asset}, type: {type(asset)}")
-        except Exception as e:
-            logger.error(f"Error accessing asset from pm_settings: {e}")
-            # Try to get the asset using content_type and object_id
-            try:
-                content_type = pm_settings.content_type
-                model_class = content_type.model_class()
-                asset = model_class.objects.get(pk=pm_settings.object_id)
-                logger.debug(f"Retrieved asset using direct lookup: {asset}, type: {type(asset)}")
-            except Exception as e2:
-                logger.error(f"Error accessing asset using direct lookup: {e2}")
-                return None
+        # Get the current iteration for this work order
+        current_iteration = pm_settings.get_current_iteration()
+        if not current_iteration:
+            logger.error(f"No iterations found for PM Settings {pm_settings.id}")
+            return None
         
-        # Ensure we have a valid asset object
-        if not asset or hasattr(asset, 'all'):  # RelatedManager has 'all' method
-            logger.error(f"Invalid asset object: {asset}, type: {type(asset)}")
-            # Try one more time with direct lookup
-            try:
-                content_type = pm_settings.content_type
-                model_class = content_type.model_class()
-                asset = model_class.objects.get(pk=pm_settings.object_id)
-                logger.debug(f"Retrieved asset using final direct lookup: {asset}, type: {type(asset)}")
-            except Exception as e3:
-                logger.error(f"Final attempt to get asset failed: {e3}")
-                return None
+        logger.info(f"Using iteration: {current_iteration.name} (interval: {current_iteration.interval_value})")
         
-        # Get the system admin user for the current tenant using connection.schema_name
+        # Create the work order
         try:
-            current_schema = connection.schema_name
-            system_admin = TenantUser.objects.get(
-                email=f'Sys_Admin@{current_schema}.tenmil.ca'
+            work_order = WorkOrder.objects.create(
+                content_type=pm_settings.content_type,
+                object_id=pm_settings.object_id,
+                code=f"PM-{trigger_value}-{current_iteration.interval_value}",
+                description=f"Preventive Maintenance - {current_iteration.name}",
+                maint_type='PM',
+                priority='Medium',
+                is_auto_generated=True,
+                created_by=user
             )
-            logger.debug(f"Found system admin: {system_admin}")
-        except TenantUser.DoesNotExist:
-            logger.warning(f"System admin not found for schema {current_schema}, using user {user}")
-            system_admin = user
-        
-        # Get active status
-        active_status = WorkOrderStatusNames.objects.filter(
-            control__name='Active'
-        ).first()
-        
-        if not active_status:
-            from core.models import WorkOrderStatusControls
-            active_control = WorkOrderStatusControls.objects.filter(key='active').first()
-            if not active_control:
-                active_control = WorkOrderStatusControls.objects.create(
-                    key='active',
-                    name='Active',
-                    color='#4caf50',
-                    order=1
-                )
-            active_status = WorkOrderStatusNames.objects.create(
-                name='Active',
-                control=active_control
-            )
-            logger.debug(f"Created active status: {active_status}")
-        
-        # Create work order description with fallback
-        try:
-            asset_code = asset.code if asset and hasattr(asset, 'code') else f"{pm_settings.content_type.app_label}.{pm_settings.content_type.model}"
-            description = f"Meter-driven PM for {asset_code} at {trigger_value} {pm_settings.interval_unit}"
+            logger.info(f"Created work order {work_order.id}")
         except Exception as e:
-            logger.error(f"Error creating work order description: {e}")
-            description = f"Meter-driven PM at {trigger_value} {pm_settings.interval_unit}"
+            logger.error(f"Error creating work order: {e}")
+            return None
         
-        # Create work order (do NOT set created_by)
-        trigger_meter_reading = MeterReading.objects.filter(
-            object_id=asset.id
-        ).order_by('-created_at').first().meter_reading
-        work_order = WorkOrder.objects.create(
-            content_type=pm_settings.content_type,
-            object_id=pm_settings.object_id,
-            status=active_status,
-            maint_type='PM',
-            priority='medium',
-            description=description,
-            is_auto_generated=True,
-            trigger_meter_reading=trigger_meter_reading
-        )
-        
-        logger.info(f"Created work order {work_order.id}: {work_order.description}")
-        
-        # Get current iteration and copy cumulative checklist to work order
+        # Create the PM trigger record
         try:
-            current_iteration = pm_settings.get_current_iteration()
-            if current_iteration:
-                pm_settings.copy_iteration_checklist_to_work_order(work_order, current_iteration)
-                logger.info(f"Copied cumulative checklist for iteration '{current_iteration.name}' to work order {work_order.id}")
-            else:
-                logger.warning(f"No iterations found for PM Settings {pm_settings.id}")
+            pm_trigger = PMTrigger.objects.create(
+                pm_settings=pm_settings,
+                trigger_value=trigger_value,
+                trigger_unit=pm_settings.interval_unit,
+                work_order=work_order
+            )
+            logger.info(f"Created PM trigger {pm_trigger.id}")
+        except Exception as e:
+            logger.error(f"Error creating PM trigger: {e}")
+            work_order.delete()
+            return None
+        
+        # Copy the cumulative checklist for the current iteration
+        try:
+            pm_settings.copy_iteration_checklist_to_work_order(work_order, current_iteration)
+            logger.info(f"Copied cumulative checklist for iteration '{current_iteration.name}' to work order {work_order.id}")
         except Exception as e:
             logger.error(f"Error copying iteration checklist to work order {work_order.id}: {e}")
         
-        # Log creation with system admin as user
-        WorkOrderLog.objects.create(
-            work_order=work_order,
-            amount=0,
-            log_type=WorkOrderLog.LogTypeChoices.CREATED,
-            user=system_admin,
-            description="Work Order Created (PM Automation)"
-        )
+        # Get system admin user for logging
+        try:
+            system_admin = User.objects.filter(is_superuser=True).first()
+        except Exception as e:
+            logger.error(f"Error getting system admin user: {e}")
+            system_admin = None
         
-        logger.info(f"Created work order log for work order {work_order.id}")
+        # Log creation with system admin as user
+        if system_admin:
+            try:
+                WorkOrderLog.objects.create(
+                    work_order=work_order,
+                    amount=0,
+                    log_type=WorkOrderLog.LogTypeChoices.CREATED,
+                    user=system_admin,
+                    description="Work Order Created (PM Automation)"
+                )
+                logger.info(f"Created work order log for work order {work_order.id}")
+            except Exception as e:
+                logger.error(f"Error creating work order log: {e}")
+        
+        # Advance to the next iteration for the next work order
+        try:
+            next_iteration = pm_settings.advance_to_next_iteration()
+            if next_iteration:
+                logger.info(f"Advanced to next iteration: {next_iteration.name}")
+            else:
+                logger.warning(f"No iterations found for PM Settings {pm_settings.id}")
+        except Exception as e:
+            logger.error(f"Error advancing to next iteration for PM Settings {pm_settings.id}: {e}")
+        
         return work_order
     
     @staticmethod
@@ -335,16 +307,6 @@ class PMAutomationService:
         # Update PM settings with the closing meter reading
         pm_settings = pm_trigger.pm_settings
         pm_settings.update_next_trigger(closing_meter_reading)
-        
-        # Advance to the next iteration in the cycle
-        try:
-            next_iteration = pm_settings.advance_to_next_iteration()
-            if next_iteration:
-                logger.info(f"Advanced to next iteration: {next_iteration.name}")
-            else:
-                logger.warning(f"No iterations found for PM Settings {pm_settings.id}")
-        except Exception as e:
-            logger.error(f"Error advancing to next iteration for PM Settings {pm_settings.id}: {e}")
         
         logger.info(f"Updated PM settings next trigger to {pm_settings.next_trigger_value}")
     
