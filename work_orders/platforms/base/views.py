@@ -226,7 +226,7 @@ class WorkOrderImportBacklogsView(BaseAPIView):
                 }, status_code=400)
                 
         except Exception as e:
-            return self.handle_exceptions(e)
+            return self.handle_exception(e)
 
 
 class WorkOrderCompletionView(BaseAPIView):
@@ -262,4 +262,4 @@ class WorkOrderCompletionView(BaseAPIView):
                 }, status_code=400)
                 
         except Exception as e:
-            return self.handle_exceptions(e)
+            return self.handle_exception(e)
