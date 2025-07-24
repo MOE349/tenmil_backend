@@ -1,7 +1,6 @@
 from django.utils import timezone
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection
-from django.contrib.auth.models import User
 from meter_readings.models import MeterReading
 from pm_automation.models import PMSettings, PMTrigger, PMUnitChoices
 from work_orders.models import WorkOrder, WorkOrderStatusNames, WorkOrderLog
@@ -196,18 +195,8 @@ class PMAutomationService:
     
     @staticmethod
     def _create_pm_work_order(pm_settings, trigger_value, user):
-        """
-        Create a PM work order for the given trigger value
-        """
+        """Create a PM work order and log the creation with the system admin as user"""
         logger.info(f"Creating PM work order for trigger {trigger_value}")
-        
-        # Get the current iteration for this work order
-        current_iteration = pm_settings.get_current_iteration()
-        if not current_iteration:
-            logger.error(f"No iterations found for PM Settings {pm_settings.id}")
-            return None
-        
-        logger.info(f"Using iteration: {current_iteration.name} (interval: {current_iteration.interval_value})")
         
         # Get the asset using the GenericForeignKey
         asset = None
@@ -271,65 +260,54 @@ class PMAutomationService:
             )
             logger.debug(f"Created active status: {active_status}")
         
-        # Create work order description with iteration info
+        # Create work order description with fallback
         try:
             asset_code = asset.code if asset and hasattr(asset, 'code') else f"{pm_settings.content_type.app_label}.{pm_settings.content_type.model}"
-            description = f"Preventive Maintenance - {current_iteration.name} for {asset_code} at {trigger_value} {pm_settings.interval_unit}"
+            description = f"Meter-driven PM for {asset_code} at {trigger_value} {pm_settings.interval_unit}"
         except Exception as e:
             logger.error(f"Error creating work order description: {e}")
-            description = f"Preventive Maintenance - {current_iteration.name} at {trigger_value} {pm_settings.interval_unit}"
+            description = f"Meter-driven PM at {trigger_value} {pm_settings.interval_unit}"
         
-        # Get trigger meter reading
-        try:
-            trigger_meter_reading = MeterReading.objects.filter(
-                object_id=asset.id
-            ).order_by('-created_at').first().meter_reading
-        except Exception as e:
-            logger.error(f"Error getting trigger meter reading: {e}")
-            trigger_meter_reading = trigger_value
+        # Create work order (do NOT set created_by)
+        trigger_meter_reading = MeterReading.objects.filter(
+            object_id=asset.id
+        ).order_by('-created_at').first().meter_reading
+        work_order = WorkOrder.objects.create(
+            content_type=pm_settings.content_type,
+            object_id=pm_settings.object_id,
+            status=active_status,
+            maint_type='PM',
+            priority='medium',
+            description=description,
+            is_auto_generated=True,
+            trigger_meter_reading=trigger_meter_reading
+        )
         
-        # Create work order
-        try:
-            work_order = WorkOrder.objects.create(
-                content_type=pm_settings.content_type,
-                object_id=pm_settings.object_id,
-                status=active_status,
-                code=f"PM-{trigger_value}-{current_iteration.interval_value}",
-                description=description,
-                maint_type='PM',
-                priority='medium',
-                is_auto_generated=True,
-                trigger_meter_reading=trigger_meter_reading,
-                created_by=user
-            )
-            logger.info(f"Created work order {work_order.id}: {work_order.description}")
-        except Exception as e:
-            logger.error(f"Error creating work order: {e}")
-            return None
+        logger.info(f"Created work order {work_order.id}: {work_order.description}")
         
-        # Copy the cumulative checklist for the current iteration
+        # Get current iteration and copy cumulative checklist to work order
         try:
-            pm_settings.copy_iteration_checklist_to_work_order(work_order, current_iteration)
-            logger.info(f"Copied cumulative checklist for iteration '{current_iteration.name}' to work order {work_order.id}")
+            current_iteration = pm_settings.get_current_iteration()
+            if current_iteration:
+                pm_settings.copy_iteration_checklist_to_work_order(work_order, current_iteration)
+                logger.info(f"Copied cumulative checklist for iteration '{current_iteration.name}' to work order {work_order.id}")
+            else:
+                logger.warning(f"No iterations found for PM Settings {pm_settings.id}")
         except Exception as e:
             logger.error(f"Error copying iteration checklist to work order {work_order.id}: {e}")
         
         # Log creation with system admin as user
-        try:
-            WorkOrderLog.objects.create(
-                work_order=work_order,
-                amount=0,
-                log_type=WorkOrderLog.LogTypeChoices.CREATED,
-                user=system_admin,
-                description="Work Order Created (PM Automation)"
-            )
-            logger.info(f"Created work order log for work order {work_order.id}")
-        except Exception as e:
-            logger.error(f"Error creating work order log: {e}")
+        WorkOrderLog.objects.create(
+            work_order=work_order,
+            amount=0,
+            log_type=WorkOrderLog.LogTypeChoices.CREATED,
+            user=system_admin,
+            description="Work Order Created (PM Automation)"
+        )
         
-        # Do NOT advance to the next iteration here (advance after work order completion)
+        logger.info(f"Created work order log for work order {work_order.id}")
         return work_order
-
+    
     @staticmethod
     def handle_work_order_completion(work_order, closing_meter_reading):
         """
