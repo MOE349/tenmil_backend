@@ -3,6 +3,10 @@ from configurations.base_features.views.base_api_view import BaseAPIView
 from meter_readings.models import MeterReading
 from work_orders.models import *
 from work_orders.platforms.base.serializers import *
+from work_orders.services import WorkOrderService
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework import status
 
 
 class WorkOrderBaseView(BaseAPIView):
@@ -87,6 +91,16 @@ class WorkOrderBaseView(BaseAPIView):
             instance.status = status_instance
             instance.save()
             WorkOrderLog.objects.create(work_order=instance, amount=amount, log_type=WorkOrderLog.LogTypeChoices.COMPLETED, user=params['user'], description="Work Order Closed")
+            
+            # Handle backlog completion - return uncompleted backlog items to asset backlogs
+            try:
+                completion_result = WorkOrderService.handle_work_order_completion(instance.id, params['user'])
+                if completion_result['success'] and completion_result['returned_count'] > 0:
+                    print(f"Returned {completion_result['returned_count']} uncompleted backlog items to asset backlogs")
+                elif not completion_result['success']:
+                    print(f"Warning: Failed to handle backlog completion: {completion_result['error']}")
+            except Exception as e:
+                print(f"Error handling backlog completion: {e}")
         else:
             instance.is_closed = False
             instance.status = status_instance
@@ -180,3 +194,83 @@ class WorkOrderCompletionNoteBaseView(BaseAPIView):
         instance, response = super().update(data, params, pk, partial, return_instance, *args, **kwargs)
         WorkOrderLog.objects.create(work_order=instance.work_order, amount=0, log_type=WorkOrderLog.LogTypeChoices.UPDATED, user=params['user'], description=" ".join(list(data.keys())))
         return self.format_response(data=response, status_code=200)
+
+
+class WorkOrderImportBacklogsView(BaseAPIView):
+    """Custom view for importing asset backlogs into work order checklists"""
+    serializer_class = WorkOrderBaseSerializer
+    model_class = WorkOrder
+    http_method_names = ['post']
+    
+    @action(detail=True, methods=['post'], url_path='import-backlogs')
+    def import_backlogs(self, request, pk=None):
+        """
+        Import asset backlogs into work order checklist
+        
+        POST /api/work-orders/{work_order_id}/import-backlogs/
+        """
+        try:
+            work_order_id = pk
+            user = request.user
+            
+            # Call the service to import backlogs
+            result = WorkOrderService.import_asset_backlogs_to_work_order(work_order_id, user)
+            
+            if result['success']:
+                return Response({
+                    'success': True,
+                    'message': result['message'],
+                    'imported_count': result['imported_count'],
+                    'work_order_id': result['work_order_id']
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'success': False,
+                    'error': result['error']
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': f'Unexpected error: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class WorkOrderCompletionView(BaseAPIView):
+    """Custom view for handling work order completion with backlog management"""
+    serializer_class = WorkOrderBaseSerializer
+    model_class = WorkOrder
+    http_method_names = ['post']
+    
+    @action(detail=True, methods=['post'], url_path='complete')
+    def complete(self, request, pk=None):
+        """
+        Complete work order and handle backlog management
+        
+        POST /api/work-orders/{work_order_id}/complete/
+        """
+        try:
+            work_order_id = pk
+            user = request.user
+            
+            # Call the service to handle completion
+            result = WorkOrderService.handle_work_order_completion(work_order_id, user)
+            
+            if result['success']:
+                return Response({
+                    'success': True,
+                    'message': result['message'],
+                    'returned_count': result['returned_count'],
+                    'work_order_id': result['work_order_id']
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'success': False,
+                    'error': result['error']
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': f'Unexpected error: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

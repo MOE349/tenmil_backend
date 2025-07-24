@@ -29,11 +29,21 @@ class WorkOrderStatusNamesApiView(WorkOrderStatusNamesBaseView):
     serializer_class = WorkOrderStatusNamesApiSerializer
 
 
-class WorkOrderControlsApiView(WorkOrderStatusControlsBaseView):
+class WorkOrderStatusControlsApiView(WorkOrderStatusControlsBaseView):
     serializer_class = WorkOrderStatusControlsApiSerializer
 
 
-class WWorkOrderCompletionNoteApiView(WorkOrderCompletionNoteBaseView):
+class WorkOrderCompletionNoteApiView(WorkOrderCompletionNoteBaseView):
     serializer_class = WorkOrderCompletionNoteApiSerializer
+
+
+class WorkOrderImportBacklogsApiView(WorkOrderImportBacklogsView):
+    """API view for importing asset backlogs into work order checklists"""
+    serializer_class = WorkOrderApiSerializer
+
+
+class WorkOrderCompletionApiView(WorkOrderCompletionView):
+    """API view for handling work order completion with backlog management"""
+    serializer_class = WorkOrderApiSerializer
 
 
