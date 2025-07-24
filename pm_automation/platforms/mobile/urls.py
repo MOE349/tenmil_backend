@@ -3,8 +3,12 @@ from pm_automation.platforms.mobile.views import *
 
 
 urlpatterns = [
-path('pmsettings', PmsettingsMobileView.as_view(), name='Pmsettings'), 
-path('pmtrigger', PmtriggerMobileView.as_view(), name='Pmtrigger'), 
-path('pm-settings-checklist', PMSettingsChecklistMobileView.as_view(), name='PM Settings Checklist'),
-path('pm-settings-checklist/<str:pk>', PMSettingsChecklistMobileView.as_view(), name='PM Settings Checklist'),
+    path('pm-settings', PMSettingsMobileView.as_view(), name='PM Settings'),
+    path('pm-settings/<str:pk>', PMSettingsMobileView.as_view(), name='PM Settings'),
+    path('pm-triggers', PMTriggerMobileView.as_view(), name='PM Triggers'),
+    path('pm-triggers/<str:pk>', PMTriggerMobileView.as_view(), name='PM Triggers'),
+    path('pm-iterations', PMIterationMobileView.as_view(), name='PM Iterations'),
+    path('pm-iterations/<str:pk>', PMIterationMobileView.as_view(), name='PM Iterations'),
+    path('pm-iteration-checklist', PMIterationChecklistMobileView.as_view(), name='PM Iteration Checklist'),
+    path('pm-iteration-checklist/<str:pk>', PMIterationChecklistMobileView.as_view(), name='PM Iteration Checklist'),
 ]

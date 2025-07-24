@@ -2,15 +2,19 @@ from pm_automation.platforms.base.views import *
 from pm_automation.platforms.mobile.serializers import *
 
 
-class PmsettingsMobileView(PmsettingsBaseView):
-    serializer_class = PmsettingsMobileSerializer
+class PMSettingsMobileView(PMSettingsBaseView):
+    serializer_class = PMSettingsMobileSerializer
 
 
-class PmtriggerMobileView(PmtriggerBaseView):
-    serializer_class = PmtriggerMobileSerializer
+class PMTriggerMobileView(PMTriggerBaseView):
+    serializer_class = PMTriggerMobileSerializer
 
 
-class PMSettingsChecklistMobileView(PMSettingsChecklistBaseView):
-    serializer_class = PMSettingsChecklistMobileSerializer
+class PMIterationMobileView(PMIterationBaseView):
+    serializer_class = PMIterationMobileSerializer
+
+
+class PMIterationChecklistMobileView(PMIterationChecklistBaseView):
+    serializer_class = PMIterationChecklistMobileSerializer
 
 

@@ -12,7 +12,7 @@ from rest_framework.views import APIView
 
 
 
-class TenantLoginBaseView(TokenObtainPairView, BaseAPIView):
+class TenantLoginBaseView(TokenObtainPairView):
     serializer_class = TenantTokenObtainPairBaseSerializer
     permission_classes = [AllowAny]
     authentication_classes=[]
@@ -36,10 +36,10 @@ class TenantLoginBaseView(TokenObtainPairView, BaseAPIView):
                 "tenant_id": user.tenant_id
             }
             print("login response: ", response)
-            return self.format_response(response, [], 200)
+            return Response(response, status=status.HTTP_200_OK)
         except Exception as e:
             traceback.print_exc()
-            return self.format_response({"detail": str(e)}, [], 500)
+            return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class TenantRegisterBaseView(APIView):
     serializer_class = TenantRegisterBaseSerializer

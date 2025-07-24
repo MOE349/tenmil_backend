@@ -1,16 +1,19 @@
 from pm_automation.platforms.base.serializers import *
 
 
-class PmsettingsDashboardSerializer(PmsettingsBaseSerializer):
+class PMSettingsDashboardSerializer(PMSettingsBaseSerializer):
     pass
 
 
-class PmtriggerDashboardSerializer(PmtriggerBaseSerializer):
+class PMTriggerDashboardSerializer(PMTriggerBaseSerializer):
     pass
 
 
-class PMSettingsChecklistDashboardSerializer(PMSettingsChecklistSerializer):
-    class Meta(PMSettingsChecklistSerializer.Meta):
-        fields = ['id', 'name', 'pm_settings']
+class PMIterationDashboardSerializer(PMIterationSerializer):
+    pass
+
+
+class PMIterationChecklistDashboardSerializer(PMIterationChecklistSerializer):
+    pass
 
 
