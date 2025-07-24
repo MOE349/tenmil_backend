@@ -168,6 +168,18 @@ class PMSettings(BaseModel):
                 source_pm_iteration_checklist=item
             )
 
+    def get_iteration_for_trigger(self, trigger_value):
+        """
+        Return the PMIteration whose interval_value is the largest divisor of trigger_value,
+        and is a defined iteration for this PMSettings.
+        """
+        iterations = list(self.get_iterations())
+        valid_iterations = [it for it in iterations if trigger_value % it.interval_value == 0]
+        if not valid_iterations:
+            return None
+        # Return the iteration with the largest interval_value
+        return max(valid_iterations, key=lambda it: it.interval_value)
+
 
 class PMIteration(BaseModel):
     """PM Iteration - represents when a PM should occur based on interval"""

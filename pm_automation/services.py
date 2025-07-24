@@ -198,6 +198,13 @@ class PMAutomationService:
         """Create a PM work order and log the creation with the system admin as user"""
         logger.info(f"Creating PM work order for trigger {trigger_value}")
         
+        # Get the correct iteration for this trigger value
+        current_iteration = pm_settings.get_iteration_for_trigger(trigger_value)
+        if not current_iteration:
+            logger.error(f"No valid iteration found for trigger value {trigger_value} in PM Settings {pm_settings.id}")
+            return None
+        logger.info(f"Using iteration: {current_iteration.name} (interval: {current_iteration.interval_value})")
+        
         # Get the asset using the GenericForeignKey
         asset = None
         try:
@@ -285,14 +292,10 @@ class PMAutomationService:
         
         logger.info(f"Created work order {work_order.id}: {work_order.description}")
         
-        # Get current iteration and copy cumulative checklist to work order
+        # Copy the cumulative checklist for the correct iteration
         try:
-            current_iteration = pm_settings.get_current_iteration()
-            if current_iteration:
-                pm_settings.copy_iteration_checklist_to_work_order(work_order, current_iteration)
-                logger.info(f"Copied cumulative checklist for iteration '{current_iteration.name}' to work order {work_order.id}")
-            else:
-                logger.warning(f"No iterations found for PM Settings {pm_settings.id}")
+            pm_settings.copy_iteration_checklist_to_work_order(work_order, current_iteration)
+            logger.info(f"Copied cumulative checklist for iteration '{current_iteration.name}' to work order {work_order.id}")
         except Exception as e:
             logger.error(f"Error copying iteration checklist to work order {work_order.id}: {e}")
         
