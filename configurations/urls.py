@@ -21,10 +21,10 @@ api_urls = [
     path('financial-reports/', include('financial_reports.platforms.api.urls')),
     path('meter-readings/', include('meter_readings.platforms.api.urls')),
     path('work-orders/', include('work_orders.platforms.api.urls')),
-    # path('scheduled-maintenance/', include('scheduled_maintenance.platforms.api.urls')),
     path('fault-codes/', include('fault_codes.platforms.api.urls')),
     path('pm-automation/', include('pm_automation.platforms.api.urls')),
     path('projects/', include('projects.platforms.api.urls')),
+    path('asset-backlogs/', include('asset_backlogs.platforms.api.urls')),
 ]
 # dashboard_urls = [
 #     # path('users/', include('users.platforms.dashboard.urls')),
@@ -33,7 +33,11 @@ api_urls = [
 #     path('financial-reports/', include('financial_reports.platforms.dashboard.urls')),
 #     path('meter-readings/', include('meter_readings.platforms.dashboard.urls')),
 #     path('work-orders/', include('work_orders.platforms.dashboard.urls')),
-#     path('scheduled-maintenance/', include('scheduled_maintenance.platforms.dashboard.urls')),
+    # path('fault-codes/', include('fault_codes.platforms.dashboard.urls')),
+    # path('pm-automation/', include('pm_automation.platforms.dashboard.urls')),
+    # path('projects/', include('projects.platforms.dashboard.urls')),
+    # path('asset-backlogs/', include('asset_backlogs.platforms.dashboard.urls')),
+
 # ]
 
 # mobile_urls = [
@@ -43,7 +47,10 @@ api_urls = [
 #     path('financial-reports/', include('financial_reports.platforms.mobile.urls')),
 #     path('meter-readings/', include('meter_readings.platforms.dashboard.urls')),
 #     path('work-orders/', include('work_orders.platforms.mobile.urls')),
-#     path('scheduled-maintenance/', include('scheduled_maintenance.platforms.mobile.urls')),
+    # path('fault-codes/', include('fault_codes.platforms.mobile.urls')),
+    # path('pm-automation/', include('pm_automation.platforms.mobile.urls')),
+    # path('projects/', include('projects.platforms.mobile.urls')),
+    # path('asset-backlogs/', include('asset_backlogs.platforms.mobile.urls')),
 # ]
 v1_urlpatterns = [
     path('api/', include(api_urls)),

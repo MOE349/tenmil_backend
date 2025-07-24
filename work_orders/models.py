@@ -43,6 +43,7 @@ class WorkOrderChecklist(BaseModel):
     completed_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name="WorkOrderChecklist_CompletedBy", null=True, blank=True)
     completion_date = models.DateTimeField(null=True, blank=True)
     hrs_spent = models.IntegerField(null=True, blank=True)
+    is_backlog = models.BooleanField(default=False)
     
     # New field to track source PM iteration checklist
     source_pm_iteration_checklist = models.ForeignKey(

@@ -31,4 +31,5 @@ TENANT_APPS = [
     "fault_codes.apps.FaultCodesConfig",
     "pm_automation.apps.PmAutomationConfig",
     "projects.apps.ProjectsConfig",
+    "asset_backlogs.apps.AssetBacklogsConfig",
 ]
