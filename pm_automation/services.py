@@ -209,35 +209,102 @@ class PMAutomationService:
         
         logger.info(f"Using iteration: {current_iteration.name} (interval: {current_iteration.interval_value})")
         
-        # Create the work order
+        # Get the asset using the GenericForeignKey
+        asset = None
+        try:
+            asset = pm_settings.asset
+            logger.debug(f"Retrieved asset: {asset}, type: {type(asset)}")
+        except Exception as e:
+            logger.error(f"Error accessing asset from pm_settings: {e}")
+            # Try to get the asset using content_type and object_id
+            try:
+                content_type = pm_settings.content_type
+                model_class = content_type.model_class()
+                asset = model_class.objects.get(pk=pm_settings.object_id)
+                logger.debug(f"Retrieved asset using direct lookup: {asset}, type: {type(asset)}")
+            except Exception as e2:
+                logger.error(f"Error accessing asset using direct lookup: {e2}")
+                return None
+        
+        # Ensure we have a valid asset object
+        if not asset or hasattr(asset, 'all'):  # RelatedManager has 'all' method
+            logger.error(f"Invalid asset object: {asset}, type: {type(asset)}")
+            # Try one more time with direct lookup
+            try:
+                content_type = pm_settings.content_type
+                model_class = content_type.model_class()
+                asset = model_class.objects.get(pk=pm_settings.object_id)
+                logger.debug(f"Retrieved asset using final direct lookup: {asset}, type: {type(asset)}")
+            except Exception as e3:
+                logger.error(f"Final attempt to get asset failed: {e3}")
+                return None
+        
+        # Get the system admin user for the current tenant using connection.schema_name
+        try:
+            current_schema = connection.schema_name
+            system_admin = TenantUser.objects.get(
+                email=f'Sys_Admin@{current_schema}.tenmil.ca'
+            )
+            logger.debug(f"Found system admin: {system_admin}")
+        except TenantUser.DoesNotExist:
+            logger.warning(f"System admin not found for schema {current_schema}, using user {user}")
+            system_admin = user
+        
+        # Get active status
+        active_status = WorkOrderStatusNames.objects.filter(
+            control__name='Active'
+        ).first()
+        
+        if not active_status:
+            from core.models import WorkOrderStatusControls
+            active_control = WorkOrderStatusControls.objects.filter(key='active').first()
+            if not active_control:
+                active_control = WorkOrderStatusControls.objects.create(
+                    key='active',
+                    name='Active',
+                    color='#4caf50',
+                    order=1
+                )
+            active_status = WorkOrderStatusNames.objects.create(
+                name='Active',
+                control=active_control
+            )
+            logger.debug(f"Created active status: {active_status}")
+        
+        # Create work order description with iteration info
+        try:
+            asset_code = asset.code if asset and hasattr(asset, 'code') else f"{pm_settings.content_type.app_label}.{pm_settings.content_type.model}"
+            description = f"Preventive Maintenance - {current_iteration.name} for {asset_code} at {trigger_value} {pm_settings.interval_unit}"
+        except Exception as e:
+            logger.error(f"Error creating work order description: {e}")
+            description = f"Preventive Maintenance - {current_iteration.name} at {trigger_value} {pm_settings.interval_unit}"
+        
+        # Get trigger meter reading
+        try:
+            trigger_meter_reading = MeterReading.objects.filter(
+                object_id=asset.id
+            ).order_by('-created_at').first().meter_reading
+        except Exception as e:
+            logger.error(f"Error getting trigger meter reading: {e}")
+            trigger_meter_reading = trigger_value
+        
+        # Create work order
         try:
             work_order = WorkOrder.objects.create(
                 content_type=pm_settings.content_type,
                 object_id=pm_settings.object_id,
+                status=active_status,
                 code=f"PM-{trigger_value}-{current_iteration.interval_value}",
-                description=f"Preventive Maintenance - {current_iteration.name}",
+                description=description,
                 maint_type='PM',
-                priority='Medium',
+                priority='medium',
                 is_auto_generated=True,
+                trigger_meter_reading=trigger_meter_reading,
                 created_by=user
             )
-            logger.info(f"Created work order {work_order.id}")
+            logger.info(f"Created work order {work_order.id}: {work_order.description}")
         except Exception as e:
             logger.error(f"Error creating work order: {e}")
-            return None
-        
-        # Create the PM trigger record
-        try:
-            pm_trigger = PMTrigger.objects.create(
-                pm_settings=pm_settings,
-                trigger_value=trigger_value,
-                trigger_unit=pm_settings.interval_unit,
-                work_order=work_order
-            )
-            logger.info(f"Created PM trigger {pm_trigger.id}")
-        except Exception as e:
-            logger.error(f"Error creating PM trigger: {e}")
-            work_order.delete()
             return None
         
         # Copy the cumulative checklist for the current iteration
@@ -247,26 +314,18 @@ class PMAutomationService:
         except Exception as e:
             logger.error(f"Error copying iteration checklist to work order {work_order.id}: {e}")
         
-        # Get system admin user for logging
-        try:
-            system_admin = User.objects.filter(is_superuser=True).first()
-        except Exception as e:
-            logger.error(f"Error getting system admin user: {e}")
-            system_admin = None
-        
         # Log creation with system admin as user
-        if system_admin:
-            try:
-                WorkOrderLog.objects.create(
-                    work_order=work_order,
-                    amount=0,
-                    log_type=WorkOrderLog.LogTypeChoices.CREATED,
-                    user=system_admin,
-                    description="Work Order Created (PM Automation)"
-                )
-                logger.info(f"Created work order log for work order {work_order.id}")
-            except Exception as e:
-                logger.error(f"Error creating work order log: {e}")
+        try:
+            WorkOrderLog.objects.create(
+                work_order=work_order,
+                amount=0,
+                log_type=WorkOrderLog.LogTypeChoices.CREATED,
+                user=system_admin,
+                description="Work Order Created (PM Automation)"
+            )
+            logger.info(f"Created work order log for work order {work_order.id}")
+        except Exception as e:
+            logger.error(f"Error creating work order log: {e}")
         
         # Advance to the next iteration for the next work order
         try:
