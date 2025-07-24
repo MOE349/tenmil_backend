@@ -106,34 +106,16 @@ class PMSettings(BaseModel):
             self.next_trigger_value = float(self.start_threshold_value) + float(self.interval_value)
     
     def get_next_trigger(self):
-        """Calculate the next trigger value based on current iteration"""
-        # Get the current iteration to determine the interval
-        current_iteration = self.get_current_iteration()
-        if current_iteration:
-            # Use the current iteration's interval value
-            interval_to_use = current_iteration.interval_value
-        else:
-            # Fallback to base interval if no iterations
-            interval_to_use = self.interval_value
-        
+        """Calculate the next trigger value"""
         if not self.next_trigger_value:
-            # Initial trigger: start_threshold_value + current_iteration_interval
-            return self.start_threshold_value + interval_to_use
+            # Initial trigger: start_threshold_value + interval_value
+            return self.start_threshold_value + self.interval_value
         return self.next_trigger_value
     
     def update_next_trigger(self, closing_value):
         """Update next trigger after work order completion - Floating system"""
-        # Get the current iteration to use its interval value
-        current_iteration = self.get_current_iteration()
-        if current_iteration:
-            # Use the current iteration's interval value
-            interval_to_add = current_iteration.interval_value
-        else:
-            # Fallback to base interval if no iterations
-            interval_to_add = self.interval_value
-        
-        # Floating trigger: completion_meter_reading + current_iteration_interval_value
-        self.next_trigger_value = closing_value + interval_to_add
+        # Floating trigger: completion_meter_reading + interval_value
+        self.next_trigger_value = closing_value + self.interval_value
         self.last_handled_trigger = closing_value
         self.save()
     

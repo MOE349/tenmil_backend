@@ -327,18 +327,9 @@ class PMAutomationService:
         except Exception as e:
             logger.error(f"Error creating work order log: {e}")
         
-        # Advance to the next iteration for the next work order
-        try:
-            next_iteration = pm_settings.advance_to_next_iteration()
-            if next_iteration:
-                logger.info(f"Advanced to next iteration: {next_iteration.name}")
-            else:
-                logger.warning(f"No iterations found for PM Settings {pm_settings.id}")
-        except Exception as e:
-            logger.error(f"Error advancing to next iteration for PM Settings {pm_settings.id}: {e}")
-        
+        # Do NOT advance to the next iteration here (advance after work order completion)
         return work_order
-    
+
     @staticmethod
     def handle_work_order_completion(work_order, closing_meter_reading):
         """
@@ -366,6 +357,16 @@ class PMAutomationService:
         # Update PM settings with the closing meter reading
         pm_settings = pm_trigger.pm_settings
         pm_settings.update_next_trigger(closing_meter_reading)
+        
+        # Advance to the next iteration in the cycle
+        try:
+            next_iteration = pm_settings.advance_to_next_iteration()
+            if next_iteration:
+                logger.info(f"Advanced to next iteration: {next_iteration.name}")
+            else:
+                logger.warning(f"No iterations found for PM Settings {pm_settings.id}")
+        except Exception as e:
+            logger.error(f"Error advancing to next iteration for PM Settings {pm_settings.id}: {e}")
         
         logger.info(f"Updated PM settings next trigger to {pm_settings.next_trigger_value}")
     
