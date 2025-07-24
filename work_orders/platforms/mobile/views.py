@@ -32,11 +32,11 @@ class WorkOrderCompletionNoteMobileView(WorkOrderCompletionNoteBaseView):
 
 class WorkOrderImportBacklogsMobileView(WorkOrderImportBacklogsView):
     """Mobile view for importing asset backlogs into work order checklists"""
-    serializer_class = WorkOrderMobileSerializer
+    pass
 
 
 class WorkOrderCompletionMobileView(WorkOrderCompletionView):
     """Mobile view for handling work order completion with backlog management"""
-    serializer_class = WorkOrderMobileSerializer
+    pass
 
 

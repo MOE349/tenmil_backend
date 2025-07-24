@@ -4,9 +4,6 @@ from meter_readings.models import MeterReading
 from work_orders.models import *
 from work_orders.platforms.base.serializers import *
 from work_orders.services import WorkOrderService
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework import status
 
 
 class WorkOrderBaseView(BaseAPIView):
@@ -198,12 +195,11 @@ class WorkOrderCompletionNoteBaseView(BaseAPIView):
 
 class WorkOrderImportBacklogsView(BaseAPIView):
     """Custom view for importing asset backlogs into work order checklists"""
-    serializer_class = WorkOrderBaseSerializer
+    serializer_class = None  # No serializer needed for this operation
     model_class = WorkOrder
     http_method_names = ['post']
     
-    @action(detail=True, methods=['post'], url_path='import-backlogs')
-    def import_backlogs(self, request, pk=None):
+    def post(self, request, pk=None, *args, **kwargs):
         """
         Import asset backlogs into work order checklist
         
@@ -217,33 +213,29 @@ class WorkOrderImportBacklogsView(BaseAPIView):
             result = WorkOrderService.import_asset_backlogs_to_work_order(work_order_id, user)
             
             if result['success']:
-                return Response({
+                return self.format_response(data={
                     'success': True,
                     'message': result['message'],
                     'imported_count': result['imported_count'],
                     'work_order_id': result['work_order_id']
-                }, status=status.HTTP_200_OK)
+                }, status_code=200)
             else:
-                return Response({
+                return self.format_response(data={
                     'success': False,
                     'error': result['error']
-                }, status=status.HTTP_400_BAD_REQUEST)
+                }, status_code=400)
                 
         except Exception as e:
-            return Response({
-                'success': False,
-                'error': f'Unexpected error: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return self.handle_exceptions(e)
 
 
 class WorkOrderCompletionView(BaseAPIView):
     """Custom view for handling work order completion with backlog management"""
-    serializer_class = WorkOrderBaseSerializer
+    serializer_class = None  # No serializer needed for this operation
     model_class = WorkOrder
     http_method_names = ['post']
     
-    @action(detail=True, methods=['post'], url_path='complete')
-    def complete(self, request, pk=None):
+    def post(self, request, pk=None, *args, **kwargs):
         """
         Complete work order and handle backlog management
         
@@ -257,20 +249,17 @@ class WorkOrderCompletionView(BaseAPIView):
             result = WorkOrderService.handle_work_order_completion(work_order_id, user)
             
             if result['success']:
-                return Response({
+                return self.format_response(data={
                     'success': True,
                     'message': result['message'],
                     'returned_count': result['returned_count'],
                     'work_order_id': result['work_order_id']
-                }, status=status.HTTP_200_OK)
+                }, status_code=200)
             else:
-                return Response({
+                return self.format_response(data={
                     'success': False,
                     'error': result['error']
-                }, status=status.HTTP_400_BAD_REQUEST)
+                }, status_code=400)
                 
         except Exception as e:
-            return Response({
-                'success': False,
-                'error': f'Unexpected error: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return self.handle_exceptions(e)

@@ -39,11 +39,11 @@ class WorkOrderCompletionNoteApiView(WorkOrderCompletionNoteBaseView):
 
 class WorkOrderImportBacklogsApiView(WorkOrderImportBacklogsView):
     """API view for importing asset backlogs into work order checklists"""
-    serializer_class = WorkOrderApiSerializer
+    pass
 
 
 class WorkOrderCompletionApiView(WorkOrderCompletionView):
     """API view for handling work order completion with backlog management"""
-    serializer_class = WorkOrderApiSerializer
+    pass
 
 

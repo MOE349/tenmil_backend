@@ -32,11 +32,11 @@ class WorkOrderCompletionNoteDashboardView(WorkOrderCompletionNoteBaseView):
 
 class WorkOrderImportBacklogsDashboardView(WorkOrderImportBacklogsView):
     """Dashboard view for importing asset backlogs into work order checklists"""
-    serializer_class = WorkOrderDashboardSerializer
+    pass
 
 
 class WorkOrderCompletionDashboardView(WorkOrderCompletionView):
     """Dashboard view for handling work order completion with backlog management"""
-    serializer_class = WorkOrderDashboardSerializer
+    pass
 
 
