@@ -36,11 +36,10 @@ class WorkOrderService:
                     'imported_count': 0
                 }
             
-            # Get all backlogs for this asset
-            content_type = ContentType.objects.get_for_model(asset)
+            # Get all backlogs for this asset using the work order's content_type and object_id
             asset_backlogs = AssetBacklog.objects.filter(
-                content_type=content_type,
-                object_id=asset.id
+                content_type=work_order.content_type,
+                object_id=work_order.object_id
             )
             
             if not asset_backlogs.exists():
@@ -148,31 +147,30 @@ class WorkOrderService:
             
             # Return uncompleted backlog items to asset backlogs
             returned_count = 0
-            content_type = ContentType.objects.get_for_model(asset)
             
             for checklist_item in uncompleted_backlog_items:
                 # Check if this backlog already exists (to avoid duplicates)
                 existing_backlog = AssetBacklog.objects.filter(
-                    content_type=content_type,
-                    object_id=asset.id,
+                    content_type=work_order.content_type,
+                    object_id=work_order.object_id,
                     name=checklist_item.description
                 ).first()
                 
                 if existing_backlog:
-                    logger.debug(f"Backlog '{checklist_item.description}' already exists for asset {asset.id}")
+                    logger.debug(f"Backlog '{checklist_item.description}' already exists for asset {work_order.object_id}")
                     continue
                 
                 # Create new backlog item
                 backlog_item = AssetBacklog.objects.create(
-                    content_type=content_type,
-                    object_id=asset.id,
+                    content_type=work_order.content_type,
+                    object_id=work_order.object_id,
                     name=checklist_item.description
                 )
                 
                 returned_count += 1
-                logger.info(f"Returned backlog '{checklist_item.description}' to asset {asset.id}")
+                logger.info(f"Returned backlog '{checklist_item.description}' to asset {work_order.object_id}")
             
-            logger.info(f"Successfully returned {returned_count} backlog items to asset {asset.id}")
+            logger.info(f"Successfully returned {returned_count} backlog items to asset {work_order.object_id}")
             
             return {
                 'success': True,
