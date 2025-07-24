@@ -26,16 +26,6 @@ class WorkOrderService:
             work_order = WorkOrder.objects.get(id=work_order_id)
             logger.info(f"Importing asset backlogs for work order {work_order.id}")
             
-            # Get the asset from the work order
-            asset = work_order.asset
-            if not asset:
-                logger.error(f"No asset found for work order {work_order.id}")
-                return {
-                    'success': False,
-                    'error': 'No asset found for this work order',
-                    'imported_count': 0
-                }
-            
             # Get all backlogs for this asset using the work order's content_type and object_id
             asset_backlogs = AssetBacklog.objects.filter(
                 content_type=work_order.content_type,
@@ -43,7 +33,7 @@ class WorkOrderService:
             )
             
             if not asset_backlogs.exists():
-                logger.info(f"No backlogs found for asset {asset.id}")
+                logger.info(f"No backlogs found for asset {work_order.object_id}")
                 return {
                     'success': True,
                     'message': 'No backlogs found for this asset',
@@ -74,7 +64,7 @@ class WorkOrderService:
                 
                 # Remove the backlog from asset backlogs
                 backlog.delete()
-                logger.info(f"Removed backlog '{backlog.name}' from asset {asset.id}")
+                logger.info(f"Removed backlog '{backlog.name}' from asset {work_order.object_id}")
                 
                 imported_count += 1
                 logger.info(f"Imported backlog '{backlog.name}' to work order {work_order.id}")
@@ -120,15 +110,7 @@ class WorkOrderService:
             work_order = WorkOrder.objects.get(id=work_order_id)
             logger.info(f"Handling completion for work order {work_order.id}")
             
-            # Get the asset from the work order
-            asset = work_order.asset
-            if not asset:
-                logger.error(f"No asset found for work order {work_order.id}")
-                return {
-                    'success': False,
-                    'error': 'No asset found for this work order',
-                    'returned_count': 0
-                }
+
             
             # Get all uncompleted backlog checklist items
             uncompleted_backlog_items = WorkOrderChecklist.objects.filter(
