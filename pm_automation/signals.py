@@ -17,18 +17,13 @@ def handle_pm_settings_save(sender, instance, created, **kwargs):
     # If this is a new PM Settings, create the first iteration automatically
     if created:
         try:
-            # Check if iterations already exist (in case they were created manually)
-            existing_iterations = instance.iterations.count()
-            if existing_iterations == 0:
-                # Create the first iteration with the base interval value
-                first_iteration = PMIteration.objects.create(
-                    pm_settings=instance,
-                    interval_value=instance.interval_value,
-                    name=f"{instance.interval_value} {instance.interval_unit}"
-                )
-                logger.info(f"Created first iteration for PM Settings {instance.id}: {first_iteration.name}")
-            else:
-                logger.info(f"PM Settings {instance.id} already has {existing_iterations} iterations, skipping auto-creation")
+            # Create the first iteration with the base interval value
+            first_iteration = PMIteration.objects.create(
+                pm_settings=instance,
+                interval_value=instance.interval_value,
+                name=f"{instance.interval_value} {instance.interval_unit}"
+            )
+            logger.info(f"Created first iteration for PM Settings {instance.id}: {first_iteration.name}")
         except Exception as e:
             logger.error(f"Error creating first iteration for PM Settings {instance.id}: {e}")
     
