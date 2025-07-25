@@ -198,12 +198,17 @@ class PMAutomationService:
         """Create a PM work order and log the creation with the system admin as user"""
         logger.info(f"Creating PM work order for trigger {trigger_value}")
         
-        # Get the current iteration in the sequential cycle
-        current_iteration = pm_settings.get_current_iteration()
-        if not current_iteration:
+        # Increment the trigger counter
+        new_counter = pm_settings.increment_trigger_counter()
+        logger.info(f"Incremented trigger counter to {new_counter}")
+        
+        # Get iterations that should be triggered based on counter logic
+        triggered_iterations = pm_settings.get_iterations_for_trigger()
+        if not triggered_iterations:
             logger.error(f"No iterations found for PM Settings {pm_settings.id}")
             return None
-        logger.info(f"Using iteration: {current_iteration.name} (interval: {current_iteration.interval_value})")
+        
+        logger.info(f"Triggered iterations: {[f'{it.name} (order: {it.order})' for it in triggered_iterations]}")
         
         # Get the asset using the GenericForeignKey
         asset = None
@@ -268,12 +273,13 @@ class PMAutomationService:
             logger.debug(f"Created active status: {active_status}")
         
         # Create work order description with fallback
+        iteration_names = [it.name for it in triggered_iterations]
         try:
             asset_code = asset.code if asset and hasattr(asset, 'code') else f"{pm_settings.content_type.app_label}.{pm_settings.content_type.model}"
-            description = f"Meter-driven PM for {asset_code} at {trigger_value} {pm_settings.interval_unit} ({current_iteration.name})"
+            description = f"Meter-driven PM for {asset_code} at {trigger_value} {pm_settings.interval_unit} (Counter: {new_counter}, Iterations: {', '.join(iteration_names)})"
         except Exception as e:
             logger.error(f"Error creating work order description: {e}")
-            description = f"Meter-driven PM at {trigger_value} {pm_settings.interval_unit} ({current_iteration.name})"
+            description = f"Meter-driven PM at {trigger_value} {pm_settings.interval_unit} (Counter: {new_counter}, Iterations: {', '.join(iteration_names)})"
         
         # Create work order (do NOT set created_by)
         trigger_meter_reading = MeterReading.objects.filter(
@@ -292,12 +298,13 @@ class PMAutomationService:
         
         logger.info(f"Created work order {work_order.id}: {work_order.description}")
         
-        # Copy the cumulative checklist for the current iteration
+        # Copy the cumulative checklist for all triggered iterations
         try:
-            pm_settings.copy_iteration_checklist_to_work_order(work_order, current_iteration)
-            logger.info(f"Copied cumulative checklist for iteration '{current_iteration.name}' to work order {work_order.id}")
+            for iteration in triggered_iterations:
+                pm_settings.copy_iteration_checklist_to_work_order(work_order, iteration)
+                logger.info(f"Copied checklist for iteration '{iteration.name}' to work order {work_order.id}")
         except Exception as e:
-            logger.error(f"Error copying iteration checklist to work order {work_order.id}: {e}")
+            logger.error(f"Error copying iteration checklists to work order {work_order.id}: {e}")
         
         # Log creation with system admin as user
         WorkOrderLog.objects.create(
@@ -338,16 +345,6 @@ class PMAutomationService:
         # Update PM settings with the closing meter reading
         pm_settings = pm_trigger.pm_settings
         pm_settings.update_next_trigger(closing_meter_reading)
-        
-        # Advance to the next iteration in the cycle
-        try:
-            next_iteration = pm_settings.advance_to_next_iteration()
-            if next_iteration:
-                logger.info(f"Advanced to next iteration: {next_iteration.name}")
-            else:
-                logger.warning(f"No iterations found for PM Settings {pm_settings.id}")
-        except Exception as e:
-            logger.error(f"Error advancing to next iteration for PM Settings {pm_settings.id}: {e}")
         
         logger.info(f"Updated PM settings next trigger to {pm_settings.next_trigger_value}")
     

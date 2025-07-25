@@ -11,16 +11,17 @@ class PMIterationChecklistInline(admin.TabularInline):
 class PMIterationInline(admin.TabularInline):
     model = PMIteration
     extra = 1
-    fields = ['interval_value', 'name']
+    fields = ['interval_value', 'name', 'order']
+    readonly_fields = ['order']
     inlines = [PMIterationChecklistInline]
 
 
 @admin.register(PMSettings)
 class PMSettingsAdmin(admin.ModelAdmin):
-    list_display = ('id', 'content_type', 'object_id', 'interval_value', 'interval_unit', 'start_threshold_value', 'start_threshold_unit', 'lead_time_value', 'lead_time_unit', 'is_active', 'next_trigger_value', 'iterations_count')
+    list_display = ('id', 'content_type', 'object_id', 'interval_value', 'interval_unit', 'start_threshold_value', 'start_threshold_unit', 'lead_time_value', 'lead_time_unit', 'is_active', 'next_trigger_value', 'trigger_counter', 'iterations_count')
     list_filter = ('is_active', 'interval_unit', 'start_threshold_unit', 'lead_time_unit')
     search_fields = ('content_type__app_label', 'content_type__model', 'object_id')
-    readonly_fields = ('next_trigger_value', 'last_handled_trigger', 'current_iteration_index', 'iterations_count')
+    readonly_fields = ('next_trigger_value', 'last_handled_trigger', 'trigger_counter', 'iterations_count')
     inlines = [PMIterationInline]
     
     def iterations_count(self, obj):
@@ -43,7 +44,7 @@ class PMSettingsAdmin(admin.ModelAdmin):
             'fields': ('lead_time_value', 'lead_time_unit')
         }),
         ('Floating Trigger Status', {
-            'fields': ('is_active', 'next_trigger_value', 'last_handled_trigger', 'current_iteration_index'),
+            'fields': ('is_active', 'next_trigger_value', 'last_handled_trigger', 'trigger_counter'),
             'description': 'Next trigger = completion_meter_reading + interval_value'
         }),
     )

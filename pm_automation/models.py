@@ -62,8 +62,8 @@ class PMSettings(BaseModel):
     next_trigger_value = models.FloatField(_("Next Trigger Value"), null=True, blank=True)
     last_handled_trigger = models.FloatField(_("Last Handled Trigger"), null=True, blank=True)
     
-    # Current iteration tracking
-    current_iteration_index = models.PositiveIntegerField(default=0, help_text="Index of current iteration in the cycle")
+    # Trigger counter
+    trigger_counter = models.PositiveIntegerField(default=0, help_text="Number of times this PM setting has been triggered")
     
     class Meta:
         verbose_name = _("PM Settings")
@@ -195,25 +195,8 @@ class PMSettings(BaseModel):
         self.save()
     
     def get_iterations(self):
-        """Get all iterations ordered by interval value"""
-        return self.iterations.all().order_by('interval_value')
-    
-    def get_current_iteration(self):
-        """Get the current iteration based on current_iteration_index"""
-        iterations = list(self.get_iterations())
-        if not iterations:
-            return None
-        return iterations[self.current_iteration_index % len(iterations)]
-    
-    def advance_to_next_iteration(self):
-        """Advance to the next iteration in the cycle"""
-        iterations = list(self.get_iterations())
-        if not iterations:
-            return None
-        
-        self.current_iteration_index = (self.current_iteration_index + 1) % len(iterations)
-        self.save()
-        return self.get_current_iteration()
+        """Get all iterations ordered by order field (interval_value / pm_interval)"""
+        return self.iterations.all().order_by('order')
     
     def get_cumulative_checklist_for_iteration(self, iteration):
         """Get cumulative checklist for a specific iteration"""
@@ -252,7 +235,7 @@ class PMIteration(BaseModel):
     order = models.PositiveIntegerField(default=0, help_text="Display order")
     
     class Meta:
-        ordering = ['interval_value']
+        ordering = ['order']
         verbose_name = _("PM Iteration")
         verbose_name_plural = _("PM Iterations")
         unique_together = ['pm_settings', 'interval_value']
@@ -277,13 +260,10 @@ class PMIteration(BaseModel):
                     f"Iteration interval value ({self.interval_value}) must be a multiplier of the PM interval ({pm_interval}). "
                     f"Valid values are: {pm_interval}, {pm_interval * 2}, {pm_interval * 3}, etc."
                 )
+            
+            # Calculate order as interval_value / pm_interval
+            self.order = int(self.interval_value / pm_interval)
         
-        # Auto-assign order if not provided
-        if not self.order:
-            max_order = PMIteration.objects.filter(pm_settings=self.pm_settings).aggregate(
-                max_order=models.Max('order')
-            )['max_order'] or 0
-            self.order = max_order + 1
         super().save(*args, **kwargs)
 
 
@@ -323,6 +303,27 @@ class PMTrigger(BaseModel):
             return f"PM Trigger at {self.trigger_value} {self.trigger_unit} for {asset_str}"
         except Exception:
             return f"PM Trigger at {self.trigger_value} {self.trigger_unit} for {self.pm_settings.content_type.app_label}.{self.pm_settings.content_type.model}.{self.pm_settings.object_id}"
+
+
+    def get_iterations_for_trigger(self):
+        """
+        Get iterations that should be triggered based on the current counter.
+        For each iteration, check if counter % order == 0.
+        """
+        iterations = list(self.get_iterations())
+        triggered_iterations = []
+        
+        for iteration in iterations:
+            if self.trigger_counter % iteration.order == 0:
+                triggered_iterations.append(iteration)
+        
+        return triggered_iterations
+    
+    def increment_trigger_counter(self):
+        """Increment the trigger counter by 1"""
+        self.trigger_counter += 1
+        self.save()
+        return self.trigger_counter
 
 
 
