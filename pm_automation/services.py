@@ -299,12 +299,15 @@ class PMAutomationService:
         logger.info(f"Created work order {work_order.id}: {work_order.description}")
         
         # Copy the cumulative checklist for all triggered iterations
-        # try:
-        #     for iteration in triggered_iterations:
-        #         pm_settings.copy_iteration_checklist_to_work_order(work_order, iteration)
-        #         logger.info(f"Copied checklist for iteration '{iteration.name}' to work order {work_order.id}")
-        # except Exception as e:
-        #     logger.error(f"Error copying iteration checklists to work order {work_order.id}: {e}")
+        try:
+            # Get the highest-order iteration (which will have the most comprehensive checklist)
+            highest_order_iteration = max(triggered_iterations, key=lambda x: x.order)
+            
+            # Copy the cumulative checklist for the highest-order iteration
+            pm_settings.copy_iteration_checklist_to_work_order(work_order, highest_order_iteration)
+            logger.info(f"Copied cumulative checklist for highest-order iteration '{highest_order_iteration.name}' to work order {work_order.id}")
+        except Exception as e:
+            logger.error(f"Error copying iteration checklists to work order {work_order.id}: {e}")
         
         # Log creation with system admin as user
         WorkOrderLog.objects.create(
