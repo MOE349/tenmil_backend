@@ -113,6 +113,9 @@ class PMSettings(BaseModel):
             matching_iteration = self.iterations.filter(interval_value=old_interval_value).first()
             
             if matching_iteration:
+                # Store the matching iteration ID before updating it
+                matching_iteration_id = matching_iteration.id
+                
                 # Update the iteration to match the new interval value
                 old_name = matching_iteration.name
                 matching_iteration.interval_value = self.interval_value
@@ -122,9 +125,58 @@ class PMSettings(BaseModel):
                 logger.info(f"Updated iteration {matching_iteration.id}: {old_name} -> {matching_iteration.name}")
             else:
                 logger.info(f"No iteration found matching old interval value {old_interval_value} for PM Settings {self.id}")
+                matching_iteration_id = None
+            
+            # Second action: Update all other iterations based on their multipliers
+            self.update_other_iterations(old_interval_value, matching_iteration_id)
                 
         except Exception as e:
             logger.error(f"Error updating matching iteration for PM Settings {self.id}: {e}")
+    
+    def update_other_iterations(self, old_interval_value, matching_iteration_id):
+        """
+        Update all other iterations by calculating their multiplier and applying it to the new interval.
+        This is the second action, separate from updating the matching iteration.
+        """
+        try:
+            # Get all iterations except the one that was just updated (using ID instead of interval_value)
+            if matching_iteration_id:
+                other_iterations = self.iterations.exclude(id=matching_iteration_id)
+            else:
+                # If no matching iteration was found, get all iterations
+                other_iterations = self.iterations.all()
+            
+            if not other_iterations.exists():
+                logger.info(f"No other iterations to update for PM Settings {self.id}")
+                return
+            
+            logger.info(f"Updating {other_iterations.count()} other iterations for PM Settings {self.id}")
+            
+            updated_count = 0
+            for iteration in other_iterations:
+                try:
+                    # Calculate the multiplier (iteration interval / old pm interval)
+                    multiplier = iteration.interval_value / old_interval_value
+                    
+                    # Calculate new interval value with same multiplier
+                    new_interval_value = self.interval_value * multiplier
+                    
+                    # Update the iteration
+                    old_name = iteration.name
+                    iteration.interval_value = new_interval_value
+                    iteration.name = f"{new_interval_value} {self.interval_unit}"
+                    iteration.save()
+                    
+                    logger.info(f"Updated other iteration {iteration.id}: {old_name} -> {iteration.name} (multiplier: {multiplier})")
+                    updated_count += 1
+                    
+                except Exception as e:
+                    logger.error(f"Error updating other iteration {iteration.id}: {e}")
+            
+            logger.info(f"Successfully updated {updated_count} other iterations for PM Settings {self.id}")
+            
+        except Exception as e:
+            logger.error(f"Error updating other iterations for PM Settings {self.id}: {e}")
     
 
     
