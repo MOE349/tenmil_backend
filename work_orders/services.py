@@ -1,6 +1,7 @@
 from django.contrib.contenttypes.models import ContentType
 from work_orders.models import WorkOrder, WorkOrderChecklist
 from asset_backlogs.models import AssetBacklog
+from configurations.base_features.exceptions.base_exceptions import LocalBaseException
 import logging
 
 logger = logging.getLogger(__name__)
@@ -34,11 +35,10 @@ class WorkOrderService:
             
             if not asset_backlogs.exists():
                 logger.info(f"No backlogs found for asset {work_order.object_id}")
-                return {
-                    'success': True,
-                    'message': 'No backlogs found for this asset',
-                    'imported_count': 0
-                }
+                raise LocalBaseException(
+                    exception="No backlog found",
+                    status_code=404
+                )
             
             # Import each backlog as a checklist item and remove from backlogs
             imported_count = 0
@@ -83,14 +83,16 @@ class WorkOrderService:
             return {
                 'success': False,
                 'error': 'Work order not found',
-                'imported_count': 0
+                'imported_count': 0,
+                'work_order_id': work_order_id
             }
         except Exception as e:
             logger.error(f"Error importing backlogs to work order {work_order_id}: {e}")
             return {
                 'success': False,
                 'error': f'Error importing backlogs: {str(e)}',
-                'imported_count': 0
+                'imported_count': 0,
+                'work_order_id': work_order_id
             }
     
     @staticmethod
@@ -124,7 +126,8 @@ class WorkOrderService:
                 return {
                     'success': True,
                     'message': 'No uncompleted backlog items to return',
-                    'returned_count': 0
+                    'returned_count': 0,
+                    'work_order_id': work_order.id
                 }
             
             # Return uncompleted backlog items to asset backlogs
@@ -166,12 +169,14 @@ class WorkOrderService:
             return {
                 'success': False,
                 'error': 'Work order not found',
-                'returned_count': 0
+                'returned_count': 0,
+                'work_order_id': work_order_id
             }
         except Exception as e:
             logger.error(f"Error handling work order completion {work_order_id}: {e}")
             return {
                 'success': False,
                 'error': f'Error handling completion: {str(e)}',
-                'returned_count': 0
+                'returned_count': 0,
+                'work_order_id': work_order_id
             } 

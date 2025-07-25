@@ -222,7 +222,8 @@ class WorkOrderImportBacklogsView(BaseAPIView):
             else:
                 return self.format_response(data={
                     'success': False,
-                    'error': result['error']
+                    'error': result['error'],
+                    'work_order_id': result.get('work_order_id')
                 }, status_code=400)
                 
         except Exception as e:
@@ -258,7 +259,8 @@ class WorkOrderCompletionView(BaseAPIView):
             else:
                 return self.format_response(data={
                     'success': False,
-                    'error': result['error']
+                    'error': result['error'],
+                    'work_order_id': result.get('work_order_id')
                 }, status_code=400)
                 
         except Exception as e:
