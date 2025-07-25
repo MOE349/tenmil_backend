@@ -273,6 +273,15 @@ class PMIteration(BaseModel):
         return f"{self.pm_settings} - {self.name}"
     
     def save(self, *args, **kwargs):
+        # Validate that interval_value is a multiplier of the PM interval
+        if self.pm_settings and self.interval_value:
+            pm_interval = self.pm_settings.interval_value
+            if self.interval_value % pm_interval != 0:
+                raise ValueError(
+                    f"Iteration interval value ({self.interval_value}) must be a multiplier of the PM interval ({pm_interval}). "
+                    f"Valid values are: {pm_interval}, {pm_interval * 2}, {pm_interval * 3}, etc."
+                )
+        
         # Auto-assign order if not provided
         if not self.order:
             max_order = PMIteration.objects.filter(pm_settings=self.pm_settings).aggregate(
