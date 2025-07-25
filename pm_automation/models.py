@@ -97,11 +97,11 @@ class PMSettings(BaseModel):
             if not self.next_trigger_value:
                 self.recalculate_next_trigger()
         
-        super().save(*args, **kwargs)
-        
-        # Update iterations if interval_value changed
+        # Update iterations BEFORE saving to avoid signal interference
         if old_interval_value is not None and old_interval_value != self.interval_value:
             self.update_iterations_for_new_interval(old_interval_value)
+        
+        super().save(*args, **kwargs)
     
     def update_iterations_for_new_interval(self, old_interval_value):
         """
@@ -116,8 +116,9 @@ class PMSettings(BaseModel):
             logger.warning(f"Cannot update iterations: new interval value is {self.interval_value} for PM Settings {self.id}")
             return  # Avoid negative or zero values
         
-        # Get all iterations for this PM settings
-        iterations = self.iterations.all()
+        # Get all iterations for this PM settings - use explicit query to ensure we get all
+        from pm_automation.models import PMIteration
+        iterations = PMIteration.objects.filter(pm_settings=self).order_by('interval_value')
         
         if not iterations.exists():
             logger.info(f"No iterations to update for PM Settings {self.id}")
@@ -128,6 +129,10 @@ class PMSettings(BaseModel):
         # Store original values for debugging
         original_values = [(it.id, it.interval_value, it.name) for it in iterations]
         logger.info(f"Original iteration values: {original_values}")
+        
+        # Log all iteration IDs being processed
+        iteration_ids = [it.id for it in iterations]
+        logger.info(f"Processing iterations with IDs: {iteration_ids}")
         
         updated_count = 0
         for iteration in iterations:
