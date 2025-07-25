@@ -198,10 +198,10 @@ class PMAutomationService:
         """Create a PM work order and log the creation with the system admin as user"""
         logger.info(f"Creating PM work order for trigger {trigger_value}")
         
-        # Get the correct iteration for this trigger value
-        current_iteration = pm_settings.get_iteration_for_trigger(trigger_value)
+        # Get the current iteration in the sequential cycle
+        current_iteration = pm_settings.get_current_iteration()
         if not current_iteration:
-            logger.error(f"No valid iteration found for trigger value {trigger_value} in PM Settings {pm_settings.id}")
+            logger.error(f"No iterations found for PM Settings {pm_settings.id}")
             return None
         logger.info(f"Using iteration: {current_iteration.name} (interval: {current_iteration.interval_value})")
         
@@ -270,10 +270,10 @@ class PMAutomationService:
         # Create work order description with fallback
         try:
             asset_code = asset.code if asset and hasattr(asset, 'code') else f"{pm_settings.content_type.app_label}.{pm_settings.content_type.model}"
-            description = f"Meter-driven PM for {asset_code} at {trigger_value} {pm_settings.interval_unit}"
+            description = f"Meter-driven PM for {asset_code} at {trigger_value} {pm_settings.interval_unit} ({current_iteration.name})"
         except Exception as e:
             logger.error(f"Error creating work order description: {e}")
-            description = f"Meter-driven PM at {trigger_value} {pm_settings.interval_unit}"
+            description = f"Meter-driven PM at {trigger_value} {pm_settings.interval_unit} ({current_iteration.name})"
         
         # Create work order (do NOT set created_by)
         trigger_meter_reading = MeterReading.objects.filter(
@@ -292,7 +292,7 @@ class PMAutomationService:
         
         logger.info(f"Created work order {work_order.id}: {work_order.description}")
         
-        # Copy the cumulative checklist for the correct iteration
+        # Copy the cumulative checklist for the current iteration
         try:
             pm_settings.copy_iteration_checklist_to_work_order(work_order, current_iteration)
             logger.info(f"Copied cumulative checklist for iteration '{current_iteration.name}' to work order {work_order.id}")
