@@ -77,6 +77,10 @@ class PMSettings(BaseModel):
             return f"PM Settings for {self.content_type.app_label}.{self.content_type.model}.{self.object_id} - Every {self.interval_value} {self.interval_unit}"
     
     def save(self, *args, **kwargs):
+        # Validate that interval_value is greater than 0
+        if self.interval_value is not None and self.interval_value <= 0:
+            raise ValueError("PM interval value must be greater than 0.")
+        
         # Check if this is a new record or if key fields have changed
         old_interval_value = None
         if self.pk:  # This is an update
@@ -273,6 +277,10 @@ class PMIteration(BaseModel):
         return f"{self.pm_settings} - {self.name}"
     
     def save(self, *args, **kwargs):
+        # Validate that interval_value is greater than 0
+        if self.interval_value is not None and self.interval_value <= 0:
+            raise ValueError("Iteration interval value must be greater than 0.")
+        
         # Validate that interval_value is a multiplier of the PM interval
         if self.pm_settings and self.interval_value:
             pm_interval = self.pm_settings.interval_value
