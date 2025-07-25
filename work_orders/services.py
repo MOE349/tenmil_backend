@@ -80,20 +80,16 @@ class WorkOrderService:
             
         except WorkOrder.DoesNotExist:
             logger.error(f"Work order {work_order_id} not found")
-            return {
-                'success': False,
-                'error': 'Work order not found',
-                'imported_count': 0,
-                'work_order_id': work_order_id
-            }
+            raise LocalBaseException(
+                exception="Work order not found",
+                status_code=404
+            )
         except Exception as e:
             logger.error(f"Error importing backlogs to work order {work_order_id}: {e}")
-            return {
-                'success': False,
-                'error': f'Error importing backlogs: {str(e)}',
-                'imported_count': 0,
-                'work_order_id': work_order_id
-            }
+            raise LocalBaseException(
+                exception=f"Error importing backlogs: {str(e)}",
+                status_code=500
+            )
     
     @staticmethod
     def handle_work_order_completion(work_order_id, user):
@@ -166,17 +162,13 @@ class WorkOrderService:
             
         except WorkOrder.DoesNotExist:
             logger.error(f"Work order {work_order_id} not found")
-            return {
-                'success': False,
-                'error': 'Work order not found',
-                'returned_count': 0,
-                'work_order_id': work_order_id
-            }
+            raise LocalBaseException(
+                exception="Work order not found",
+                status_code=404
+            )
         except Exception as e:
             logger.error(f"Error handling work order completion {work_order_id}: {e}")
-            return {
-                'success': False,
-                'error': f'Error handling completion: {str(e)}',
-                'returned_count': 0,
-                'work_order_id': work_order_id
-            } 
+            raise LocalBaseException(
+                exception=f"Error handling completion: {str(e)}",
+                status_code=500
+            ) 

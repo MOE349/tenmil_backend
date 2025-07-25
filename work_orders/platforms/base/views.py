@@ -212,19 +212,12 @@ class WorkOrderImportBacklogsView(BaseAPIView):
             # Call the service to import backlogs
             result = WorkOrderService.import_asset_backlogs_to_work_order(work_order_id, user)
             
-            if result['success']:
-                return self.format_response(data={
-                    'success': True,
-                    'message': result['message'],
-                    'imported_count': result['imported_count'],
-                    'work_order_id': result['work_order_id']
-                }, status_code=200)
-            else:
-                return self.format_response(data={
-                    'success': False,
-                    'error': result['error'],
-                    'work_order_id': result.get('work_order_id')
-                }, status_code=400)
+            return self.format_response(data={
+                'success': True,
+                'message': result['message'],
+                'imported_count': result['imported_count'],
+                'work_order_id': result['work_order_id']
+            }, status_code=200)
                 
         except Exception as e:
             return self.handle_exception(e)
@@ -249,19 +242,12 @@ class WorkOrderCompletionView(BaseAPIView):
             # Call the service to handle completion
             result = WorkOrderService.handle_work_order_completion(work_order_id, user)
             
-            if result['success']:
-                return self.format_response(data={
-                    'success': True,
-                    'message': result['message'],
-                    'returned_count': result['returned_count'],
-                    'work_order_id': result['work_order_id']
-                }, status_code=200)
-            else:
-                return self.format_response(data={
-                    'success': False,
-                    'error': result['error'],
-                    'work_order_id': result.get('work_order_id')
-                }, status_code=400)
+            return self.format_response(data={
+                'success': True,
+                'message': result['message'],
+                'returned_count': result['returned_count'],
+                'work_order_id': result['work_order_id']
+            }, status_code=200)
                 
         except Exception as e:
             return self.handle_exception(e)
