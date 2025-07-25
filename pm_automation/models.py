@@ -109,9 +109,7 @@ class PMSettings(BaseModel):
         Each iteration represents a multiplier of the PM interval, so all iterations must be updated.
         """
         try:
-            # Get all iterations ordered by interval value DESCENDING to avoid unique constraint violations
-            # When updating from lower to higher intervals, we need to update highest first
-            all_iterations = list(self.iterations.all().order_by('-interval_value'))
+            all_iterations = list(self.iterations.all().order_by('interval_value'))
             
             if not all_iterations:
                 logger.info(f"No iterations to update for PM Settings {self.id}")
@@ -120,8 +118,20 @@ class PMSettings(BaseModel):
             logger.info(f"Updating {len(all_iterations)} iterations for PM Settings {self.id}")
             logger.info(f"Old PM interval: {old_interval_value}, New PM interval: {self.interval_value}")
             
+            # Choose update order based on interval change direction
+            if old_interval_value > self.interval_value:
+                # Going from higher to lower intervals (e.g., 1000 → 500)
+                # Update in ASCENDING order (lowest first) to avoid conflicts
+                update_order = all_iterations
+                logger.info("Updating in ASCENDING order (higher to lower interval change)")
+            else:
+                # Going from lower to higher intervals (e.g., 500 → 1000)
+                # Update in DESCENDING order (highest first) to avoid conflicts
+                update_order = list(reversed(all_iterations))
+                logger.info("Updating in DESCENDING order (lower to higher interval change)")
+            
             updated_count = 0
-            for iteration in all_iterations:
+            for iteration in update_order:
                 try:
                     # Calculate the multiplier (iteration interval / old pm interval)
                     multiplier = iteration.interval_value / old_interval_value
