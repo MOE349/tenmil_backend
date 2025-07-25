@@ -17,11 +17,16 @@ class PMIterationInline(admin.TabularInline):
 
 @admin.register(PMSettings)
 class PMSettingsAdmin(admin.ModelAdmin):
-    list_display = ('id', 'content_type', 'object_id', 'interval_value', 'interval_unit', 'start_threshold_value', 'start_threshold_unit', 'lead_time_value', 'lead_time_unit', 'is_active', 'next_trigger_value')
+    list_display = ('id', 'content_type', 'object_id', 'interval_value', 'interval_unit', 'start_threshold_value', 'start_threshold_unit', 'lead_time_value', 'lead_time_unit', 'is_active', 'next_trigger_value', 'iterations_count')
     list_filter = ('is_active', 'interval_unit', 'start_threshold_unit', 'lead_time_unit')
     search_fields = ('content_type__app_label', 'content_type__model', 'object_id')
-    readonly_fields = ('next_trigger_value', 'last_handled_trigger', 'current_iteration_index')
+    readonly_fields = ('next_trigger_value', 'last_handled_trigger', 'current_iteration_index', 'iterations_count')
     inlines = [PMIterationInline]
+    
+    def iterations_count(self, obj):
+        """Show the number of iterations for this PM settings"""
+        return obj.iterations.count()
+    iterations_count.short_description = 'Iterations'
     
     fieldsets = (
         ('Asset', {
@@ -69,12 +74,19 @@ class PMTriggerAdmin(admin.ModelAdmin):
 
 @admin.register(PMIteration)
 class PMIterationAdmin(admin.ModelAdmin):
-    list_display = ['name', 'pm_settings', 'interval_value', 'order', 'is_default_iteration']
+    list_display = ['name', 'pm_settings', 'interval_value', 'order', 'is_default_iteration', 'multiplier']
     list_filter = ['pm_settings']
     search_fields = ['name', 'pm_settings__name']
     ordering = ['pm_settings', 'interval_value']
     inlines = [PMIterationChecklistInline]
-    readonly_fields = ['is_default_iteration']
+    readonly_fields = ['is_default_iteration', 'multiplier']
+    
+    def multiplier(self, obj):
+        """Show the multiplier for this iteration (how many times the base interval)"""
+        if obj.pm_settings.interval_value > 0:
+            return f"{obj.interval_value / obj.pm_settings.interval_value:.1f}x"
+        return "N/A"
+    multiplier.short_description = 'Multiplier'
     
     def is_default_iteration(self, obj):
         """Check if this iteration matches the PM settings' interval_value"""

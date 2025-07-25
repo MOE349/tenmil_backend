@@ -5,6 +5,9 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from tenant_users.models import TenantUser as User
 from work_orders.models import WorkOrderChecklist
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class PMUnitChoices(models.TextChoices):
@@ -75,10 +78,12 @@ class PMSettings(BaseModel):
     
     def save(self, *args, **kwargs):
         # Check if this is a new record or if key fields have changed
+        old_interval_value = None
         if self.pk:  # This is an update
             try:
                 # Get the original instance from database
                 original = PMSettings.objects.get(pk=self.pk)
+                old_interval_value = original.interval_value
                 # Check if key fields that affect trigger calculation have changed
                 if (original.start_threshold_value != self.start_threshold_value or 
                     original.interval_value != self.interval_value):
@@ -93,6 +98,55 @@ class PMSettings(BaseModel):
                 self.recalculate_next_trigger()
         
         super().save(*args, **kwargs)
+        
+        # Update iterations if interval_value changed
+        if old_interval_value is not None and old_interval_value != self.interval_value:
+            self.update_iterations_for_new_interval(old_interval_value)
+    
+    def update_iterations_for_new_interval(self, old_interval_value):
+        """
+        Update all iterations when the PM settings interval_value changes.
+        Maintains the same multipliers but with the new base interval.
+        """
+        if old_interval_value <= 0:
+            logger.warning(f"Cannot update iterations: old interval value is {old_interval_value} for PM Settings {self.id}")
+            return  # Avoid division by zero or negative values
+        
+        if self.interval_value <= 0:
+            logger.warning(f"Cannot update iterations: new interval value is {self.interval_value} for PM Settings {self.id}")
+            return  # Avoid negative or zero values
+        
+        # Get all iterations for this PM settings
+        iterations = self.iterations.all()
+        
+        if not iterations.exists():
+            logger.info(f"No iterations to update for PM Settings {self.id}")
+            return
+        
+        logger.info(f"Updating {iterations.count()} iterations for PM Settings {self.id}: {old_interval_value} -> {self.interval_value}")
+        
+        updated_count = 0
+        for iteration in iterations:
+            try:
+                # Calculate the multiplier (how many times the old interval this iteration represents)
+                multiplier = iteration.interval_value / old_interval_value
+                
+                # Calculate new interval value with same multiplier
+                new_interval_value = self.interval_value * multiplier
+                
+                # Update the iteration
+                old_name = iteration.name
+                iteration.interval_value = new_interval_value
+                iteration.name = f"{new_interval_value} {self.interval_unit}"
+                iteration.save()
+                
+                logger.info(f"Updated iteration {iteration.id}: {old_name} -> {iteration.name} (multiplier: {multiplier})")
+                updated_count += 1
+                
+            except Exception as e:
+                logger.error(f"Error updating iteration {iteration.id}: {e}")
+        
+        logger.info(f"Successfully updated {updated_count} iterations for PM Settings {self.id}")
     
     def recalculate_next_trigger(self):
         """Recalculate the next trigger value based on current settings"""
