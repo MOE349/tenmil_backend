@@ -27,18 +27,8 @@ def handle_pm_settings_save(sender, instance, created, **kwargs):
         except Exception as e:
             logger.error(f"Error creating first iteration for PM Settings {instance.id}: {e}")
     
-    current_meter_reading = MeterReading.objects.filter(
-        content_type=instance.content_type,
-        object_id=instance.object_id
-    ).order_by('-created_at').first()
-    
-    if current_meter_reading.meter_reading >= instance.next_trigger_value:
-        PMAutomationService.process_meter_reading(
-            asset_id=instance.object_id,
-            meter_reading_value=current_meter_reading.meter_reading,
-            meter_reading_unit='hours',
-            user=current_meter_reading.created_by
-        )
+    # Remove the PM automation trigger from here to prevent double processing
+    # The automation should only be triggered by meter reading saves
 
 
 @receiver(post_save, sender=MeterReading)

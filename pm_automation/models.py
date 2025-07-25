@@ -242,8 +242,10 @@ class PMSettings(BaseModel):
     
     def increment_trigger_counter(self):
         """Increment the trigger counter by 1"""
-        self.trigger_counter += 1
-        self.save()
+        # Use update() to avoid triggering signals
+        PMSettings.objects.filter(id=self.id).update(trigger_counter=self.trigger_counter + 1)
+        # Refresh the instance to get the updated value
+        self.refresh_from_db()
         return self.trigger_counter
 
 
