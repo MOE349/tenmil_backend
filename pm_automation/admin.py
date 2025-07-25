@@ -69,11 +69,24 @@ class PMTriggerAdmin(admin.ModelAdmin):
 
 @admin.register(PMIteration)
 class PMIterationAdmin(admin.ModelAdmin):
-    list_display = ['name', 'pm_settings', 'interval_value', 'order']
+    list_display = ['name', 'pm_settings', 'interval_value', 'order', 'is_default_iteration']
     list_filter = ['pm_settings']
     search_fields = ['name', 'pm_settings__name']
     ordering = ['pm_settings', 'interval_value']
     inlines = [PMIterationChecklistInline]
+    readonly_fields = ['is_default_iteration']
+    
+    def is_default_iteration(self, obj):
+        """Check if this iteration matches the PM settings' interval_value"""
+        return obj.interval_value == obj.pm_settings.interval_value
+    is_default_iteration.boolean = True
+    is_default_iteration.short_description = 'Default Iteration'
+    
+    def has_delete_permission(self, request, obj=None):
+        """Prevent deletion of default iterations"""
+        if obj and obj.interval_value == obj.pm_settings.interval_value:
+            return False
+        return super().has_delete_permission(request, obj)
 
 
 @admin.register(PMIterationChecklist)
