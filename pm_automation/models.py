@@ -166,6 +166,11 @@ class PMSettings(BaseModel):
             updated_count = 0
             for iteration in other_iterations:
                 try:
+                    # Skip iterations that already match the new PM interval value
+                    if iteration.interval_value == self.interval_value:
+                        logger.info(f"Skipping iteration {iteration.id} with value {iteration.interval_value} (already matches new PM interval)")
+                        continue
+                    
                     # Calculate the multiplier (iteration interval / old pm interval)
                     multiplier = iteration.interval_value / old_interval_value
                     
