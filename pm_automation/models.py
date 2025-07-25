@@ -125,14 +125,28 @@ class PMSettings(BaseModel):
         
         logger.info(f"Updating {iterations.count()} iterations for PM Settings {self.id}: {old_interval_value} -> {self.interval_value}")
         
+        # Store original values for debugging
+        original_values = [(it.id, it.interval_value, it.name) for it in iterations]
+        logger.info(f"Original iteration values: {original_values}")
+        
         updated_count = 0
         for iteration in iterations:
             try:
                 # Calculate the multiplier (how many times the old interval this iteration represents)
                 multiplier = iteration.interval_value / old_interval_value
                 
+                # Validate multiplier is reasonable (should be >= 1.0 for valid iterations)
+                if multiplier < 1.0:
+                    logger.warning(f"WARNING: Iteration {iteration.id} has multiplier {multiplier} < 1.0. This might indicate data inconsistency.")
+                
                 # Calculate new interval value with same multiplier
                 new_interval_value = self.interval_value * multiplier
+                
+                # Debug logging
+                logger.info(f"DEBUG: Iteration {iteration.id} - Old: {iteration.interval_value}, Old Base: {old_interval_value}, New Base: {self.interval_value}")
+                logger.info(f"DEBUG: Multiplier: {multiplier}, New Value: {new_interval_value}")
+                logger.info(f"DEBUG: Calculation: {iteration.interval_value} / {old_interval_value} = {multiplier}")
+                logger.info(f"DEBUG: Calculation: {self.interval_value} * {multiplier} = {new_interval_value}")
                 
                 # Update the iteration
                 old_name = iteration.name
