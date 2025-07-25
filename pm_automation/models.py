@@ -116,13 +116,24 @@ class PMSettings(BaseModel):
                 # Store the matching iteration ID before updating it
                 matching_iteration_id = matching_iteration.id
                 
-                # Update the iteration to match the new interval value
-                old_name = matching_iteration.name
-                matching_iteration.interval_value = self.interval_value
-                matching_iteration.name = f"{self.interval_value} {self.interval_unit}"
-                matching_iteration.save()
+                # Check if there's already an iteration with the new interval value
+                existing_iteration_with_new_value = self.iterations.filter(interval_value=self.interval_value).exclude(id=matching_iteration.id).first()
                 
-                logger.info(f"Updated iteration {matching_iteration.id}: {old_name} -> {matching_iteration.name}")
+                if existing_iteration_with_new_value:
+                    # If there's already an iteration with the new value, delete the matching iteration
+                    # and update the existing one to be the "matching" iteration
+                    logger.info(f"Found existing iteration {existing_iteration_with_new_value.id} with new interval value {self.interval_value}")
+                    logger.info(f"Deleting matching iteration {matching_iteration.id} and keeping existing iteration")
+                    matching_iteration.delete()
+                    matching_iteration_id = existing_iteration_with_new_value.id
+                else:
+                    # Update the iteration to match the new interval value
+                    old_name = matching_iteration.name
+                    matching_iteration.interval_value = self.interval_value
+                    matching_iteration.name = f"{self.interval_value} {self.interval_unit}"
+                    matching_iteration.save()
+                    
+                    logger.info(f"Updated iteration {matching_iteration.id}: {old_name} -> {matching_iteration.name}")
             else:
                 logger.info(f"No iteration found matching old interval value {old_interval_value} for PM Settings {self.id}")
                 matching_iteration_id = None
@@ -161,14 +172,22 @@ class PMSettings(BaseModel):
                     # Calculate new interval value with same multiplier
                     new_interval_value = self.interval_value * multiplier
                     
-                    # Update the iteration
-                    old_name = iteration.name
-                    iteration.interval_value = new_interval_value
-                    iteration.name = f"{new_interval_value} {self.interval_unit}"
-                    iteration.save()
+                    # Check if there's already an iteration with this new value
+                    existing_iteration = self.iterations.filter(interval_value=new_interval_value).exclude(id=iteration.id).first()
                     
-                    logger.info(f"Updated other iteration {iteration.id}: {old_name} -> {iteration.name} (multiplier: {multiplier})")
-                    updated_count += 1
+                    if existing_iteration:
+                        # If there's already an iteration with this value, delete the current one
+                        logger.info(f"Found existing iteration {existing_iteration.id} with value {new_interval_value}, deleting iteration {iteration.id}")
+                        iteration.delete()
+                    else:
+                        # Update the iteration
+                        old_name = iteration.name
+                        iteration.interval_value = new_interval_value
+                        iteration.name = f"{new_interval_value} {self.interval_unit}"
+                        iteration.save()
+                        
+                        logger.info(f"Updated other iteration {iteration.id}: {old_name} -> {iteration.name} (multiplier: {multiplier})")
+                        updated_count += 1
                     
                 except Exception as e:
                     logger.error(f"Error updating other iteration {iteration.id}: {e}")
