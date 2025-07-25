@@ -109,8 +109,9 @@ class PMSettings(BaseModel):
         Each iteration represents a multiplier of the PM interval, so all iterations must be updated.
         """
         try:
-            # Get all iterations ordered by interval value to preserve order
-            all_iterations = list(self.iterations.all().order_by('interval_value'))
+            # Get all iterations ordered by interval value DESCENDING to avoid unique constraint violations
+            # When updating from lower to higher intervals, we need to update highest first
+            all_iterations = list(self.iterations.all().order_by('-interval_value'))
             
             if not all_iterations:
                 logger.info(f"No iterations to update for PM Settings {self.id}")
