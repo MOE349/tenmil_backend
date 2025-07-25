@@ -96,4 +96,6 @@ class WorkOrderCompletionNoteBaseSerializer(BaseSerializer):
         completed_by = [checklist.completed_by.name for checklist in checklists]
         completed_by = list(set(completed_by))
         response['completed_by'] = completed_by
+        response['completion_meter_reading'] = instance.work_order.completion_meter_reading
+        response['trigger_meter_reading'] = instance.work_order.trigger_meter_reading
         return response
