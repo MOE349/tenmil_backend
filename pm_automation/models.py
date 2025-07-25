@@ -249,11 +249,26 @@ class PMSettings(BaseModel):
         and is a defined iteration for this PMSettings.
         """
         iterations = list(self.get_iterations())
-        valid_iterations = [it for it in iterations if trigger_value % it.interval_value == 0]
+        logger.info(f"Looking for iteration for trigger {trigger_value}. Available iterations: {[f'{it.name} ({it.interval_value})' for it in iterations]}")
+        
+        valid_iterations = []
+        for it in iterations:
+            remainder = trigger_value % it.interval_value
+            logger.info(f"Checking iteration {it.name} ({it.interval_value}): {trigger_value} % {it.interval_value} = {remainder}")
+            if remainder == 0:
+                valid_iterations.append(it)
+                logger.info(f"  -> Valid iteration found: {it.name}")
+            else:
+                logger.info(f"  -> Invalid iteration (remainder {remainder})")
+        
         if not valid_iterations:
+            logger.warning(f"No valid iterations found for trigger {trigger_value}")
             return None
+        
         # Return the iteration with the largest interval_value
-        return max(valid_iterations, key=lambda it: it.interval_value)
+        selected_iteration = max(valid_iterations, key=lambda it: it.interval_value)
+        logger.info(f"Selected iteration: {selected_iteration.name} (largest valid)")
+        return selected_iteration
 
 
 class PMIteration(BaseModel):
