@@ -78,10 +78,12 @@ class PMSettings(BaseModel):
     
     def save(self, *args, **kwargs):
         # Check if this is a new record or if key fields have changed
+        old_interval_value = None
         if self.pk:  # This is an update
             try:
                 # Get the original instance from database
                 original = PMSettings.objects.get(pk=self.pk)
+                old_interval_value = original.interval_value
                 # Check if key fields that affect trigger calculation have changed
                 if (original.start_threshold_value != self.start_threshold_value or 
                     original.interval_value != self.interval_value):
@@ -96,6 +98,33 @@ class PMSettings(BaseModel):
                 self.recalculate_next_trigger()
         
         super().save(*args, **kwargs)
+        
+        # Update the iteration that matches the old interval value
+        if old_interval_value is not None and old_interval_value != self.interval_value:
+            self.update_matching_iteration(old_interval_value)
+    
+    def update_matching_iteration(self, old_interval_value):
+        """
+        Update the iteration that matches the old interval value to match the new interval value.
+        Only updates the iteration that exactly matches the old PM settings interval value.
+        """
+        try:
+            # Find the iteration that matches the old interval value
+            matching_iteration = self.iterations.filter(interval_value=old_interval_value).first()
+            
+            if matching_iteration:
+                # Update the iteration to match the new interval value
+                old_name = matching_iteration.name
+                matching_iteration.interval_value = self.interval_value
+                matching_iteration.name = f"{self.interval_value} {self.interval_unit}"
+                matching_iteration.save()
+                
+                logger.info(f"Updated iteration {matching_iteration.id}: {old_name} -> {matching_iteration.name}")
+            else:
+                logger.info(f"No iteration found matching old interval value {old_interval_value} for PM Settings {self.id}")
+                
+        except Exception as e:
+            logger.error(f"Error updating matching iteration for PM Settings {self.id}: {e}")
     
 
     
