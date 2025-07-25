@@ -121,11 +121,11 @@ class PMSettings(BaseModel):
                 
                 if existing_iteration_with_new_value:
                     # If there's already an iteration with the new value, delete the matching iteration
-                    # and update the existing one to be the "matching" iteration
+                    # and keep the existing one (don't mark it as matching_iteration_id)
                     logger.info(f"Found existing iteration {existing_iteration_with_new_value.id} with new interval value {self.interval_value}")
                     logger.info(f"Deleting matching iteration {matching_iteration.id} and keeping existing iteration")
                     matching_iteration.delete()
-                    matching_iteration_id = existing_iteration_with_new_value.id
+                    matching_iteration_id = None  # Don't exclude the existing iteration from updates
                 else:
                     # Update the iteration to match the new interval value
                     old_name = matching_iteration.name
