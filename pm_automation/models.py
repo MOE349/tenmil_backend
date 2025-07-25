@@ -226,6 +226,26 @@ class PMSettings(BaseModel):
                 source_pm_iteration_checklist=item
             )
 
+    def get_iterations_for_trigger(self):
+        """
+        Get iterations that should be triggered based on the current counter.
+        For each iteration, check if counter % order == 0.
+        """
+        iterations = list(self.get_iterations())
+        triggered_iterations = []
+        
+        for iteration in iterations:
+            if self.trigger_counter % iteration.order == 0:
+                triggered_iterations.append(iteration)
+        
+        return triggered_iterations
+    
+    def increment_trigger_counter(self):
+        """Increment the trigger counter by 1"""
+        self.trigger_counter += 1
+        self.save()
+        return self.trigger_counter
+
 
 class PMIteration(BaseModel):
     """PM Iteration - represents when a PM should occur based on interval"""
@@ -303,27 +323,6 @@ class PMTrigger(BaseModel):
             return f"PM Trigger at {self.trigger_value} {self.trigger_unit} for {asset_str}"
         except Exception:
             return f"PM Trigger at {self.trigger_value} {self.trigger_unit} for {self.pm_settings.content_type.app_label}.{self.pm_settings.content_type.model}.{self.pm_settings.object_id}"
-
-
-    def get_iterations_for_trigger(self):
-        """
-        Get iterations that should be triggered based on the current counter.
-        For each iteration, check if counter % order == 0.
-        """
-        iterations = list(self.get_iterations())
-        triggered_iterations = []
-        
-        for iteration in iterations:
-            if self.trigger_counter % iteration.order == 0:
-                triggered_iterations.append(iteration)
-        
-        return triggered_iterations
-    
-    def increment_trigger_counter(self):
-        """Increment the trigger counter by 1"""
-        self.trigger_counter += 1
-        self.save()
-        return self.trigger_counter
 
 
 
