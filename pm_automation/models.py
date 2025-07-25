@@ -99,78 +99,29 @@ class PMSettings(BaseModel):
         
         super().save(*args, **kwargs)
         
-        # Update the iteration that matches the old interval value
+        # Update all iterations to maintain their multiplier pattern
         if old_interval_value is not None and old_interval_value != self.interval_value:
             self.update_matching_iteration(old_interval_value)
     
     def update_matching_iteration(self, old_interval_value):
         """
-        Update the iteration that matches the old interval value to match the new interval value.
-        Only updates the iteration that exactly matches the old PM settings interval value.
+        Update ALL iterations to maintain their multiplier pattern when PM interval changes.
+        Each iteration represents a multiplier of the PM interval, so all iterations must be updated.
         """
         try:
-            # Find the iteration that matches the old interval value
-            matching_iteration = self.iterations.filter(interval_value=old_interval_value).first()
+            # Get all iterations ordered by interval value to preserve order
+            all_iterations = list(self.iterations.all().order_by('interval_value'))
             
-            if matching_iteration:
-                # Store the matching iteration ID before updating it
-                matching_iteration_id = matching_iteration.id
-                
-                # Check if there's already an iteration with the new interval value
-                existing_iteration_with_new_value = self.iterations.filter(interval_value=self.interval_value).exclude(id=matching_iteration.id).first()
-                
-                if existing_iteration_with_new_value:
-                    # If there's already an iteration with the new value, delete the matching iteration
-                    # and keep the existing one (don't mark it as matching_iteration_id)
-                    logger.info(f"Found existing iteration {existing_iteration_with_new_value.id} with new interval value {self.interval_value}")
-                    logger.info(f"Deleting matching iteration {matching_iteration.id} and keeping existing iteration")
-                    matching_iteration.delete()
-                    matching_iteration_id = None  # Don't exclude the existing iteration from updates
-                else:
-                    # Update the iteration to match the new interval value
-                    old_name = matching_iteration.name
-                    matching_iteration.interval_value = self.interval_value
-                    matching_iteration.name = f"{self.interval_value} {self.interval_unit}"
-                    matching_iteration.save()
-                    
-                    logger.info(f"Updated iteration {matching_iteration.id}: {old_name} -> {matching_iteration.name}")
-            else:
-                logger.info(f"No iteration found matching old interval value {old_interval_value} for PM Settings {self.id}")
-                matching_iteration_id = None
-            
-            # Second action: Update all other iterations based on their multipliers
-            self.update_other_iterations(old_interval_value, matching_iteration_id)
-                
-        except Exception as e:
-            logger.error(f"Error updating matching iteration for PM Settings {self.id}: {e}")
-    
-    def update_other_iterations(self, old_interval_value, matching_iteration_id):
-        """
-        Update all other iterations by calculating their multiplier and applying it to the new interval.
-        This is the second action, separate from updating the matching iteration.
-        """
-        try:
-            # Get all iterations except the one that was just updated (using ID instead of interval_value)
-            if matching_iteration_id:
-                other_iterations = self.iterations.exclude(id=matching_iteration_id)
-            else:
-                # If no matching iteration was found, get all iterations
-                other_iterations = self.iterations.all()
-            
-            if not other_iterations.exists():
-                logger.info(f"No other iterations to update for PM Settings {self.id}")
+            if not all_iterations:
+                logger.info(f"No iterations to update for PM Settings {self.id}")
                 return
             
-            logger.info(f"Updating {other_iterations.count()} other iterations for PM Settings {self.id}")
+            logger.info(f"Updating {len(all_iterations)} iterations for PM Settings {self.id}")
+            logger.info(f"Old PM interval: {old_interval_value}, New PM interval: {self.interval_value}")
             
             updated_count = 0
-            for iteration in other_iterations:
+            for iteration in all_iterations:
                 try:
-                    # Skip iterations that already match the new PM interval value
-                    if iteration.interval_value == self.interval_value:
-                        logger.info(f"Skipping iteration {iteration.id} with value {iteration.interval_value} (already matches new PM interval)")
-                        continue
-                    
                     # Calculate the multiplier (iteration interval / old pm interval)
                     multiplier = iteration.interval_value / old_interval_value
                     
@@ -183,16 +134,23 @@ class PMSettings(BaseModel):
                     iteration.name = f"{new_interval_value} {self.interval_unit}"
                     iteration.save()
                     
-                    logger.info(f"Updated other iteration {iteration.id}: {old_name} -> {iteration.name} (multiplier: {multiplier})")
+                    logger.info(f"Updated iteration {iteration.id}: {old_name} -> {iteration.name} (multiplier: {multiplier})")
                     updated_count += 1
                     
                 except Exception as e:
-                    logger.error(f"Error updating other iteration {iteration.id}: {e}")
+                    logger.error(f"Error updating iteration {iteration.id}: {e}")
             
-            logger.info(f"Successfully updated {updated_count} other iterations for PM Settings {self.id}")
+            logger.info(f"Successfully updated {updated_count} iterations for PM Settings {self.id}")
             
         except Exception as e:
-            logger.error(f"Error updating other iterations for PM Settings {self.id}: {e}")
+            logger.error(f"Error updating iterations for PM Settings {self.id}: {e}")
+    
+    def update_other_iterations(self, old_interval_value, matching_iteration_id):
+        """
+        This method is no longer used - all iteration updates are handled in update_matching_iteration.
+        Kept for backward compatibility but does nothing.
+        """
+        pass
     
 
     
