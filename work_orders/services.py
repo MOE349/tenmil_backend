@@ -84,6 +84,9 @@ class WorkOrderService:
                 exception="Work order not found",
                 status_code=404
             )
+        except LocalBaseException:
+            # Re-raise LocalBaseException without wrapping it
+            raise
         except Exception as e:
             logger.error(f"Error importing backlogs to work order {work_order_id}: {e}")
             raise LocalBaseException(
@@ -166,6 +169,9 @@ class WorkOrderService:
                 exception="Work order not found",
                 status_code=404
             )
+        except LocalBaseException:
+            # Re-raise LocalBaseException without wrapping it
+            raise
         except Exception as e:
             logger.error(f"Error handling work order completion {work_order_id}: {e}")
             raise LocalBaseException(
