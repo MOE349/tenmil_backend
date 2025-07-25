@@ -177,22 +177,14 @@ class PMSettings(BaseModel):
                     # Calculate new interval value with same multiplier
                     new_interval_value = self.interval_value * multiplier
                     
-                    # Check if there's already an iteration with this new value (excluding current iteration)
-                    existing_iteration = self.iterations.filter(interval_value=new_interval_value).exclude(id=iteration.id).first()
+                    # Update the iteration to the new value based on its multiplier
+                    old_name = iteration.name
+                    iteration.interval_value = new_interval_value
+                    iteration.name = f"{new_interval_value} {self.interval_unit}"
+                    iteration.save()
                     
-                    if existing_iteration and existing_iteration.id != iteration.id:
-                        # If there's already an iteration with this value, delete the current one
-                        logger.info(f"Found existing iteration {existing_iteration.id} with value {new_interval_value}, deleting iteration {iteration.id}")
-                        iteration.delete()
-                    else:
-                        # Update the iteration
-                        old_name = iteration.name
-                        iteration.interval_value = new_interval_value
-                        iteration.name = f"{new_interval_value} {self.interval_unit}"
-                        iteration.save()
-                        
-                        logger.info(f"Updated other iteration {iteration.id}: {old_name} -> {iteration.name} (multiplier: {multiplier})")
-                        updated_count += 1
+                    logger.info(f"Updated other iteration {iteration.id}: {old_name} -> {iteration.name} (multiplier: {multiplier})")
+                    updated_count += 1
                     
                 except Exception as e:
                     logger.error(f"Error updating other iteration {iteration.id}: {e}")
