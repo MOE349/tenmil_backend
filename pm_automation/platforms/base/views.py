@@ -48,9 +48,9 @@ class PMSettingsBaseView(BaseAPIView):
                 # )
             
             # Update PM counter using the same logic as manual generation
-            # pm_counter += next_iteration + 1
+            # pm_counter += next_iteration
             old_counter = instance.trigger_counter
-            new_counter = old_counter + next_iteration + 1
+            new_counter = old_counter + next_iteration
             
             logger.info(f"PM Settings counter update: PM={pk}, old_counter={old_counter}, next_iteration={next_iteration}, new_counter={new_counter}")
             
