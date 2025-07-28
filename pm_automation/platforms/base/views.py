@@ -208,7 +208,6 @@ class ManualPMGenerationBaseView(BaseAPIView):
             )
         
         # Check if there are any open PM work orders that might conflict
-        # This is a business rule - you might want to allow or disallow based on your needs
         from work_orders.models import WorkOrder
         open_pm_work_orders = WorkOrder.objects.filter(
             content_type=pm_settings.content_type,
@@ -218,15 +217,12 @@ class ManualPMGenerationBaseView(BaseAPIView):
             is_pm_generated=True
         ).count()
         
-        # if open_pm_work_orders > 0:
-        #     logger.warning(f"Manual PM generation requested but {open_pm_work_orders} open PM work orders exist")
-            # You might want to raise an exception here or just log a warning
-            # Uncomment the next lines if you want to prevent manual generation when there are open PM work orders
-            # raise LocalBaseException(
-            #     exception_type="validation_error",
-            #     status_code=400,
-            #     kwargs={"message": f"Cannot generate manual PM work order. {open_pm_work_orders} open PM work orders exist for this asset."}
-            # )
+        if open_pm_work_orders > 0:
+            logger.warning(f"Manual PM generation requested but {open_pm_work_orders} open PM work orders exist")
+            raise LocalBaseException(
+                exception=f"Cannot generate PM work order. {open_pm_work_orders} open PM work order(s) exist for this asset. Please complete the existing work order(s) before generating a new one.",
+                status_code=400
+            )
     
     def _calculate_next_iterations(self, pm_settings):
         """
