@@ -135,8 +135,8 @@ class ManualPMGenerationBaseView(BaseAPIView):
     
     def post(self, request, pm_settings_id, *args, **kwargs):
         """
-        Generate manual PM work order for selected iteration
-        Expected payload: {"iteration_number": 1}
+        Generate manual PM work order for the next appropriate iteration
+        No payload required - iteration is calculated automatically
         """
         try:
             # Get PM settings using BaseAPIView method
@@ -145,34 +145,29 @@ class ManualPMGenerationBaseView(BaseAPIView):
             # Validate that manual generation is possible
             self._validate_manual_generation(pm_settings)
             
-            # Get iteration number from request
-            iteration_number = request.data.get('iteration_number')
-            if not iteration_number:
+            # Calculate iteration_number locally - find what would naturally trigger next
+            next_counter = pm_settings.trigger_counter + 1
+            
+            # Find which iterations would trigger at the next counter
+            triggered_iterations = []
+            for iteration in pm_settings.get_iterations():
+                if next_counter % iteration.order == 0:
+                    triggered_iterations.append(iteration)
+            
+            if not triggered_iterations:
                 raise LocalBaseException(
-                    exception="iteration_number is required",
+                    exception="No iterations would trigger at the next counter position",
                     status_code=400
                 )
             
-            # Convert to int and validate
-            try:
-                iteration_number = int(iteration_number)
-                if iteration_number < 0:
-                    raise ValueError("iteration_number must be 0 or positive")
-            except (ValueError, TypeError):
-                raise LocalBaseException(
-                    exception="iteration_number must be a valid integer (0 or positive)",
-                    status_code=400
-                )
+            # Get the largest (most comprehensive) iteration that would trigger
+            largest_iteration = max(triggered_iterations, key=lambda x: x.interval_value)
+            iteration_number = 0  # Use natural next iteration (option "0")
             
-            # Validate iteration number against available options
+            logger.info(f"Calculated iteration_number={iteration_number} for counter {next_counter}, largest iteration: {largest_iteration.name}")
+            
+            # Get the formatted string and extract the numeric value
             next_iterations = self._calculate_next_iterations(pm_settings)
-            if str(iteration_number) not in next_iterations:
-                raise LocalBaseException(
-                    exception=f"Invalid iteration_number. Available options: {list(next_iterations.keys())}",
-                    status_code=400
-                )
-            
-            # Get the formatted string (e.g., "500 hours") and extract the numeric value
             iteration_string = next_iterations[str(iteration_number)]
             iteration_value = int(iteration_string.split()[0])  # Extract "500" from "500 hours"
             
@@ -192,6 +187,7 @@ class ManualPMGenerationBaseView(BaseAPIView):
                     "iteration_number": iteration_number,
                     "iteration_interval": iteration_string,  # Return formatted string for user
                     "new_pm_counter": pm_settings.trigger_counter,
+                    "triggered_iterations": [it.name for it in triggered_iterations],
                     "created_by": work_order.created_by.email if hasattr(work_order, 'created_by') and work_order.created_by else "System"
                 },
                 status_code=201
