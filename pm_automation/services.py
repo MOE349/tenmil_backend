@@ -292,7 +292,7 @@ class PMAutomationService:
             maint_type='PM',
             priority='medium',
             description=description,
-            is_auto_generated=True,
+            is_pm_generated=True,
             trigger_meter_reading=trigger_meter_reading
         )
         

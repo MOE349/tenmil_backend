@@ -40,3 +40,8 @@ class PMIterationChecklistDashboardView(PMIterationChecklistBaseView):
     serializer_class = PMIterationChecklistDashboardSerializer
 
 
+class ManualPMGenerationDashboardView(ManualPMGenerationBaseView):
+    """Dashboard view for manual PM work order generation"""
+    pass
+
+

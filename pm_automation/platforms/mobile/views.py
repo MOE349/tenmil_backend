@@ -40,3 +40,8 @@ class PMIterationChecklistMobileView(PMIterationChecklistBaseView):
     serializer_class = PMIterationChecklistMobileSerializer
 
 
+class ManualPMGenerationMobileView(ManualPMGenerationBaseView):
+    """Mobile view for manual PM work order generation"""
+    pass
+
+
