@@ -417,6 +417,22 @@ class ManualPMGenerationBaseView(BaseAPIView):
         
         logger.info(f"Created {work_order_type.lower()} PM work order {work_order.id}: {work_order.description}")
         
+        # Create PMTrigger record so completion handling works properly
+        try:
+            from pm_automation.models import PMTrigger
+            trigger_value = pm_settings.next_trigger_value if pm_settings.next_trigger_value else float(pm_settings.start_threshold_value) + float(pm_settings.interval_value)
+            
+            pm_trigger = PMTrigger.objects.create(
+                pm_settings=pm_settings,
+                trigger_value=trigger_value,
+                trigger_unit=pm_settings.interval_unit,
+                work_order=work_order,
+                is_handled=False
+            )
+            logger.info(f"Created PMTrigger {pm_trigger.id} for manual work order {work_order.id} at trigger value {trigger_value}")
+        except Exception as e:
+            logger.error(f"Error creating PMTrigger for manual work order {work_order.id}: {e}")
+        
         # Copy the cumulative checklist for triggered iterations
         try:
             if triggered_iterations:
