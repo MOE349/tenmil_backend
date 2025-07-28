@@ -13,6 +13,80 @@ logger = logging.getLogger(__name__)
 class PMSettingsBaseView(BaseAPIView):
     serializer_class = PMSettingsBaseSerializer
     model_class = PMSettings
+    
+    def update(self, data, params, pk, partial, return_instance=False, *args, **kwargs):
+        """Override update to handle next_iteration counter adjustments"""
+        
+        # Check if next_iteration is in the data
+        next_iteration = data.pop('next_iteration', None)
+        counter_update_info = None
+        
+        if next_iteration is not None:
+            # Validate next_iteration
+            try:
+                next_iteration = int(next_iteration)
+                if next_iteration <= 0:
+                    raise ValueError("next_iteration must be positive")
+            except (ValueError, TypeError) as e:
+                raise LocalBaseException(
+                    exception_type="validation_error",
+                    status_code=400,
+                    kwargs={"message": f"Invalid next_iteration value: {str(e)}"}
+                )
+            
+            # Get the instance
+            instance = self.get_instance(pk)
+            
+            # Validate that PM settings is active (optional business rule)
+            if not instance.is_active:
+                logger.warning(f"Counter update attempted on inactive PM Settings {pk}")
+                # Uncomment if you want to prevent updates on inactive PM settings
+                # raise LocalBaseException(
+                #     exception_type="validation_error", 
+                #     status_code=400,
+                #     kwargs={"message": "Cannot update counter for inactive PM Settings"}
+                # )
+            
+            # Update PM counter using the same logic as manual generation
+            # pm_counter += next_iteration + 1
+            old_counter = instance.trigger_counter
+            new_counter = old_counter + next_iteration + 1
+            
+            logger.info(f"PM Settings counter update: PM={pk}, old_counter={old_counter}, next_iteration={next_iteration}, new_counter={new_counter}")
+            
+            # Update the counter directly
+            PMSettings.objects.filter(id=pk).update(trigger_counter=new_counter)
+            
+            # Store counter update info for response
+            counter_update_info = {
+                "counter_updated": True,
+                "old_counter": old_counter,
+                "new_counter": new_counter,
+                "next_iteration": next_iteration
+            }
+            
+            logger.info(f"Successfully updated PM Settings {pk} counter from {old_counter} to {new_counter} (next_iteration={next_iteration})")
+        
+        # Proceed with normal update
+        instance, response = super().update(data, params, pk, partial, return_instance=True, *args, **kwargs)
+        
+        # Add counter update info to response if it occurred
+        if counter_update_info:
+            if isinstance(response, dict):
+                response['counter_update'] = counter_update_info
+            else:
+                # If response is not a dict, we'll add it to the final formatted response
+                pass
+        
+        if return_instance:
+            return instance, response
+        
+        # Format the final response with counter update info
+        formatted_response = self.format_response(data=response)
+        if counter_update_info and hasattr(formatted_response, 'data') and isinstance(formatted_response.data, dict):
+            formatted_response.data['counter_update'] = counter_update_info
+        
+        return formatted_response
 
 
 class PMTriggerBaseView(BaseAPIView):
@@ -40,7 +114,8 @@ class ManualPMGenerationBaseView(BaseAPIView):
     def get(self, request, pm_settings_id, *args, **kwargs):
         """
         Get next available iterations for manual PM generation
-        Returns: {"1": 500, "2": 1000, "3": 500, "4": 2000}
+        Returns: {"0": "2000 hours", "1": "500 hours", "2": "1000 hours", "3": "500 hours", "4": "2000 hours"}
+        Where "0" is the natural next iteration, and 1-4 are manual advance options
         """
         try:
             # Get PM settings
@@ -83,11 +158,13 @@ class ManualPMGenerationBaseView(BaseAPIView):
             # Convert to int and validate
             try:
                 iteration_number = int(iteration_number)
+                if iteration_number < 0:
+                    raise ValueError("iteration_number must be 0 or positive")
             except (ValueError, TypeError):
                 raise LocalBaseException(
                     exception_type="validation_error",
                     status_code=400,
-                    kwargs={"message": "iteration_number must be a valid integer"}
+                    kwargs={"message": "iteration_number must be a valid integer (0 or positive)"}
                 )
             
             # Validate iteration number against available options
@@ -102,11 +179,15 @@ class ManualPMGenerationBaseView(BaseAPIView):
                     }
                 )
             
+            # Get the formatted string (e.g., "500 hours") and extract the numeric value
+            iteration_string = next_iterations[str(iteration_number)]
+            iteration_value = int(iteration_string.split()[0])  # Extract "500" from "500 hours"
+            
             # Generate manual work order
             work_order = self._generate_manual_work_order(
                 pm_settings, 
                 iteration_number, 
-                next_iterations[str(iteration_number)],
+                iteration_value,  # Pass numeric value for calculations
                 request.user
             )
             
@@ -116,7 +197,7 @@ class ManualPMGenerationBaseView(BaseAPIView):
                     "work_order_code": work_order.code,
                     "description": work_order.description,
                     "iteration_number": iteration_number,
-                    "iteration_interval": next_iterations[str(iteration_number)],
+                    "iteration_interval": iteration_string,  # Return formatted string for user
                     "new_pm_counter": pm_settings.trigger_counter,
                     "created_by": work_order.created_by.email if hasattr(work_order, 'created_by') and work_order.created_by else "System"
                 },
@@ -162,7 +243,7 @@ class ManualPMGenerationBaseView(BaseAPIView):
     def _calculate_next_iterations(self, pm_settings):
         """
         Calculate next available iterations for manual generation
-        Returns: {"1": 500, "2": 1000, "3": 500, "4": 2000}
+        Returns: {"0": "2000 hours", "1": "2000 hours", "2": "500 hours", "3": "1000 hours", "4": "500 hours"}
         """
         # Get all iterations ordered by order
         iterations = list(pm_settings.get_iterations())
@@ -177,11 +258,27 @@ class ManualPMGenerationBaseView(BaseAPIView):
         
         logger.info(f"Calculating manual PM iterations: current_counter={pm_settings.trigger_counter}, next_counter={next_counter}, largest_order={largest_order}")
         
-        # Calculate next X triggers where X = largest_order
+        # Calculate next X+1 triggers where X = largest_order (0 + X manual options)
         next_iterations = {}
         
+        # First, add option "0" - the natural next iteration in the cycle
+        natural_counter = next_counter  # This is what would happen naturally
+        triggered_iterations_natural = []
+        for iteration in iterations:
+            if natural_counter % iteration.order == 0:
+                triggered_iterations_natural.append(iteration)
+        
+        if triggered_iterations_natural:
+            largest_natural = max(triggered_iterations_natural, key=lambda x: x.interval_value)
+            next_iterations["0"] = f"{int(largest_natural.interval_value)} {pm_settings.interval_unit}"
+            logger.debug(f"Natural counter {natural_counter}: triggered iterations {[f'{it.interval_value}(order:{it.order})' for it in triggered_iterations_natural]}, largest: {largest_natural.interval_value} {pm_settings.interval_unit}")
+        else:
+            next_iterations["0"] = f"{int(pm_settings.interval_value)} {pm_settings.interval_unit}"
+            logger.warning(f"Natural counter {natural_counter}: no iterations triggered, using base interval {pm_settings.interval_value} {pm_settings.interval_unit}")
+        
+        # Then add manual options 1 through largest_order
         for i in range(1, largest_order + 1):
-            counter = next_counter + i - 1  # 20, 21, 22, 23 for example
+            counter = next_counter + i  # 21, 22, 23, 24 for manual options
             
             # Find which iterations trigger at this counter
             triggered_iterations = []
@@ -192,29 +289,35 @@ class ManualPMGenerationBaseView(BaseAPIView):
             # Get the largest (highest interval) triggered iteration
             if triggered_iterations:
                 largest_iteration = max(triggered_iterations, key=lambda x: x.interval_value)
-                next_iterations[str(i)] = int(largest_iteration.interval_value)
-                logger.debug(f"Counter {counter}: triggered iterations {[f'{it.interval_value}(order:{it.order})' for it in triggered_iterations]}, largest: {largest_iteration.interval_value}")
+                # Format as string with unit
+                next_iterations[str(i)] = f"{int(largest_iteration.interval_value)} {pm_settings.interval_unit}"
+                logger.debug(f"Manual counter {counter}: triggered iterations {[f'{it.interval_value}(order:{it.order})' for it in triggered_iterations]}, largest: {largest_iteration.interval_value} {pm_settings.interval_unit}")
             else:
                 # This shouldn't happen with proper iteration setup, but fallback to base interval
-                next_iterations[str(i)] = int(pm_settings.interval_value)
-                logger.warning(f"Counter {counter}: no iterations triggered, using base interval {pm_settings.interval_value}")
+                next_iterations[str(i)] = f"{int(pm_settings.interval_value)} {pm_settings.interval_unit}"
+                logger.warning(f"Manual counter {counter}: no iterations triggered, using base interval {pm_settings.interval_value} {pm_settings.interval_unit}")
         
         logger.info(f"Calculated next iterations: {next_iterations}")
         return next_iterations
     
-    def _generate_manual_work_order(self, pm_settings, iteration_number, iteration_interval, user):
+    def _generate_manual_work_order(self, pm_settings, iteration_number, iteration_value, user):
         """Generate manual PM work order for the selected iteration"""
         
-        # Update PM settings counter using the user's logic:
-        # pm_counter += chosen_iteration_key + 1
-        new_counter = pm_settings.trigger_counter + iteration_number + 1
+        # Update PM settings counter based on iteration type:
+        if iteration_number == 0:
+            # Option "0" is the natural next iteration - just increment by 1
+            new_counter = pm_settings.trigger_counter + 1
+            target_counter = pm_settings.trigger_counter + 1
+            work_order_type = "NATURAL"
+        else:
+            # Manual options - use: pm_counter += iteration_number + 1
+            new_counter = pm_settings.trigger_counter + iteration_number + 1
+            target_counter = pm_settings.trigger_counter + iteration_number
+            work_order_type = "MANUAL"
         
-        logger.info(f"Manual PM generation: old_counter={pm_settings.trigger_counter}, iteration_number={iteration_number}, new_counter={new_counter}")
+        logger.info(f"{work_order_type} PM generation: old_counter={pm_settings.trigger_counter}, iteration_number={iteration_number}, target_counter={target_counter}, new_counter={new_counter}")
         
-        # Calculate the target counter for determining triggered iterations
-        target_counter = pm_settings.trigger_counter + iteration_number
-        
-        # Get iterations that would trigger at this target counter
+        # Get iterations that would trigger at the target counter
         triggered_iterations = []
         for iteration in pm_settings.get_iterations():
             if target_counter % iteration.order == 0:
@@ -262,9 +365,24 @@ class ManualPMGenerationBaseView(BaseAPIView):
             )
         
         # Create work order description
-        iteration_names = [it.name for it in triggered_iterations] if triggered_iterations else [f"{iteration_interval}h"]
+        iteration_names = [it.name for it in triggered_iterations] if triggered_iterations else [f"{iteration_value}h"]
         asset_code = asset.code if hasattr(asset, 'code') else f"{pm_settings.content_type.app_label}.{pm_settings.content_type.model}"
-        description = f"[MANUAL] PM for {asset_code} - Target: {iteration_interval}h (Iterations: {', '.join(iteration_names)})"
+        
+        # Create description: pm name + iteration interval + unit
+        unit_formatted = pm_settings.interval_unit.title()  # Proper capitalization
+        
+        if pm_settings.name:
+            # Use PM settings name if available
+            if iteration_number == 0:
+                description = f"{pm_settings.name} {iteration_value} {unit_formatted}"
+            else:
+                description = f"[Manual] {pm_settings.name} {iteration_value} {unit_formatted}"
+        else:
+            # Fallback to generic PM naming
+            if iteration_number == 0:
+                description = f"{iteration_value} {unit_formatted} PM"
+            else:
+                description = f"[Manual] {iteration_value} {unit_formatted} PM"
         
         # Get trigger meter reading (current meter reading)
         from meter_readings.models import MeterReading
@@ -291,7 +409,7 @@ class ManualPMGenerationBaseView(BaseAPIView):
             trigger_meter_reading=trigger_meter_reading
         )
         
-        logger.info(f"Created manual PM work order {work_order.id}: {work_order.description}")
+        logger.info(f"Created {work_order_type.lower()} PM work order {work_order.id}: {work_order.description}")
         
         # Copy the cumulative checklist for triggered iterations
         try:
@@ -304,15 +422,16 @@ class ManualPMGenerationBaseView(BaseAPIView):
             logger.error(f"Error copying iteration checklists to work order {work_order.id}: {e}")
         
         # Log creation with request user (not system admin)
+        log_description = f"Work Order Created ({work_order_type.title()} PM Generation)"
         WorkOrderLog.objects.create(
             work_order=work_order,
             amount=0,
             log_type=WorkOrderLog.LogTypeChoices.CREATED,
             user=user,
-            description="Work Order Created (Manual PM Generation)"
+            description=log_description
         )
         
-        logger.info(f"Created work order log for manual PM work order {work_order.id} by user {user.email}")
+        logger.info(f"Created work order log for {work_order_type.lower()} PM work order {work_order.id} by user {user.email}")
         
         return work_order
 

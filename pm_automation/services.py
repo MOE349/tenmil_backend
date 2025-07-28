@@ -272,14 +272,26 @@ class PMAutomationService:
             )
             logger.debug(f"Created active status: {active_status}")
         
-        # Create work order description with fallback
+        # Create work order description with consistent format
         iteration_names = [it.name for it in triggered_iterations]
-        try:
-            asset_code = asset.code if asset and hasattr(asset, 'code') else f"{pm_settings.content_type.app_label}.{pm_settings.content_type.model}"
-            description = f"Meter-driven PM for {asset_code} at {trigger_value} {pm_settings.interval_unit} (Counter: {new_counter}, Iterations: {', '.join(iteration_names)})"
-        except Exception as e:
-            logger.error(f"Error creating work order description: {e}")
-            description = f"Meter-driven PM at {trigger_value} {pm_settings.interval_unit} (Counter: {new_counter}, Iterations: {', '.join(iteration_names)})"
+        
+        # Get the largest triggered iteration for the description
+        if triggered_iterations:
+            largest_iteration = max(triggered_iterations, key=lambda x: x.interval_value)
+            iteration_value = int(largest_iteration.interval_value)
+        else:
+            # Fallback to PM interval if no iterations triggered
+            iteration_value = int(pm_settings.interval_value)
+        
+        # Create description: pm name + iteration interval + unit (same format as manual)
+        unit_formatted = pm_settings.interval_unit.title()  # Proper capitalization
+        
+        if pm_settings.name:
+            # Use PM settings name if available
+            description = f"{pm_settings.name} {iteration_value} {unit_formatted}"
+        else:
+            # Fallback to generic PM naming
+            description = f"{iteration_value} {unit_formatted} PM"
         
         # Create work order (do NOT set created_by)
         trigger_meter_reading = MeterReading.objects.filter(
