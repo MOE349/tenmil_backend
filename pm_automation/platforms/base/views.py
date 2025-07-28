@@ -54,18 +54,30 @@ class PMSettingsBaseView(BaseAPIView):
             
             logger.info(f"PM Settings counter update: PM={pk}, old_counter={old_counter}, next_iteration={next_iteration}, new_counter={new_counter}")
             
-            # Update the counter directly
-            data['trigger_counter']=new_counter
+            # Update the counter and recalculate next trigger value
+            data['trigger_counter'] = new_counter
+            
+            # Recalculate next trigger value based on the new counter
+            # We need to temporarily update the instance to calculate the new trigger
+            old_next_trigger = instance.next_trigger_value
+            instance.trigger_counter = new_counter
+            instance.recalculate_next_trigger()
+            new_next_trigger = instance.next_trigger_value
+            
+            # Add the new next_trigger_value to the data to be updated
+            data['next_trigger_value'] = new_next_trigger
             
             # Store counter update info for response
             counter_update_info = {
                 "counter_updated": True,
                 "old_counter": old_counter,
                 "new_counter": new_counter,
-                "next_iteration": next_iteration
+                "next_iteration": next_iteration,
+                "old_next_trigger": old_next_trigger,
+                "new_next_trigger": new_next_trigger
             }
             
-            logger.info(f"Successfully updated PM Settings {pk} counter from {old_counter} to {new_counter} (next_iteration={next_iteration})")
+            logger.info(f"Successfully calculated PM Settings {pk} updates: counter {old_counter}→{new_counter}, next_trigger {old_next_trigger}→{new_next_trigger}")
         
         # Proceed with normal update
         instance, response = super().update(data, params, pk, partial, return_instance=True, *args, **kwargs)
