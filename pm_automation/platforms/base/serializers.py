@@ -56,7 +56,7 @@ class PMSettingsBaseSerializer(BaseSerializer):
             }
         has_work_orders = PMTrigger.objects.filter(pm_settings=instance, work_order__object_id=instance.object_id, work_order__status__control__name="Active", work_order__is_pm_generated=True).exists()
         if has_work_orders:
-            response['next_trigger_value'] = f"{instance.next_trigger_value}?"
+            response['next_trigger_value'] = f"{int(instance.next_trigger_value)}?"
         return response
 
 
