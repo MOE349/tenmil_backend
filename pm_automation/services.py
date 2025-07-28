@@ -176,20 +176,25 @@ class PMAutomationService:
             logger.error(f"Failed to create work order for trigger {trigger_value}")
             return None
         
-        # Create or update the trigger record
-        if existing_trigger:
-            existing_trigger.work_order = work_order
-            existing_trigger.save()
-            logger.debug(f"Updated existing trigger {existing_trigger.id} with work order {work_order.id}")
+        # Create or update the trigger record using get_or_create to handle unique constraint
+        pm_trigger, created = PMTrigger.objects.get_or_create(
+            pm_settings=pm_settings,
+            trigger_value=trigger_value,
+            defaults={
+                'trigger_unit': pm_settings.interval_unit,
+                'work_order': work_order,
+                'is_handled': False
+            }
+        )
+        
+        if created:
+            logger.debug(f"Created new trigger {pm_trigger.id} for work order {work_order.id}")
         else:
-            new_trigger = PMTrigger.objects.create(
-                pm_settings=pm_settings,
-                trigger_value=trigger_value,
-                trigger_unit=pm_settings.interval_unit,
-                work_order=work_order,
-                is_handled=False
-            )
-            logger.debug(f"Created new trigger {new_trigger.id} for work order {work_order.id}")
+            # Update existing trigger with the new work order
+            pm_trigger.work_order = work_order
+            pm_trigger.is_handled = False  # Reset to unhandled
+            pm_trigger.save()
+            logger.debug(f"Updated existing trigger {pm_trigger.id} with work order {work_order.id}")
         
         return work_order
     

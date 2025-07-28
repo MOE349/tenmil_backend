@@ -189,10 +189,10 @@ class PMSettings(BaseModel):
     
     def update_next_trigger(self, closing_value):
         """Update next trigger after work order completion - Floating system"""
-        # Increment the trigger counter for completion
-        self.trigger_counter += 1
+        # NOTE: Don't increment trigger_counter here - it's already incremented during work order creation
         
         # Calculate the next trigger interval based on what iteration will trigger next
+        # Use current counter + 1 to find the next trigger
         next_counter = self.trigger_counter + 1
         iterations = list(self.get_iterations())
         
