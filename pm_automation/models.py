@@ -189,8 +189,22 @@ class PMSettings(BaseModel):
     
     def update_next_trigger(self, closing_value):
         """Update next trigger after work order completion - Floating system"""
-        # Floating trigger: completion_meter_reading + interval_value
-        self.next_trigger_value = closing_value + self.interval_value
+        # Increment the trigger counter for completion
+        self.trigger_counter += 1
+        
+        # Calculate the next trigger interval based on what iteration will trigger next
+        next_counter = self.trigger_counter + 1
+        iterations = list(self.get_iterations())
+        
+        # Find the iteration that will trigger at the next counter
+        next_trigger_interval = self.interval_value  # Default to base interval
+        for iteration in iterations:
+            if next_counter % iteration.order == 0:
+                next_trigger_interval = iteration.interval_value
+                break
+        
+        # Floating trigger: completion_meter_reading + next_trigger_interval
+        self.next_trigger_value = closing_value + next_trigger_interval
         self.last_handled_trigger = closing_value
         self.save()
     
