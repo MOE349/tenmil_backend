@@ -29,9 +29,8 @@ class PMSettingsBaseView(BaseAPIView):
                     raise ValueError("next_iteration must be positive")
             except (ValueError, TypeError) as e:
                 raise LocalBaseException(
-                    exception_type="validation_error",
-                    status_code=400,
-                    kwargs={"message": f"Invalid next_iteration value: {str(e)}"}
+                    exception=f"Invalid next_iteration value: {str(e)}",
+                    status_code=400
                 )
             
             # Get the instance
@@ -150,9 +149,8 @@ class ManualPMGenerationBaseView(BaseAPIView):
             iteration_number = request.data.get('iteration_number')
             if not iteration_number:
                 raise LocalBaseException(
-                    exception_type="validation_error",
-                    status_code=400,
-                    kwargs={"message": "iteration_number is required"}
+                    exception="iteration_number is required",
+                    status_code=400
                 )
             
             # Convert to int and validate
@@ -162,21 +160,16 @@ class ManualPMGenerationBaseView(BaseAPIView):
                     raise ValueError("iteration_number must be 0 or positive")
             except (ValueError, TypeError):
                 raise LocalBaseException(
-                    exception_type="validation_error",
-                    status_code=400,
-                    kwargs={"message": "iteration_number must be a valid integer (0 or positive)"}
+                    exception="iteration_number must be a valid integer (0 or positive)",
+                    status_code=400
                 )
             
             # Validate iteration number against available options
             next_iterations = self._calculate_next_iterations(pm_settings)
             if str(iteration_number) not in next_iterations:
                 raise LocalBaseException(
-                    exception_type="validation_error",
-                    status_code=400,
-                    kwargs={
-                        "message": f"Invalid iteration_number. Available options: {list(next_iterations.keys())}",
-                        "available_iterations": next_iterations
-                    }
+                    exception=f"Invalid iteration_number. Available options: {list(next_iterations.keys())}",
+                    status_code=400
                 )
             
             # Get the formatted string (e.g., "500 hours") and extract the numeric value
@@ -214,9 +207,8 @@ class ManualPMGenerationBaseView(BaseAPIView):
         iterations = list(pm_settings.get_iterations())
         if not iterations:
             raise LocalBaseException(
-                exception_type="validation_error",
-                status_code=400,
-                kwargs={"message": "No PM iterations configured for this PM Settings"}
+                exception="No PM iterations configured for this PM Settings",
+                status_code=400
             )
         
         # Check if there are any open PM work orders that might conflict
@@ -358,9 +350,8 @@ class ManualPMGenerationBaseView(BaseAPIView):
         except Exception as e:
             logger.error(f"Error accessing asset from pm_settings: {e}")
             raise LocalBaseException(
-                exception_type="internal_error",
-                status_code=500,
-                kwargs={"message": "Could not access asset for PM settings"}
+                exception="Could not access asset for PM settings",
+                status_code=500
             )
         
         # Get active status
