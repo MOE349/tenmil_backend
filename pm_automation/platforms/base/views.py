@@ -57,15 +57,42 @@ class PMSettingsBaseView(BaseAPIView):
             # Update the counter and recalculate next trigger value
             data['trigger_counter'] = new_counter
             
-            # Recalculate next trigger value based on the new counter
-            # We need to temporarily update the instance to calculate the new trigger
+            # Properly recalculate next trigger value based on new counter position
+            # and latest PM work order completion
             old_next_trigger = instance.next_trigger_value
-            instance.trigger_counter = new_counter
-            instance.recalculate_next_trigger()
-            new_next_trigger = instance.next_trigger_value
+            
+            # Find what iterations would trigger at the new counter position
+            triggered_iterations = []
+            for iteration in instance.get_iterations():
+                if new_counter % iteration.order == 0:
+                    triggered_iterations.append(iteration)
+            
+            # Get the latest completed PM work order for this asset
+            from work_orders.models import WorkOrder
+            latest_pm_work_order = WorkOrder.objects.filter(
+                content_type=instance.content_type,
+                object_id=instance.object_id,
+                is_pm_generated=True,
+                is_closed=True,
+                completion_meter_reading__isnull=False
+            ).order_by('-completion_end_date', '-created_at').first()
+            
+            # Calculate new next trigger value
+            if latest_pm_work_order and latest_pm_work_order.completion_meter_reading:
+                # Use floating trigger system: last completion + PM interval
+                new_next_trigger = float(latest_pm_work_order.completion_meter_reading) + float(instance.interval_value)
+                logger.info(f"Using completion meter reading {latest_pm_work_order.completion_meter_reading} from work order {latest_pm_work_order.id}")
+            else:
+                # Fallback to initial trigger system if no completed PM work orders
+                new_next_trigger = float(instance.start_threshold_value) + float(instance.interval_value)
+                logger.info(f"No completed PM work orders found, using initial trigger calculation")
             
             # Add the new next_trigger_value to the data to be updated
             data['next_trigger_value'] = new_next_trigger
+            
+            # Also update last_handled_trigger if we have a completion reading
+            if latest_pm_work_order and latest_pm_work_order.completion_meter_reading:
+                data['last_handled_trigger'] = float(latest_pm_work_order.completion_meter_reading)
             
             # Store counter update info for response
             counter_update_info = {
@@ -74,10 +101,12 @@ class PMSettingsBaseView(BaseAPIView):
                 "new_counter": new_counter,
                 "next_iteration": next_iteration,
                 "old_next_trigger": old_next_trigger,
-                "new_next_trigger": new_next_trigger
+                "new_next_trigger": new_next_trigger,
+                "triggered_iterations": [it.name for it in triggered_iterations] if triggered_iterations else [],
+                "calculation_method": "completion_based" if latest_pm_work_order else "initial_threshold"
             }
             
-            logger.info(f"Successfully calculated PM Settings {pk} updates: counter {old_counter}→{new_counter}, next_trigger {old_next_trigger}→{new_next_trigger}")
+            logger.info(f"Successfully calculated PM Settings {pk} updates: counter {old_counter}→{new_counter}, next_trigger {old_next_trigger}→{new_next_trigger}, triggered_iterations: {[it.name for it in triggered_iterations] if triggered_iterations else 'none'}")
         
         # Proceed with normal update
         instance, response = super().update(data, params, pk, partial, return_instance=True, *args, **kwargs)
