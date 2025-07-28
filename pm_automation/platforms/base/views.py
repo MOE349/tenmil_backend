@@ -54,96 +54,18 @@ class PMSettingsBaseView(BaseAPIView):
             
             logger.info(f"PM Settings counter update: PM={pk}, old_counter={old_counter}, next_iteration={next_iteration}, new_counter={new_counter}")
             
-            # Update the counter and recalculate next trigger value
+            # Update the counter
             data['trigger_counter'] = new_counter
-            
-            # Properly recalculate next trigger value based on new counter position
-            # and latest PM work order completion
-            old_next_trigger = instance.next_trigger_value
-            
-            # Find what iterations would trigger at the new counter position
-            triggered_iterations = []
-            for iteration in instance.get_iterations():
-                if new_counter % iteration.order == 0:
-                    triggered_iterations.append(iteration)
-            
-            # Get the latest completed PM work order for this asset
-            from work_orders.models import WorkOrder
-            latest_pm_work_order = WorkOrder.objects.filter(
-                content_type=instance.content_type,
-                object_id=instance.object_id,
-                is_pm_generated=True,
-                is_closed=True,
-                completion_meter_reading__isnull=False
-            ).order_by('-completion_end_date', '-created_at').first()
-            
-            # Calculate new next trigger value
-            if latest_pm_work_order and latest_pm_work_order.completion_meter_reading:
-                # Find the next major iteration (largest possible) that will trigger
-                next_iteration_interval = None
-                max_iteration_value = max(it.interval_value for it in instance.get_iterations())
-                
-                # Look ahead to find when the largest iteration will trigger next
-                max_order = max(it.order for it in instance.get_iterations())
-                for future_counter in range(new_counter + 1, new_counter + max_order + 1):
-                    future_triggered_iterations = []
-                    for iteration in instance.get_iterations():
-                        if future_counter % iteration.order == 0:
-                            future_triggered_iterations.append(iteration)
-                    
-                    if future_triggered_iterations:
-                        largest_future_iteration = max(future_triggered_iterations, key=lambda x: x.interval_value)
-                        # If this is the maximum iteration, use it
-                        if largest_future_iteration.interval_value == max_iteration_value:
-                            next_iteration_interval = largest_future_iteration.interval_value
-                            logger.info(f"Next major iteration at counter {future_counter}: {largest_future_iteration.name} ({next_iteration_interval})")
-                            break
-                
-                # If we didn't find the max iteration in the near future, use the next significant one
-                if not next_iteration_interval:
-                    for future_counter in range(new_counter + 1, new_counter + max_order + 1):
-                        future_triggered_iterations = []
-                        for iteration in instance.get_iterations():
-                            if future_counter % iteration.order == 0:
-                                future_triggered_iterations.append(iteration)
-                        
-                        if future_triggered_iterations:
-                            largest_future_iteration = max(future_triggered_iterations, key=lambda x: x.interval_value)
-                            next_iteration_interval = largest_future_iteration.interval_value
-                            logger.info(f"Next available iteration at counter {future_counter}: {largest_future_iteration.name} ({next_iteration_interval})")
-                            break
-                
-                # Use the next iteration's interval, or fallback to base interval
-                interval_for_trigger = next_iteration_interval if next_iteration_interval else instance.interval_value
-                
-                # Use floating trigger system: last completion + next iteration interval
-                new_next_trigger = float(latest_pm_work_order.completion_meter_reading) + float(interval_for_trigger)
-                logger.info(f"Using completion meter reading {latest_pm_work_order.completion_meter_reading} + interval {interval_for_trigger} = {new_next_trigger}")
-            else:
-                # Fallback to initial trigger system if no completed PM work orders
-                new_next_trigger = float(instance.start_threshold_value) + float(instance.interval_value)
-                logger.info(f"No completed PM work orders found, using initial trigger calculation")
-            
-            # Add the new next_trigger_value to the data to be updated
-            data['next_trigger_value'] = new_next_trigger
-            
-            # Also update last_handled_trigger if we have a completion reading
-            if latest_pm_work_order and latest_pm_work_order.completion_meter_reading:
-                data['last_handled_trigger'] = float(latest_pm_work_order.completion_meter_reading)
             
             # Store counter update info for response
             counter_update_info = {
                 "counter_updated": True,
                 "old_counter": old_counter,
                 "new_counter": new_counter,
-                "next_iteration": next_iteration,
-                "old_next_trigger": old_next_trigger,
-                "new_next_trigger": new_next_trigger,
-                "triggered_iterations": [it.name for it in triggered_iterations] if triggered_iterations else [],
-                "calculation_method": "completion_based" if latest_pm_work_order else "initial_threshold"
+                "next_iteration": next_iteration
             }
             
-            logger.info(f"Successfully calculated PM Settings {pk} updates: counter {old_counter}→{new_counter}, next_trigger {old_next_trigger}→{new_next_trigger}, triggered_iterations: {[it.name for it in triggered_iterations] if triggered_iterations else 'none'}")
+            logger.info(f"Successfully updated PM Settings {pk} counter from {old_counter} to {new_counter} (next_iteration={next_iteration})")
         
         # Proceed with normal update
         instance, response = super().update(data, params, pk, partial, return_instance=True, *args, **kwargs)
