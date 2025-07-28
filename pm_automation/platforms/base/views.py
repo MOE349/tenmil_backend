@@ -79,9 +79,46 @@ class PMSettingsBaseView(BaseAPIView):
             
             # Calculate new next trigger value
             if latest_pm_work_order and latest_pm_work_order.completion_meter_reading:
-                # Use floating trigger system: last completion + PM interval
-                new_next_trigger = float(latest_pm_work_order.completion_meter_reading) + float(instance.interval_value)
-                logger.info(f"Using completion meter reading {latest_pm_work_order.completion_meter_reading} from work order {latest_pm_work_order.id}")
+                # Find the next major iteration (largest possible) that will trigger
+                next_iteration_interval = None
+                max_iteration_value = max(it.interval_value for it in instance.get_iterations())
+                
+                # Look ahead to find when the largest iteration will trigger next
+                max_order = max(it.order for it in instance.get_iterations())
+                for future_counter in range(new_counter + 1, new_counter + max_order + 1):
+                    future_triggered_iterations = []
+                    for iteration in instance.get_iterations():
+                        if future_counter % iteration.order == 0:
+                            future_triggered_iterations.append(iteration)
+                    
+                    if future_triggered_iterations:
+                        largest_future_iteration = max(future_triggered_iterations, key=lambda x: x.interval_value)
+                        # If this is the maximum iteration, use it
+                        if largest_future_iteration.interval_value == max_iteration_value:
+                            next_iteration_interval = largest_future_iteration.interval_value
+                            logger.info(f"Next major iteration at counter {future_counter}: {largest_future_iteration.name} ({next_iteration_interval})")
+                            break
+                
+                # If we didn't find the max iteration in the near future, use the next significant one
+                if not next_iteration_interval:
+                    for future_counter in range(new_counter + 1, new_counter + max_order + 1):
+                        future_triggered_iterations = []
+                        for iteration in instance.get_iterations():
+                            if future_counter % iteration.order == 0:
+                                future_triggered_iterations.append(iteration)
+                        
+                        if future_triggered_iterations:
+                            largest_future_iteration = max(future_triggered_iterations, key=lambda x: x.interval_value)
+                            next_iteration_interval = largest_future_iteration.interval_value
+                            logger.info(f"Next available iteration at counter {future_counter}: {largest_future_iteration.name} ({next_iteration_interval})")
+                            break
+                
+                # Use the next iteration's interval, or fallback to base interval
+                interval_for_trigger = next_iteration_interval if next_iteration_interval else instance.interval_value
+                
+                # Use floating trigger system: last completion + next iteration interval
+                new_next_trigger = float(latest_pm_work_order.completion_meter_reading) + float(interval_for_trigger)
+                logger.info(f"Using completion meter reading {latest_pm_work_order.completion_meter_reading} + interval {interval_for_trigger} = {new_next_trigger}")
             else:
                 # Fallback to initial trigger system if no completed PM work orders
                 new_next_trigger = float(instance.start_threshold_value) + float(instance.interval_value)
@@ -284,12 +321,19 @@ class ManualPMGenerationBaseView(BaseAPIView):
     def _calculate_next_iterations(self, pm_settings):
         """
         Calculate next available iterations for manual generation
-        Returns: {"0": "2000 hours", "1": "2000 hours", "2": "500 hours", "3": "1000 hours", "4": "500 hours"}
+        Returns: {"0": "2000 hours", "1": "500 hours", "2": "1000 hours", "3": "500 hours", "4": "500 hours"}
+        Where "0" is the natural next iteration, and 1-4 are manual advance options
         """
         # Get all iterations ordered by order
         iterations = list(pm_settings.get_iterations())
         if not iterations:
+            logger.warning(f"No iterations found for PM Settings {pm_settings.id}")
             return {}
+        
+        # Validate iterations have proper values
+        for iteration in iterations:
+            if not iteration.interval_value or iteration.interval_value <= 0:
+                logger.error(f"Invalid iteration found: {iteration.id} with interval_value {iteration.interval_value}")
         
         # Find largest iteration order
         largest_order = max(iteration.order for iteration in iterations)
@@ -298,6 +342,7 @@ class ManualPMGenerationBaseView(BaseAPIView):
         next_counter = pm_settings.trigger_counter + 1
         
         logger.info(f"Calculating manual PM iterations: current_counter={pm_settings.trigger_counter}, next_counter={next_counter}, largest_order={largest_order}")
+        logger.info(f"Available iterations: {[(it.interval_value, it.order, it.name) for it in iterations]}")
         
         # Calculate next X+1 triggers where X = largest_order (0 + X manual options)
         next_iterations = {}
@@ -311,28 +356,39 @@ class ManualPMGenerationBaseView(BaseAPIView):
         
         if triggered_iterations_natural:
             largest_natural = max(triggered_iterations_natural, key=lambda x: x.interval_value)
-            next_iterations["0"] = f"{int(largest_natural.interval_value)} {pm_settings.interval_unit}"
-            logger.debug(f"Natural counter {natural_counter}: triggered iterations {[f'{it.interval_value}(order:{it.order})' for it in triggered_iterations_natural]}, largest: {largest_natural.interval_value} {pm_settings.interval_unit}")
+            if largest_natural.interval_value and largest_natural.interval_value > 0:
+                next_iterations["0"] = f"{int(largest_natural.interval_value)} {pm_settings.interval_unit}"
+                logger.debug(f"Natural counter {natural_counter}: triggered iterations {[f'{it.interval_value}(order:{it.order})' for it in triggered_iterations_natural]}, largest: {largest_natural.interval_value} {pm_settings.interval_unit}")
+            else:
+                logger.error(f"Invalid largest natural iteration: {largest_natural.interval_value}")
+                next_iterations["0"] = f"{int(pm_settings.interval_value)} {pm_settings.interval_unit}"
         else:
             next_iterations["0"] = f"{int(pm_settings.interval_value)} {pm_settings.interval_unit}"
             logger.warning(f"Natural counter {natural_counter}: no iterations triggered, using base interval {pm_settings.interval_value} {pm_settings.interval_unit}")
         
         # Then add manual options 1 through largest_order
         for i in range(1, largest_order + 1):
-            counter = next_counter + i  # 21, 22, 23, 24 for manual options
+            counter = next_counter + i  # 38, 39, 40, 41 for manual options
+            
+            logger.debug(f"Calculating manual option {i} for counter {counter}")
             
             # Find which iterations trigger at this counter
             triggered_iterations = []
             for iteration in iterations:
                 if counter % iteration.order == 0:
                     triggered_iterations.append(iteration)
+                    logger.debug(f"  Counter {counter} % {iteration.order} = {counter % iteration.order} → Triggers {iteration.interval_value}")
             
             # Get the largest (highest interval) triggered iteration
             if triggered_iterations:
                 largest_iteration = max(triggered_iterations, key=lambda x: x.interval_value)
-                # Format as string with unit
-                next_iterations[str(i)] = f"{int(largest_iteration.interval_value)} {pm_settings.interval_unit}"
-                logger.debug(f"Manual counter {counter}: triggered iterations {[f'{it.interval_value}(order:{it.order})' for it in triggered_iterations]}, largest: {largest_iteration.interval_value} {pm_settings.interval_unit}")
+                if largest_iteration.interval_value and largest_iteration.interval_value > 0:
+                    # Format as string with unit
+                    next_iterations[str(i)] = f"{int(largest_iteration.interval_value)} {pm_settings.interval_unit}"
+                    logger.debug(f"Manual counter {counter}: triggered iterations {[f'{it.interval_value}(order:{it.order})' for it in triggered_iterations]}, largest: {largest_iteration.interval_value} {pm_settings.interval_unit}")
+                else:
+                    logger.error(f"Invalid largest iteration at counter {counter}: {largest_iteration.interval_value}")
+                    next_iterations[str(i)] = f"{int(pm_settings.interval_value)} {pm_settings.interval_unit}"
             else:
                 # This shouldn't happen with proper iteration setup, but fallback to base interval
                 next_iterations[str(i)] = f"{int(pm_settings.interval_value)} {pm_settings.interval_unit}"
