@@ -55,7 +55,7 @@ class PMSettingsBaseView(BaseAPIView):
             logger.info(f"PM Settings counter update: PM={pk}, old_counter={old_counter}, next_iteration={next_iteration}, new_counter={new_counter}")
             
             # Update the counter directly
-            PMSettings.objects.filter(id=pk).update(trigger_counter=new_counter)
+            data['trigger_counter']=new_counter
             
             # Store counter update info for response
             counter_update_info = {
