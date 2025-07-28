@@ -418,16 +418,27 @@ class ManualPMGenerationBaseView(BaseAPIView):
             from pm_automation.models import PMTrigger
             trigger_value = pm_settings.next_trigger_value if pm_settings.next_trigger_value else float(pm_settings.start_threshold_value) + float(pm_settings.interval_value)
             
-            pm_trigger = PMTrigger.objects.create(
+            # Use get_or_create to handle unique constraint violations
+            pm_trigger, created = PMTrigger.objects.get_or_create(
                 pm_settings=pm_settings,
                 trigger_value=trigger_value,
-                trigger_unit=pm_settings.interval_unit,
-                work_order=work_order,
-                is_handled=False
+                defaults={
+                    'trigger_unit': pm_settings.interval_unit,
+                    'work_order': work_order,
+                    'is_handled': False
+                }
             )
-            logger.info(f"Created PMTrigger {pm_trigger.id} for manual work order {work_order.id} at trigger value {trigger_value}")
+            
+            if created:
+                logger.info(f"Created PMTrigger {pm_trigger.id} for manual work order {work_order.id} at trigger value {trigger_value}")
+            else:
+                # Update existing trigger with the new work order
+                pm_trigger.work_order = work_order
+                pm_trigger.is_handled = False  # Reset to unhandled
+                pm_trigger.save()
+                logger.info(f"Updated existing PMTrigger {pm_trigger.id} for manual work order {work_order.id} at trigger value {trigger_value}")
         except Exception as e:
-            logger.error(f"Error creating PMTrigger for manual work order {work_order.id}: {e}")
+            logger.error(f"Error creating/updating PMTrigger for manual work order {work_order.id}: {e}")
         
         # Copy the cumulative checklist for triggered iterations
         try:
