@@ -13,5 +13,5 @@ urlpatterns = [
     path('pm-iteration-checklist/<str:pk>', PMIterationChecklistDashboardView.as_view(), name='PM Iteration Checklist'),
     
     # Manual PM generation endpoint
-    path('pm-settings/<str:pm_settings_id>/manual-generation', ManualPMGenerationDashboardView.as_view(), name='Manual PM Generation'),
+    path('pm-settings/manual-generation/<str:pm_settings_id>', ManualPMGenerationDashboardView.as_view(), name='Manual PM Generation'),
 ]
