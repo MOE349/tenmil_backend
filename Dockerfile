@@ -13,8 +13,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy project
 COPY . .
 
-# Ensure entrypoint is executable
-RUN chmod +x entrypoint.sh
+# Ensure entrypoints are executable
+RUN chmod +x entrypoint.sh entrypoint-worker.sh entrypoint-beat.sh
 
 # Expose backend port
 EXPOSE 8000

@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # Your existing Django app service
+  # Your main Django web application
   web:
     build: .
     ports:
@@ -9,55 +9,73 @@ services:
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - REDIS_PASSWORD=your_strong_password
+      - REDIS_PASSWORD=your_strong_password_here
       - REDIS_DB=0
     depends_on:
       - redis
       - db
     volumes:
       - .:/app
-    command: gunicorn configurations.wsgi:application -c configurations/gunicorn.conf.py
+    restart: unless-stopped
+    # Uses default entrypoint.sh
 
   # Redis service
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
-    command: redis-server --requirepass your_strong_password
+    command: redis-server --requirepass your_strong_password_here
     volumes:
       - redis_data:/data
     restart: unless-stopped
 
-  # Celery Worker
+  # Celery Worker (same image, different entrypoint)
   celery-worker:
     build: .
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - REDIS_PASSWORD=your_strong_password
+      - REDIS_PASSWORD=your_strong_password_here
       - REDIS_DB=0
     depends_on:
       - redis
       - db
     volumes:
       - .:/app
-    command: python -m celery -A configurations worker --loglevel=INFO
+    entrypoint: ["./entrypoint-worker.sh"]
     restart: unless-stopped
 
-  # Celery Beat (Scheduler)
+  # Celery Beat Scheduler (same image, different entrypoint)
   celery-beat:
     build: .
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - REDIS_PASSWORD=your_strong_password
+      - REDIS_PASSWORD=your_strong_password_here
       - REDIS_DB=0
     depends_on:
       - redis
       - db
     volumes:
       - .:/app
-    command: python -m celery -A configurations beat --loglevel=INFO --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    entrypoint: ["./entrypoint-beat.sh"]
+    restart: unless-stopped
+
+  # Optional: Flower monitoring
+  flower:
+    build: .
+    ports:
+      - "5555:5555"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=your_strong_password_here
+      - REDIS_DB=0
+    depends_on:
+      - redis
+    volumes:
+      - .:/app
+    command: python -m celery -A configurations flower --broker=redis://:your_strong_password_here@redis:6379/0
     restart: unless-stopped
 
   # Your existing database service (adjust as needed)
