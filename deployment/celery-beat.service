@@ -1,0 +1,23 @@
+[Unit]
+Description=Celery Beat Service
+After=network.target redis.service postgresql.service
+
+[Service]
+Type=simple
+User=ec2-user
+Group=ec2-user
+EnvironmentFile=/path/to/your/project/.env
+WorkingDirectory=/path/to/your/project
+ExecStart=/usr/bin/python3 -m celery -A configurations beat --loglevel=INFO --scheduler django_celery_beat.schedulers:DatabaseScheduler
+Restart=always
+RestartSec=10
+
+# Prevent multiple beat instances
+Environment=C_FORCE_ROOT=1
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target 

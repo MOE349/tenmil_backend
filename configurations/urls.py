@@ -25,6 +25,7 @@ api_urls = [
     path('pm-automation/', include('pm_automation.platforms.api.urls')),
     path('projects/', include('projects.platforms.api.urls')),
     path('asset-backlogs/', include('asset_backlogs.platforms.api.urls')),
+    path('tasks/', include('configurations.task_urls')),
 ]
 # dashboard_urls = [
 #     # path('users/', include('users.platforms.dashboard.urls')),

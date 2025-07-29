@@ -13,6 +13,7 @@ THIRD_PARTY_APPS = [
     "corsheaders",
     'rest_framework_simplejwt',
     "django_extensions",
+    "django_celery_beat",
     # "rest_framework_simplejwt.token_blacklist",
 
 ]

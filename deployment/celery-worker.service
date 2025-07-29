@@ -1,0 +1,26 @@
+[Unit]
+Description=Celery Worker Service
+After=network.target redis.service postgresql.service
+
+[Service]
+Type=notify
+User=ec2-user
+Group=ec2-user
+EnvironmentFile=/path/to/your/project/.env
+WorkingDirectory=/path/to/your/project
+ExecStart=/usr/bin/python3 -m celery -A configurations worker --loglevel=INFO
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+Restart=always
+RestartSec=10
+TimeoutStopSec=600
+
+# Resource limits
+LimitNOFILE=65536
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target 
