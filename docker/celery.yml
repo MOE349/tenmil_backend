@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  celery-worker:
+    build: 
+      context: ..
+      dockerfile: Dockerfile
+    container_name: tenmil-celery-worker
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=your_strong_password_here
+      - REDIS_DB=0
+      - DJANGO_SETTINGS_MODULE=configurations.settings
+    volumes:
+      - ..:/app
+    working_dir: /app
+    command: python -m celery -A configurations worker --loglevel=INFO --concurrency=4
+    restart: unless-stopped
+    depends_on:
+      - redis
+    networks:
+      - tenmil-network
+
+  celery-beat:
+    build: 
+      context: ..
+      dockerfile: Dockerfile
+    container_name: tenmil-celery-beat
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=your_strong_password_here
+      - REDIS_DB=0
+      - DJANGO_SETTINGS_MODULE=configurations.settings
+    volumes:
+      - ..:/app
+    working_dir: /app
+    command: python -m celery -A configurations beat --loglevel=INFO --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    restart: unless-stopped
+    depends_on:
+      - redis
+    networks:
+      - tenmil-network
+
+  # Optional: Flower (Celery monitoring tool)
+  flower:
+    build: 
+      context: ..
+      dockerfile: Dockerfile
+    container_name: tenmil-flower
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=your_strong_password_here
+      - REDIS_DB=0
+    ports:
+      - "5555:5555"
+    volumes:
+      - ..:/app
+    working_dir: /app
+    command: python -m celery -A configurations flower --broker=redis://:your_strong_password_here@redis:6379/0
+    restart: unless-stopped
+    depends_on:
+      - redis
+    networks:
+      - tenmil-network
+
+networks:
+  tenmil-network:
+    external: true 

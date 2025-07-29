@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  # Your existing Django app service
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=your_strong_password
+      - REDIS_DB=0
+    depends_on:
+      - redis
+      - db
+    volumes:
+      - .:/app
+    command: gunicorn configurations.wsgi:application -c configurations/gunicorn.conf.py
+
+  # Redis service
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass your_strong_password
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  # Celery Worker
+  celery-worker:
+    build: .
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=your_strong_password
+      - REDIS_DB=0
+    depends_on:
+      - redis
+      - db
+    volumes:
+      - .:/app
+    command: python -m celery -A configurations worker --loglevel=INFO
+    restart: unless-stopped
+
+  # Celery Beat (Scheduler)
+  celery-beat:
+    build: .
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=your_strong_password
+      - REDIS_DB=0
+    depends_on:
+      - redis
+      - db
+    volumes:
+      - .:/app
+    command: python -m celery -A configurations beat --loglevel=INFO --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    restart: unless-stopped
+
+  # Your existing database service (adjust as needed)
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: your_db_name
+      POSTGRES_USER: your_db_user
+      POSTGRES_PASSWORD: your_db_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+  postgres_data: 

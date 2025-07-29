@@ -4,69 +4,79 @@ This document provides a complete guide for using the Celery and Redis task sche
 
 ## 🚀 Quick Start
 
-### 1. Install Dependencies
+### 🐳 **Docker Setup (Recommended for Production)**
 
-The required packages are already added to `requirements.txt`. Install them:
+If you're using Docker (which is recommended for AWS EC2 deployment):
 
+#### **Super Quick Start:**
+```bash
+# Make scripts executable
+chmod +x docker/start-celery.sh docker/stop-celery.sh
+
+# Start everything with one command
+./docker/start-celery.sh
+
+# View logs to see your 30-second error task working
+docker logs tenmil-celery-worker -f
+```
+
+#### **Manual Docker Setup:**
+```bash
+# Start Redis
+docker run -d --name tenmil-redis --network tenmil-network -p 6379:6379 redis:7-alpine redis-server --requirepass your_password
+
+# Start Celery Worker
+docker run -d --name tenmil-celery-worker --network tenmil-network -v $(pwd):/app -w /app -e REDIS_HOST=tenmil-redis -e REDIS_PASSWORD=your_password your-django-image python -m celery -A configurations worker --loglevel=INFO
+
+# Start Celery Beat
+docker run -d --name tenmil-celery-beat --network tenmil-network -v $(pwd):/app -w /app -e REDIS_HOST=tenmil-redis -e REDIS_PASSWORD=your_password your-django-image python -m celery -A configurations beat --loglevel=INFO --scheduler django_celery_beat.schedulers:DatabaseScheduler
+```
+
+#### **Using Docker Compose:**
+```bash
+# Use the provided docker-compose.yml
+docker-compose up -d
+
+# View logs
+docker-compose logs -f celery-worker celery-beat
+```
+
+### 💻 **Local Development Setup**
+
+#### 1. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Setup Redis
-
-Install and start Redis on your system:
+#### 2. Setup Redis Locally
 
 **Windows:**
 ```bash
-# Using Chocolatey
 choco install redis-64
-
-# Or download from https://github.com/microsoftarchive/redis/releases
 ```
 
 **macOS:**
 ```bash
-brew install redis
-brew services start redis
+brew install redis && brew services start redis
 ```
 
 **Linux:**
 ```bash
-sudo apt-get install redis-server
-sudo systemctl start redis-server
+sudo apt-get install redis-server && sudo systemctl start redis-server
 ```
 
-### 3. Database Migration
-
-Run migrations to create the django-celery-beat tables:
-
+#### 3. Database Migration
 ```bash
 python manage.py migrate
 ```
 
-### 4. Start the Services
-
-You have several options to start Celery services:
-
-#### Option A: Using Django Management Commands (Recommended)
-
-**Terminal 1: Start Celery Worker**
-```bash
-python manage.py celery_worker --concurrency=4 --loglevel=INFO
-```
-
-**Terminal 2: Start Celery Beat Scheduler**
-```bash
-python manage.py celery_beat --loglevel=INFO
-```
-
-#### Option B: Using Celery Commands Directly
+#### 4. Start Services Locally
 ```bash
 # Terminal 1: Worker
-celery -A configurations worker --loglevel=info
+python -m celery -A configurations worker --loglevel=INFO
 
 # Terminal 2: Beat
-celery -A configurations beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+python -m celery -A configurations beat --loglevel=INFO --scheduler django_celery_beat.schedulers:DatabaseScheduler
 ```
 
 ## 📋 Features Implemented

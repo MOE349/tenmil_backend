@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: tenmil-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass your_strong_password_here
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - tenmil-network
+
+  # Optional: Redis Commander (Web UI for Redis)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: tenmil-redis-commander
+    environment:
+      - REDIS_HOSTS=local:redis:6379:0:your_strong_password_here
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - tenmil-network
+
+volumes:
+  redis_data:
+
+networks:
+  tenmil-network:
+    external: false 
