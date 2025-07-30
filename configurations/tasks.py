@@ -87,4 +87,35 @@ def on_demand_error_log(custom_message="On-demand error triggered"):
         'status': 'completed',
         'message': error_message,
         'timestamp': current_time
-    } 
+    }
+
+@shared_task(bind=True)
+def check_calendar_pms(self):
+    """
+    Celery task to check for due calendar PMs
+    Runs hourly to check for calendar-based PM work orders that need to be created
+    """
+    try:
+        from pm_automation.calendar_service import CalendarPMService
+        
+        created_work_orders = CalendarPMService.check_calendar_pms_due()
+        
+        result = {
+            'status': 'completed',
+            'work_orders_created': len(created_work_orders),
+            'work_order_ids': [str(wo.id) for wo in created_work_orders],
+            'timestamp': timezone.now().isoformat(),
+            'task_id': self.request.id
+        }
+        
+        if created_work_orders:
+            logger.info(f"📅 Created {len(created_work_orders)} calendar PM work orders")
+            print(f"📅 Calendar PM Check: Created {len(created_work_orders)} work orders")
+        else:
+            print(f"📅 Calendar PM Check: No work orders due at {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        return result
+        
+    except Exception as exc:
+        logger.error(f"Error checking calendar PMs: {str(exc)}")
+        raise self.retry(exc=exc) 

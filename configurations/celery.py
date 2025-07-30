@@ -42,10 +42,16 @@ def debug_task(self):
     return 'Debug task completed'
 
 # Celery beat configuration
+from celery.schedules import crontab
+
 app.conf.beat_schedule = {
     'log-error-every-30-seconds': {
         'task': 'configurations.tasks.log_error_task',
         'schedule': 30.0,  # Every 30 seconds
+    },
+    'check-calendar-pms': {
+        'task': 'configurations.tasks.check_calendar_pms',
+        'schedule': crontab(minute=0),  # Every hour
     },
 }
 

@@ -19,6 +19,13 @@ class PMUnitChoices(models.TextChoices):
     DAYS = 'days', _('Days')
     WEEKS = 'weeks', _('Weeks')
     MONTHS = 'months', _('Months')
+    YEARS = 'years', _('Years')
+
+
+class PMTriggerTypes(models.TextChoices):
+    """Types of PM triggers"""
+    METER_READING = 'METER', _('Meter Reading')
+    CALENDAR = 'CALENDAR', _('Calendar Based')
 
 
 class PMSettings(BaseModel):
@@ -64,6 +71,41 @@ class PMSettings(BaseModel):
     
     # Trigger counter
     trigger_counter = models.PositiveIntegerField(default=0, help_text="Number of times this PM setting has been triggered")
+    
+    # NEW: Trigger type
+    trigger_type = models.CharField(
+        _("Trigger Type"),
+        max_length=20,
+        choices=PMTriggerTypes.choices,
+        default=PMTriggerTypes.METER_READING
+    )
+    
+    # NEW: Calendar-specific fields
+    start_date = models.DateTimeField(
+        _("Start Date"), 
+        null=True, 
+        blank=True,
+        help_text=_("Start date for calendar-based PMs")
+    )
+    next_due_date = models.DateTimeField(
+        _("Next Due Date"), 
+        null=True, 
+        blank=True,
+        help_text=_("Calculated next due date for calendar PMs")
+    )
+    last_completion_date = models.DateTimeField(
+        _("Last Completion Date"), 
+        null=True, 
+        blank=True,
+        help_text=_("Date of last work order completion")
+    )
+    
+    # NEW: Lead time for calendar PMs (create WO X days before due)
+    calendar_lead_time_days = models.PositiveIntegerField(
+        _("Calendar Lead Time (Days)"),
+        default=0,
+        help_text=_("Create work order X days before due date (calendar PMs only)")
+    )
     
     class Meta:
         verbose_name = _("PM Settings")
@@ -261,6 +303,108 @@ class PMSettings(BaseModel):
         # Refresh the instance to get the updated value
         self.refresh_from_db()
         return self.trigger_counter
+    
+    def get_asset_timezone(self):
+        """Get timezone for the asset this PM is attached to"""
+        try:
+            # Assuming asset has a site relationship
+            asset = self.asset
+            if hasattr(asset, 'site') and asset.site:
+                return asset.site.get_effective_timezone()
+            elif hasattr(asset, 'location') and asset.location and asset.location.site:
+                return asset.location.site.get_effective_timezone()
+            
+            # Fallback to company timezone
+            from company.models import CompanyProfile
+            company_profile = CompanyProfile.get_or_create_default()
+            return company_profile.get_timezone_object()
+        except:
+            # Final fallback to UTC
+            import pytz
+            return pytz.UTC
+    
+    def calculate_next_calendar_due_date(self, from_date=None):
+        """Calculate next due date for calendar-based PMs"""
+        if self.trigger_type != PMTriggerTypes.CALENDAR:
+            return None
+        
+        # Use provided date, last completion, or start date
+        base_date = from_date or self.last_completion_date or self.start_date
+        
+        if not base_date:
+            return None
+        
+        # Ensure base_date is timezone-aware
+        asset_tz = self.get_asset_timezone()
+        if base_date.tzinfo is None:
+            base_date = asset_tz.localize(base_date)
+        
+        # Calculate next due date based on interval
+        from dateutil.relativedelta import relativedelta
+        from datetime import timedelta
+        
+        if self.interval_unit == PMUnitChoices.DAYS:
+            return base_date + timedelta(days=int(self.interval_value))
+        elif self.interval_unit == PMUnitChoices.WEEKS:
+            return base_date + timedelta(weeks=int(self.interval_value))
+        elif self.interval_unit == PMUnitChoices.MONTHS:
+            return base_date + relativedelta(months=int(self.interval_value))
+        elif self.interval_unit == PMUnitChoices.YEARS:
+            return base_date + relativedelta(years=int(self.interval_value))
+        
+        return None
+    
+    def update_calendar_due_date(self, completion_date=None):
+        """Update next due date after work order completion"""
+        if self.trigger_type == PMTriggerTypes.CALENDAR:
+            from django.utils import timezone
+            
+            completion_dt = completion_date or timezone.now()
+            asset_tz = self.get_asset_timezone()
+            
+            # Ensure timezone awareness
+            if completion_dt.tzinfo is None:
+                completion_dt = asset_tz.localize(completion_dt)
+            
+            self.last_completion_date = completion_dt
+            self.next_due_date = self.calculate_next_calendar_due_date()
+            self.save(update_fields=['last_completion_date', 'next_due_date'])
+    
+    def is_calendar_pm_due(self, check_lead_time=True):
+        """Check if calendar PM is due (considering lead time)"""
+        if self.trigger_type != PMTriggerTypes.CALENDAR or not self.next_due_date:
+            return False
+        
+        from django.utils import timezone
+        current_time = timezone.now()
+        
+        if check_lead_time and self.calendar_lead_time_days > 0:
+            # Check if we're within lead time window
+            from datetime import timedelta
+            lead_time_threshold = self.next_due_date - timedelta(days=self.calendar_lead_time_days)
+            return current_time >= lead_time_threshold
+        else:
+            # Check if actually due
+            return current_time >= self.next_due_date
+    
+    def get_calendar_triggered_iterations(self):
+        """Get iterations that should be triggered for calendar PM"""
+        if self.trigger_type != PMTriggerTypes.CALENDAR:
+            return []
+        
+        # Similar logic to meter PM iterations
+        # Find iterations that should trigger at this counter
+        triggered_iterations = []
+        iterations = list(self.get_iterations())
+        
+        for iteration in iterations:
+            # Check if this iteration should trigger
+            # For calendar PMs, use the same multiplier logic as meter PMs
+            multiplier = iteration.interval_value / self.interval_value
+            if self.trigger_counter % multiplier == 0:
+                triggered_iterations.append(iteration)
+        
+        return triggered_iterations
 
 
 class PMIteration(BaseModel):
