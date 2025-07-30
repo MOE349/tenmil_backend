@@ -25,8 +25,8 @@ class PMSettingsBaseView(BaseAPIView):
             # Validate next_iteration
             try:
                 next_iteration = int(next_iteration)
-                if next_iteration <= 0:
-                    raise ValueError("next_iteration must be positive")
+                if next_iteration < 0:
+                    raise ValueError("next_iteration must be non-negative (0 represents natural next iteration)")
             except (ValueError, TypeError) as e:
                 raise LocalBaseException(
                     exception=f"Invalid next_iteration value: {str(e)}",
