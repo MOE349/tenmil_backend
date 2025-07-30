@@ -3,7 +3,6 @@ from django.utils.translation import gettext_lazy as _
 from configurations.base_features.db.base_model import BaseModel
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
-from tenant_users.models import TenantUser as User
 from work_orders.models import WorkOrderChecklist
 import logging
 

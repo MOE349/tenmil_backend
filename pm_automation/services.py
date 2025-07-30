@@ -2,7 +2,7 @@ from django.utils import timezone
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection
 from meter_readings.models import MeterReading
-from pm_automation.models import PMSettings, PMTrigger, PMUnitChoices
+from pm_automation.models import PMSettings, PMTrigger
 from work_orders.models import WorkOrder, WorkOrderStatusNames, WorkOrderLog
 from tenant_users.models import TenantUser
 from assets.services import get_content_type_and_asset_id

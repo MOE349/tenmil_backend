@@ -1,5 +1,5 @@
 from django.contrib import admin
-from pm_automation.models import PMSettings, PMTrigger, PMIteration, PMIterationChecklist, PMUnitChoices
+from pm_automation.models import PMSettings, PMTrigger, PMIteration, PMIterationChecklist
 
 
 class PMIterationChecklistInline(admin.TabularInline):
