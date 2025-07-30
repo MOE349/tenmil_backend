@@ -120,17 +120,32 @@ class PMSettings(BaseModel):
                 original = PMSettings.objects.get(pk=self.pk)
                 old_interval_value = original.interval_value
                 # Check if key fields that affect trigger calculation have changed
-                if (original.start_threshold_value != self.start_threshold_value or 
-                    original.interval_value != self.interval_value):
-                    # Recalculate next trigger value
-                    self.recalculate_next_trigger()
+                if self.trigger_type == PMTriggerTypes.METER_READING:
+                    if (original.start_threshold_value != self.start_threshold_value or 
+                        original.interval_value != self.interval_value or
+                        original.trigger_type != self.trigger_type):
+                        # Recalculate next trigger value for meter PMs
+                        self.recalculate_next_trigger()
+                elif self.trigger_type == PMTriggerTypes.CALENDAR:
+                    if (original.start_date != self.start_date or
+                        original.interval_value != self.interval_value or
+                        original.trigger_type != self.trigger_type):
+                        # Recalculate next due date for calendar PMs
+                        self.next_due_date = self.calculate_next_calendar_due_date()
             except Exception:
-                # This shouldn't happen, but if it does, just recalculate
-                self.recalculate_next_trigger()
+                # This shouldn't happen, but if it does, just recalculate based on type
+                if self.trigger_type == PMTriggerTypes.METER_READING:
+                    self.recalculate_next_trigger()
+                elif self.trigger_type == PMTriggerTypes.CALENDAR:
+                    self.next_due_date = self.calculate_next_calendar_due_date()
         else:  # This is a new record
-            # Set initial next trigger on first save
-            if not self.next_trigger_value:
-                self.recalculate_next_trigger()
+            # Set initial trigger/due date on first save
+            if self.trigger_type == PMTriggerTypes.METER_READING:
+                if not self.next_trigger_value:
+                    self.recalculate_next_trigger()
+            elif self.trigger_type == PMTriggerTypes.CALENDAR:
+                if not self.next_due_date:
+                    self.next_due_date = self.calculate_next_calendar_due_date()
         
         super().save(*args, **kwargs)
         
@@ -201,21 +216,35 @@ class PMSettings(BaseModel):
 
     
     def recalculate_next_trigger(self):
-        """Recalculate the next trigger value based on current settings"""
+        """Recalculate the next trigger value based on current settings (meter PMs only)"""
+        # Only calculate for meter-based PMs
+        if self.trigger_type != PMTriggerTypes.METER_READING:
+            return
+        
         if self.last_handled_trigger:
             # If we have a last handled trigger, use floating system
             # Next trigger = last handled + interval
             self.next_trigger_value = float(self.last_handled_trigger) + float(self.interval_value)
-        else:
+        elif self.start_threshold_value is not None:
             # If no last handled trigger, use initial system
             # Next trigger = start threshold + interval
             self.next_trigger_value = float(self.start_threshold_value) + float(self.interval_value)
+        else:
+            # No start threshold set - this is likely an incomplete meter PM
+            logger.warning(f"PM Settings {self.id}: Cannot calculate next trigger - start_threshold_value is None")
+            self.next_trigger_value = None
     
     def get_next_trigger(self):
-        """Calculate the next trigger value"""
+        """Calculate the next trigger value (meter PMs only)"""
+        if self.trigger_type != PMTriggerTypes.METER_READING:
+            return None
+        
         if not self.next_trigger_value:
             # Initial trigger: start_threshold_value + interval_value
-            return self.start_threshold_value + self.interval_value
+            if self.start_threshold_value is not None:
+                return self.start_threshold_value + self.interval_value
+            else:
+                return None
         return self.next_trigger_value
     
     def update_next_trigger(self, closing_value):
