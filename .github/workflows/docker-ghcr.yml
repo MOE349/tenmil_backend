@@ -32,9 +32,10 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/tenmil-backend
           tags: |
+            type=raw,value=staging
             type=ref,event=branch
             type=ref,event=pr
-            type=sha,prefix={{branch}}-
+            type=sha,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push Docker image
@@ -48,5 +49,3 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
-
-          
