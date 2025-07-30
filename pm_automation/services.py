@@ -16,17 +16,16 @@ class PMAutomationService:
     """Service for handling meter-driven PM automation"""
     
     @staticmethod
-    def process_meter_reading(asset_id, meter_reading_value, meter_reading_unit, user):
+    def process_meter_reading(asset_id, meter_reading_value, user):
         """
         Process a new meter reading and check for PM triggers
         
         Args:
             asset_id: The asset ID
             meter_reading_value: The meter reading value
-            meter_reading_unit: The meter reading unit
             user: The user who created the meter reading
         """
-        logger.info(f"Processing meter reading for asset {asset_id}: {meter_reading_value} {meter_reading_unit}")
+        logger.info(f"Processing meter reading for asset {asset_id}: {meter_reading_value}")
         
         # Get active PM settings for this asset
         pm_settings_list = PMAutomationService._get_active_pm_settings(asset_id)
@@ -41,10 +40,7 @@ class PMAutomationService:
         for pm_settings in pm_settings_list:
             logger.info(f"Processing PM Settings ID {pm_settings.id}: interval={pm_settings.interval_value} {pm_settings.interval_unit}, start_threshold={pm_settings.start_threshold_value} {pm_settings.start_threshold_unit}, lead_time={pm_settings.lead_time_value} {pm_settings.lead_time_unit}")
             
-            # Check if units match
-            if pm_settings.interval_unit != meter_reading_unit:
-                logger.warning(f"Unit mismatch for PM Settings {pm_settings.id}: PM settings use {pm_settings.interval_unit}, meter reading uses {meter_reading_unit}")
-                continue
+            # Note: Meter readings are assumed to be in the same unit as the PM settings for this asset
             
             # Calculate next triggers
             triggers = PMAutomationService._calculate_next_triggers(pm_settings, meter_reading_value)

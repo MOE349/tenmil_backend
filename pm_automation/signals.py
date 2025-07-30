@@ -53,7 +53,6 @@ def handle_meter_reading_save(sender, instance, created, **kwargs):
             created_work_orders = PMAutomationService.process_meter_reading(
                 asset_id=asset_id,
                 meter_reading_value=instance.meter_reading,
-                meter_reading_unit='hours',  # Default to hours, could be made configurable
                 user=instance.created_by
             )
             
