@@ -18,8 +18,8 @@ class PMIterationInline(admin.TabularInline):
 
 @admin.register(PMSettings)
 class PMSettingsAdmin(admin.ModelAdmin):
-    list_display = ('id', 'content_type', 'object_id', 'interval_value', 'interval_unit', 'start_threshold_value', 'start_threshold_unit', 'lead_time_value', 'lead_time_unit', 'is_active', 'next_trigger_value', 'trigger_counter', 'iterations_count')
-    list_filter = ('is_active', 'interval_unit', 'start_threshold_unit', 'lead_time_unit')
+    list_display = ('id', 'content_type', 'object_id', 'interval_value', 'interval_unit', 'start_threshold_value', 'interval_unit', 'lead_time_value', 'is_active', 'next_trigger_value', 'trigger_counter', 'iterations_count')
+    list_filter = ('is_active', 'interval_unit')
     search_fields = ('content_type__app_label', 'content_type__model', 'object_id')
     readonly_fields = ('next_trigger_value', 'last_handled_trigger', 'trigger_counter', 'iterations_count')
     inlines = [PMIterationInline]
@@ -37,11 +37,11 @@ class PMSettingsAdmin(admin.ModelAdmin):
             'fields': ('interval_value', 'interval_unit')
         }),
         ('Starting Threshold', {
-            'fields': ('start_threshold_value', 'start_threshold_unit'),
+            'fields': ('start_threshold_value',),
             'description': 'Initial trigger = start_threshold_value + interval_value'
         }),
         ('Lead Time Settings', {
-            'fields': ('lead_time_value', 'lead_time_unit')
+            'fields': ('lead_time_value',)
         }),
         ('Floating Trigger Status', {
             'fields': ('is_active', 'next_trigger_value', 'last_handled_trigger', 'trigger_counter'),

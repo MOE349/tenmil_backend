@@ -38,7 +38,7 @@ class PMAutomationService:
         # Process each PM setting
         all_created_work_orders = []
         for pm_settings in pm_settings_list:
-            logger.info(f"Processing PM Settings ID {pm_settings.id}: interval={pm_settings.interval_value} {pm_settings.interval_unit}, start_threshold={pm_settings.start_threshold_value} {pm_settings.start_threshold_unit}, lead_time={pm_settings.lead_time_value} {pm_settings.lead_time_unit}")
+            logger.info(f"Processing PM Settings ID {pm_settings.id}: interval={pm_settings.interval_value} {pm_settings.interval_unit}, start_threshold={pm_settings.start_threshold_value} {pm_settings.interval_unit}, lead_time={pm_settings.lead_time_value} {pm_settings.interval_unit}")
             
             # Note: Meter readings are assumed to be in the same unit as the PM settings for this asset
             

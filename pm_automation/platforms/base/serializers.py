@@ -2,13 +2,12 @@ from configurations.base_features.serializers.base_serializer import BaseSeriali
 from pm_automation.models import *
 from rest_framework import serializers
 
-from work_orders.models import WorkOrder
 
 
 class PMIterationChecklistSerializer(BaseSerializer):
     class Meta:
         model = PMIterationChecklist
-        fields = ['id', 'name', 'iteration']
+        fields = '__all__'
 
 
 class PMIterationSerializer(BaseSerializer):
@@ -16,7 +15,7 @@ class PMIterationSerializer(BaseSerializer):
     
     class Meta:
         model = PMIteration
-        fields = ['id', 'interval_value', 'name', 'order', 'pm_settings', 'checklist_items']
+        fields = '__all__'
 
 
 class PMSettingsBaseSerializer(BaseSerializer):

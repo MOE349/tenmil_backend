@@ -45,22 +45,12 @@ class PMSettings(BaseModel):
     )
     
     # Starting threshold - Starting at [value] [unit]
-    start_threshold_value = models.FloatField(_("Starting Threshold Value"), help_text="Starting at X units")
-    start_threshold_unit = models.CharField(
-        _("Starting Threshold Unit"), 
-        max_length=20, 
-        choices=PMUnitChoices.choices,
-        default=PMUnitChoices.HOURS
-    )
+    start_threshold_value = models.FloatField(_("Starting Threshold Value"), help_text="Starting at X units", null=True, 
+        blank=True,)
     
     # Lead time settings - Create WO [value] [unit] before trigger
-    lead_time_value = models.FloatField(_("Lead Time Value"), help_text="Create WO X units before trigger")
-    lead_time_unit = models.CharField(
-        _("Lead Time Unit"), 
-        max_length=20, 
-        choices=PMUnitChoices.choices,
-        default=PMUnitChoices.HOURS
-    )
+    lead_time_value = models.FloatField(_("Lead Time Value"), help_text="Create WO X units before trigger", null=True, 
+        blank=True,)
     
     # Active status
     is_active = models.BooleanField(_("Active"), default=True, help_text="Enable/disable PM automation")
