@@ -100,8 +100,7 @@ class FileUploadView(BaseAPIView):
             response_serializer = FileUploadSerializer(instance, context={'request': self.request})
             return self.format_response(
                 data=response_serializer.data, 
-                status_code=201,
-                message="File uploaded successfully"
+                status_code=201
             )
         except Exception as e:
             # Clean up file if creation failed
@@ -127,8 +126,7 @@ class FileUploadView(BaseAPIView):
             
             return self.format_response(
                 data={}, 
-                status_code=204,
-                message="File deleted successfully"
+                status_code=204
             )
         except Exception as e:
             return self.handle_exception(e)
@@ -145,8 +143,7 @@ class FileUploadView(BaseAPIView):
             
             return self.format_response(
                 data={}, 
-                status_code=204,
-                message="File permanently deleted"
+                status_code=204
             )
         except Exception as e:
             return self.handle_exception(e)
