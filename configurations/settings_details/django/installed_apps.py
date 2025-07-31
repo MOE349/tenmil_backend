@@ -33,4 +33,5 @@ TENANT_APPS = [
     "pm_automation.apps.PmAutomationConfig",
     "projects.apps.ProjectsConfig",
     "asset_backlogs.apps.AssetBacklogsConfig",
+    "file_uploads.apps.FileUploadsConfig",
 ]

@@ -9,3 +9,4 @@ __pycache__
 
 */migrations/*
 !*/migrations/__init__.py
+backend.pem
