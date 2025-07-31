@@ -95,8 +95,7 @@ class CalendarPMService:
                 pm_settings=pm_settings,
                 work_order=work_order,
                 trigger_value=0,  # Not applicable for calendar PMs
-                current_value=0,  # Not applicable for calendar PMs
-                triggered_iterations=triggered_iterations,
+                trigger_unit=pm_settings.interval_unit,  # Use the PM interval unit
             )
             
             # Copy iteration checklists
