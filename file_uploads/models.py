@@ -190,7 +190,7 @@ class FileUpload(BaseModel):
     def get_download_url(self):
         """Get the URL for downloading the file with proper headers"""
         from django.urls import reverse
-        return reverse('file_uploads:download', kwargs={'pk': self.pk})
+        return reverse('file_uploads:file-download', kwargs={'pk': self.pk})
     
     def is_image(self):
         """Check if the file is an image"""
