@@ -1,15 +1,10 @@
 import os
-import mimetypes
 from django.http import HttpResponse, Http404
-from django.shortcuts import get_object_or_404
 from django.core.exceptions import PermissionDenied
 from django.contrib.contenttypes.models import ContentType
-from rest_framework.response import Response
-from rest_framework import status
 from rest_framework.parsers import MultiPartParser, FormParser
 
 from configurations.base_features.views.base_api_view import BaseAPIView
-from configurations.base_features.exceptions.base_exceptions import LocalBaseException
 from file_uploads.models import FileUpload
 from .serializers import (
     FileUploadSerializer, 
