@@ -1,9 +1,6 @@
 from configurations.base_features.views.base_api_view import BaseAPIView
 from pm_automation.models import *
 from pm_automation.platforms.base.serializers import *
-from pm_automation.services import PMAutomationService
-from rest_framework.response import Response
-from rest_framework import status
 from configurations.base_features.exceptions.base_exceptions import LocalBaseException
 import logging
 
