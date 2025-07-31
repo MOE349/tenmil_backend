@@ -66,10 +66,13 @@ class CalendarPMService:
             
             # Get active status
             try:
-                active_status = WorkOrderStatusNames.objects.filter(is_active=True).first()
-                if not active_status:
-                    # Fallback if no active status found
-                    active_status = WorkOrderStatusNames.objects.first()
+                # Try to get a status with preferred names first
+                active_status = (
+                    WorkOrderStatusNames.objects.filter(name__iexact='Active').first() or
+                    WorkOrderStatusNames.objects.filter(name__iexact='Draft').first() or
+                    WorkOrderStatusNames.objects.filter(name__iexact='Pending').first() or
+                    WorkOrderStatusNames.objects.first()
+                )
             except:
                 active_status = None
             
