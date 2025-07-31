@@ -112,6 +112,13 @@ class PMSettings(BaseModel):
         if self.interval_value is not None and self.interval_value <= 0:
             raise ValueError("PM interval value must be greater than 0.")
         
+        # Normalize calendar PM dates to start of day (00:00:00)
+        if self.trigger_type == PMTriggerTypes.CALENDAR:
+            if self.start_date:
+                self.start_date = self.start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+            if self.next_due_date:
+                self.next_due_date = self.next_due_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        
         # Check if this is a new record or if key fields have changed
         old_interval_value = None
         if self.pk:  # This is an update
@@ -357,20 +364,26 @@ class PMSettings(BaseModel):
         if base_date.tzinfo is None:
             base_date = asset_tz.localize(base_date)
         
+        # Normalize base_date to start of day (00:00:00)
+        base_date = base_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        
         # Calculate next due date based on interval
         from dateutil.relativedelta import relativedelta
         from datetime import timedelta
         
         if self.interval_unit == PMUnitChoices.DAYS:
-            return base_date + timedelta(days=int(self.interval_value))
+            next_due = base_date + timedelta(days=int(self.interval_value))
         elif self.interval_unit == PMUnitChoices.WEEKS:
-            return base_date + timedelta(weeks=int(self.interval_value))
+            next_due = base_date + timedelta(weeks=int(self.interval_value))
         elif self.interval_unit == PMUnitChoices.MONTHS:
-            return base_date + relativedelta(months=int(self.interval_value))
+            next_due = base_date + relativedelta(months=int(self.interval_value))
         elif self.interval_unit == PMUnitChoices.YEARS:
-            return base_date + relativedelta(years=int(self.interval_value))
+            next_due = base_date + relativedelta(years=int(self.interval_value))
+        else:
+            return None
         
-        return None
+        # Ensure next due date is also normalized to start of day
+        return next_due.replace(hour=0, minute=0, second=0, microsecond=0)
     
     def update_calendar_due_date(self, completion_date=None):
         """Update next due date after work order completion"""
@@ -405,24 +418,7 @@ class PMSettings(BaseModel):
             # Check if actually due
             return current_time >= self.next_due_date
     
-    def get_calendar_triggered_iterations(self):
-        """Get iterations that should be triggered for calendar PM"""
-        if self.trigger_type != PMTriggerTypes.CALENDAR:
-            return []
-        
-        # Similar logic to meter PM iterations
-        # Find iterations that should trigger at this counter
-        triggered_iterations = []
-        iterations = list(self.get_iterations())
-        
-        for iteration in iterations:
-            # Check if this iteration should trigger
-            # For calendar PMs, use the same multiplier logic as meter PMs
-            multiplier = iteration.interval_value / self.interval_value
-            if self.trigger_counter % multiplier == 0:
-                triggered_iterations.append(iteration)
-        
-        return triggered_iterations
+
 
 
 class PMIteration(BaseModel):

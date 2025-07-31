@@ -78,20 +78,42 @@ def handle_work_order_completion(sender, instance, **kwargs):
     if instance.maint_type == 'PM' and instance.is_closed and not instance.is_reopened:
         logger.info(f"PM work order {instance.id} completed")
         
-        # Get the completion meter reading if available
-        completion_meter_reading = instance.completion_meter_reading
+        # Find the PM trigger to determine PM type
+        from pm_automation.models import PMTrigger, PMTriggerTypes
+        pm_trigger = PMTrigger.objects.filter(work_order=instance).first()
         
-        if completion_meter_reading:
-            logger.info(f"Handling completion with meter reading: {completion_meter_reading}")
-            try:
-                PMAutomationService.handle_work_order_completion(
-                    work_order=instance,
-                    closing_meter_reading=completion_meter_reading
-                )
-                logger.info(f"Successfully handled work order completion for {instance.id}")
-            except Exception as e:
-                logger.error(f"Error handling work order completion for {instance.id}: {e}")
-                import traceback
-                logger.error(traceback.format_exc())
+        if pm_trigger and pm_trigger.pm_settings:
+            pm_settings = pm_trigger.pm_settings
+            
+            if pm_settings.trigger_type == PMTriggerTypes.CALENDAR:
+                # Handle calendar PM completion
+                logger.info(f"Handling calendar PM work order completion for {instance.id}")
+                try:
+                    from pm_automation.calendar_service import CalendarPMService
+                    CalendarPMService.handle_calendar_work_order_completion(instance)
+                    logger.info(f"Successfully handled calendar PM work order completion for {instance.id}")
+                except Exception as e:
+                    logger.error(f"Error handling calendar PM work order completion for {instance.id}: {e}")
+                    import traceback
+                    logger.error(traceback.format_exc())
+                    
+            elif pm_settings.trigger_type == PMTriggerTypes.METER_READING:
+                # Handle meter PM completion (existing logic)
+                completion_meter_reading = instance.completion_meter_reading
+                
+                if completion_meter_reading:
+                    logger.info(f"Handling meter PM completion with meter reading: {completion_meter_reading}")
+                    try:
+                        PMAutomationService.handle_work_order_completion(
+                            work_order=instance,
+                            closing_meter_reading=completion_meter_reading
+                        )
+                        logger.info(f"Successfully handled meter PM work order completion for {instance.id}")
+                    except Exception as e:
+                        logger.error(f"Error handling meter PM work order completion for {instance.id}: {e}")
+                        import traceback
+                        logger.error(traceback.format_exc())
+                else:
+                    logger.warning(f"Meter PM work order {instance.id} completed but no completion meter reading provided")
         else:
-            logger.warning(f"PM work order {instance.id} completed but no completion meter reading provided")
+            logger.warning(f"PM work order {instance.id} completed but no PM trigger found")

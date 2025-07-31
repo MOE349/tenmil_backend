@@ -48,12 +48,38 @@ class CalendarPMService:
     def _create_calendar_work_order(pm_settings):
         """Create work order for calendar-based PM"""
         try:
-            # Get triggered iterations
-            triggered_iterations = pm_settings.get_calendar_triggered_iterations()
+            # Increment the trigger counter (like meter PMs)
+            new_counter = pm_settings.increment_trigger_counter()
             
-            # Create description
-            iterations_text = ", ".join([iter.name for iter in triggered_iterations]) if triggered_iterations else "Base PM"
-            description = f"PM: {pm_settings.name or 'Scheduled Maintenance'} - Every {pm_settings.interval_value} {pm_settings.interval_unit} ({iterations_text})"
+            # Calculate triggered iterations using the new counter (like meter PMs)
+            triggered_iterations = []
+            for iteration in pm_settings.get_iterations():
+                if new_counter % iteration.order == 0:
+                    triggered_iterations.append(iteration)
+            
+            logger.info(f"Calendar PM counter {new_counter} triggers iterations: {[f'{it.interval_value}{pm_settings.interval_unit}(order:{it.order})' for it in triggered_iterations]}")
+            
+            # Create description (matching meter PM format)
+            if triggered_iterations:
+                # Use the largest (highest interval) triggered iteration for description
+                largest_iteration = max(triggered_iterations, key=lambda x: x.interval_value)
+                iteration_value = int(largest_iteration.interval_value)
+                unit_formatted = pm_settings.interval_unit
+                
+                # Use PM settings name if available
+                if pm_settings.name:
+                    description = f"{pm_settings.name} {iteration_value} {unit_formatted}"
+                else:
+                    # Fallback to generic PM naming
+                    description = f"{iteration_value} {unit_formatted} PM"
+            else:
+                # Fallback if no iterations (shouldn't happen normally)
+                iteration_value = int(pm_settings.interval_value)
+                unit_formatted = pm_settings.interval_unit
+                if pm_settings.name:
+                    description = f"{pm_settings.name} {iteration_value} {unit_formatted}"
+                else:
+                    description = f"{iteration_value} {unit_formatted} PM"
             
             # Get system admin user
             system_admin = TenantUser.objects.filter(
@@ -98,31 +124,32 @@ class CalendarPMService:
                 trigger_unit=pm_settings.interval_unit,  # Use the PM interval unit
             )
             
-            # Copy iteration checklists
+            # Copy iteration checklists (matching meter PM logic)
             try:
                 if triggered_iterations:
+                    # Get the highest-order iteration (which will have the most comprehensive checklist)
                     highest_order_iteration = max(triggered_iterations, key=lambda x: x.order)
+                    
+                    # Copy the cumulative checklist for the highest-order iteration
                     pm_settings.copy_iteration_checklist_to_work_order(work_order, highest_order_iteration)
-                    logger.info(f"Copied checklist for iteration '{highest_order_iteration.name}' to work order {work_order.id}")
+                    logger.info(f"Copied cumulative checklist for highest-order iteration '{highest_order_iteration.name}' to work order {work_order.id}")
             except Exception as e:
                 logger.error(f"Error copying iteration checklists to work order {work_order.id}: {e}")
             
-            # Log creation
-            try:
-                WorkOrderLog.objects.create(
-                    work_order=work_order,
-                    amount=0,
-                    log_type=WorkOrderLog.LogTypeChoices.CREATED,
-                    user=system_admin,
-                    description="Work Order Created (Calendar PM Automation)"
-                )
-            except Exception as e:
-                logger.error(f"Error creating work order log: {e}")
+            # Log creation (matching meter PM format)
+            WorkOrderLog.objects.create(
+                work_order=work_order,
+                amount=0,
+                log_type=WorkOrderLog.LogTypeChoices.CREATED,
+                user=system_admin,
+                description="Work Order Created (Calendar PM Automation)"
+            )
             
-            # Update trigger counter and next due date
-            pm_settings.trigger_counter += 1
+            logger.info(f"Created work order log for work order {work_order.id}")
+            
+            # Update next due date
             pm_settings.next_due_date = pm_settings.calculate_next_calendar_due_date()
-            pm_settings.save(update_fields=['trigger_counter', 'next_due_date'])
+            pm_settings.save(update_fields=['next_due_date'])
             
             logger.info(f"Updated PM settings: counter={pm_settings.trigger_counter}, next_due={pm_settings.next_due_date}")
             
@@ -152,8 +179,12 @@ class CalendarPMService:
             # Update PM settings with completion date
             pm_settings = pm_trigger.pm_settings
             if pm_settings.trigger_type == PMTriggerTypes.CALENDAR:
-                pm_settings.update_calendar_due_date(timezone.now())
-                logger.info(f"Updated calendar PM next due date to {pm_settings.next_due_date}")
+                # Update last completion date and calculate next due date
+                pm_settings.last_completion_date = timezone.now()
+                pm_settings.next_due_date = pm_settings.calculate_next_calendar_due_date()
+                pm_settings.save(update_fields=['last_completion_date', 'next_due_date'])
+                
+                logger.info(f"Updated calendar PM: last_completion={pm_settings.last_completion_date}, next_due={pm_settings.next_due_date}")
                 
         except Exception as e:
             logger.error(f"Error handling calendar PM work order completion for {work_order.id}: {e}")
