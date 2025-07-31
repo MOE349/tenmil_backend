@@ -51,7 +51,7 @@ app.conf.beat_schedule = {
     },
     'check-calendar-pms': {
         'task': 'configurations.tasks.check_calendar_pms',
-        'schedule': crontab(minute=0),  # Every hour
+        'schedule': crontab(minute='*/15'),  # Every 15 minutes
     },
 }
 
