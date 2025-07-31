@@ -93,29 +93,62 @@ def on_demand_error_log(custom_message="On-demand error triggered"):
 def check_calendar_pms(self):
     """
     Celery task to check for due calendar PMs
-    Runs hourly to check for calendar-based PM work orders that need to be created
+    Runs every 15 minutes to check for calendar-based PM work orders that need to be created
+    Multi-tenant aware: checks all tenant schemas
     """
     try:
         from pm_automation.calendar_service import CalendarPMService
+        from django_tenants.utils import get_tenant_model, schema_context
+        from django.db import connection
         
-        created_work_orders = CalendarPMService.check_calendar_pms_due()
+        total_work_orders = []
+        tenant_results = {}
+        
+        # Get all tenant schemas
+        tenant_model = get_tenant_model()
+        tenants = tenant_model.objects.all()
+        
+        for tenant in tenants:
+            try:
+                # Switch to tenant schema
+                with schema_context(tenant.schema_name):
+                    print(f"📅 Checking calendar PMs for tenant: {tenant.schema_name}")
+                    
+                    # Check calendar PMs for this tenant
+                    created_work_orders = CalendarPMService.check_calendar_pms_due()
+                    
+                    if created_work_orders:
+                        total_work_orders.extend(created_work_orders)
+                        tenant_results[tenant.schema_name] = {
+                            'work_orders_created': len(created_work_orders),
+                            'work_order_ids': [str(wo.id) for wo in created_work_orders]
+                        }
+                        logger.info(f"📅 Created {len(created_work_orders)} calendar PM work orders for tenant {tenant.schema_name}")
+                        print(f"📅 Tenant {tenant.schema_name}: Created {len(created_work_orders)} work orders")
+                    else:
+                        print(f"📅 Tenant {tenant.schema_name}: No work orders due")
+                        
+            except Exception as tenant_exc:
+                logger.error(f"Error checking calendar PMs for tenant {tenant.schema_name}: {str(tenant_exc)}")
+                tenant_results[tenant.schema_name] = {'error': str(tenant_exc)}
         
         result = {
             'status': 'completed',
-            'work_orders_created': len(created_work_orders),
-            'work_order_ids': [str(wo.id) for wo in created_work_orders],
+            'total_work_orders_created': len(total_work_orders),
+            'tenants_processed': len(tenants),
+            'tenant_results': tenant_results,
             'timestamp': timezone.now().isoformat(),
             'task_id': self.request.id
         }
         
-        if created_work_orders:
-            logger.info(f"📅 Created {len(created_work_orders)} calendar PM work orders")
-            print(f"📅 Calendar PM Check: Created {len(created_work_orders)} work orders")
+        if total_work_orders:
+            logger.info(f"📅 Total: Created {len(total_work_orders)} calendar PM work orders across {len(tenants)} tenants")
+            print(f"📅 Calendar PM Check Complete: {len(total_work_orders)} work orders created across {len(tenants)} tenants")
         else:
-            print(f"📅 Calendar PM Check: No work orders due at {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"📅 Calendar PM Check Complete: No work orders due across {len(tenants)} tenants at {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}")
         
         return result
         
     except Exception as exc:
-        logger.error(f"Error checking calendar PMs: {str(exc)}")
+        logger.error(f"Error in calendar PM check task: {str(exc)}")
         raise self.retry(exc=exc) 
