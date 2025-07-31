@@ -115,11 +115,7 @@ class FileUploadView(BaseAPIView):
                     os.remove(data['file'].temporary_file_path())
                 except:
                     pass
-            raise LocalBaseException(
-                exception_type="file_upload_failed",
-                status_code=400,
-                exception=e
-            )
+            return self.handle_exception(e)
     
     def destroy(self, request, pk, *args, **kwargs):
         """Override to soft delete files"""
