@@ -28,12 +28,22 @@ class PMSettingsBaseSerializer(BaseSerializer):
     def validate(self, data):
         content_type = data.get('content_type')
         object_id = data.get('object_id')
-        qs = PMSettings.objects.filter(content_type=content_type, object_id=object_id)
+        trigger_type = data.get('trigger_type')
+        
+        # Check PM settings limit per trigger type
+        qs = PMSettings.objects.filter(
+            content_type=content_type, 
+            object_id=object_id,
+            trigger_type=trigger_type
+        )
         # Exclude self in case of update
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
-        if qs.count() >= 3:  # Allow up to 3 PM settings per asset
-            raise serializers.ValidationError('Each asset can have at most 3 PM automation configurations.')
+        
+        if qs.count() >= 3:  # Allow up to 3 PM settings per asset per trigger type
+            trigger_type_display = dict(PMTriggerTypes.choices).get(trigger_type, trigger_type)
+            raise serializers.ValidationError(f'Each asset can have at most 3 {trigger_type_display} PM automation configurations.')
+        
         return data
 
     def to_representation(self, instance):
