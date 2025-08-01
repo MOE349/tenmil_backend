@@ -115,12 +115,20 @@ class PMAutomationService:
         triggers = []
         next_trigger = pm_settings.get_next_trigger()
         
-        logger.debug(f"Calculating triggers: current_reading={current_meter_reading}, next_trigger={next_trigger}, interval={pm_settings.interval_value}, lead_time={pm_settings.lead_time_value}")
+        # Handle None values - if next_trigger is None, we can't calculate anything
+        if next_trigger is None:
+            logger.debug(f"next_trigger is None - PM may need start_threshold_value set. Returning empty triggers.")
+            return triggers
+        
+        # Handle None lead_time_value - default to 0 (no lead time)
+        lead_time_value = pm_settings.lead_time_value or 0
+        
+        logger.debug(f"Calculating triggers: current_reading={current_meter_reading}, next_trigger={next_trigger}, interval={pm_settings.interval_value}, lead_time={lead_time_value}")
         
         # Calculate the early-create window
-        early_create_window = next_trigger - pm_settings.lead_time_value
+        early_create_window = next_trigger - lead_time_value
         
-        logger.debug(f"Early create window: {early_create_window} (next_trigger {next_trigger} - lead_time {pm_settings.lead_time_value})")
+        logger.debug(f"Early create window: {early_create_window} (next_trigger {next_trigger} - lead_time {lead_time_value})")
         
         # For floating trigger system, we only create one trigger at a time
         # Check if we're in the early-create window
@@ -139,10 +147,11 @@ class PMAutomationService:
         """
         logger.debug(f"Checking work order creation for trigger {trigger_value}, current reading {current_meter_reading}")
         
-        # Calculate early-create window
-        early_create_window = trigger_value - pm_settings.lead_time_value
+        # Calculate early-create window (handle None lead_time_value)
+        lead_time_value = pm_settings.lead_time_value or 0
+        early_create_window = trigger_value - lead_time_value
         
-        logger.debug(f"Early create window: {early_create_window} (trigger {trigger_value} - lead time {pm_settings.lead_time_value})")
+        logger.debug(f"Early create window: {early_create_window} (trigger {trigger_value} - lead time {lead_time_value})")
         
         # Check if we're in the early-create window
         if current_meter_reading < early_create_window:
