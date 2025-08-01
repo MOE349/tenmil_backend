@@ -69,8 +69,17 @@ class PMSettingsBaseSerializer(BaseSerializer):
             work_order__is_pm_generated=True,
             is_handled=False
         ).exists()
+        
         if has_work_orders:
-            response['next_trigger_value'] = f"{int(instance.next_trigger_value)}?"
+            # Different display logic for different PM types
+            if instance.trigger_type == PMTriggerTypes.METER_READING:
+                # For METER PMs: show next_trigger_value
+                if instance.next_trigger_value is not None:
+                    response['next_trigger_value'] = f"{int(instance.next_trigger_value)}?"
+            elif instance.trigger_type == PMTriggerTypes.CALENDAR:
+                # For CALENDAR PMs: show next_due_date
+                if instance.next_due_date is not None:
+                    response['next_due_date'] = f"{instance.next_due_date}?"
         return response
 
 
