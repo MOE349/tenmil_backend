@@ -90,8 +90,59 @@ class WorkOrderBaseView(BaseAPIView):
             # Auto-set completion_end_date if not provided by user
             if not instance.completion_end_date:
                 from django.utils import timezone
-                instance.completion_end_date = timezone.now().date()
-                print(f"Auto-set completion_end_date to: {instance.completion_end_date}")
+                
+                # Get the asset's timezone for consistent date calculation
+                asset_timezone = None
+                try:
+                    # Try to get asset timezone if PM settings exist for this work order
+                    from pm_automation.models import PMSettings
+                    pm_settings = PMSettings.objects.filter(
+                        content_type=instance.content_type,
+                        object_id=instance.object_id
+                    ).first()
+                    
+                    if pm_settings:
+                        asset_timezone = pm_settings.get_asset_timezone()
+                        print(f"Using PM settings asset timezone: {asset_timezone}")
+                    else:
+                        # Try to get timezone directly from asset
+                        try:
+                            asset = instance.asset
+                            if hasattr(asset, 'site') and asset.site:
+                                asset_timezone = asset.site.get_effective_timezone()
+                                print(f"Using asset site timezone: {asset_timezone}")
+                            elif hasattr(asset, 'location') and asset.location and asset.location.site:
+                                asset_timezone = asset.location.site.get_effective_timezone()
+                                print(f"Using asset location site timezone: {asset_timezone}")
+                        except Exception:
+                            pass
+                        
+                        # Fallback to company timezone
+                        if not asset_timezone:
+                            try:
+                                from company.models import CompanyProfile
+                                company_profile = CompanyProfile.get_or_create_default()
+                                asset_timezone = company_profile.get_timezone_object()
+                                print(f"Using company timezone: {asset_timezone}")
+                            except Exception:
+                                pass
+                    
+                except Exception as e:
+                    print(f"Could not get asset timezone: {e}")
+                
+                # Convert current time to asset timezone, then get the date
+                current_time = timezone.now()
+                if asset_timezone:
+                    # Convert to asset's local time
+                    local_time = current_time.astimezone(asset_timezone)
+                    completion_date = local_time.date()
+                    print(f"Auto-set completion_end_date to: {completion_date} (asset timezone: {asset_timezone})")
+                else:
+                    # Fallback to UTC date
+                    completion_date = current_time.date()
+                    print(f"Auto-set completion_end_date to: {completion_date} (UTC fallback)")
+                
+                instance.completion_end_date = completion_date
             
             instance.save()
             WorkOrderLog.objects.create(work_order=instance, amount=amount, log_type=WorkOrderLog.LogTypeChoices.COMPLETED, user=params['user'], description="Work Order Closed")
