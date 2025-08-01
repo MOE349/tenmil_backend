@@ -134,15 +134,15 @@ class FileAttachmentSerializerMixin:
             images_count = instance.files.not_deleted().images().count()
             
             # Generate model name for API endpoints
-            # app_label = instance._meta.app_label
-            # model_name = instance.__class__.__name__.lower()
-            # full_model_name = f"{app_label}.{model_name}"
+            app_label = instance._meta.app_label
+            model_name = instance.__class__.__name__.lower()
+            full_model_name = f"{app_label}.{model_name}"
             
             response['files'] = {
                 "total_count": files_count,
                 "images_count": images_count,
                 "documents_count": instance.files.not_deleted().documents().count(),
-                # "files_endpoint": f"/v1/api/file-uploads/files/?link_to_model={full_model_name}&object_id={instance.id}",
+                "files_endpoint": f"/v1/api/file-uploads/files/?link_to_model={full_model_name}&object_id={instance.id}",
                 "upload_endpoint": "/v1/api/file-uploads/files/",
                 "upload_example": {
                     "method": "POST",
@@ -150,8 +150,8 @@ class FileAttachmentSerializerMixin:
                     "content_type": "multipart/form-data",
                     "data": {
                         "file": "<file_object>",
-                        # "link_to_model": full_model_name,
-                        # "link_to_id": str(instance.id),
+                        "link_to_model": full_model_name,
+                        "link_to_id": str(instance.id),
                         "description": "Optional description",
                         "tags": "Optional,comma,separated,tags"
                     }
@@ -159,8 +159,8 @@ class FileAttachmentSerializerMixin:
             }
             
             # Add set-image endpoint if the model has an image field
-            # if hasattr(instance, 'image'):
-            #     response['files']["set_image_endpoint"] = f"/v1/api/{app_label}/{model_name}/{instance.id}/set-image/"
+            if hasattr(instance, 'image'):
+                response['files']["set_image_endpoint"] = f"/v1/api/{app_label}/{model_name}/{instance.id}/set-image/"
         
         return response
     

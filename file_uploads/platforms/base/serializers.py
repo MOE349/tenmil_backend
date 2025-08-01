@@ -79,6 +79,18 @@ class FileUploadSerializer(BaseSerializer):
         request = self.get_request()
         user = self.get_user()
         
+        # Handle content_object properly to avoid JSON serialization errors
+        if 'content_object' in representation and instance.content_object:
+            # Instead of including the full object, provide basic info
+            content_obj = instance.content_object
+            representation['content_object'] = {
+                'model': f"{content_obj._meta.app_label}.{content_obj._meta.model_name}",
+                'id': str(content_obj.id),
+                'name': getattr(content_obj, 'name', None) or getattr(content_obj, 'title', None) or str(content_obj)
+            }
+        elif 'content_object' in representation:
+            representation['content_object'] = None
+        
         # Hide sensitive fields for non-owners
         if user and instance.uploaded_by != user:
             if instance.access_level == 'private':
