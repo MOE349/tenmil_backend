@@ -130,15 +130,19 @@ class PMSettings(BaseModel):
                 if self.trigger_type == PMTriggerTypes.METER_READING:
                     if (original.start_threshold_value != self.start_threshold_value or 
                         original.interval_value != self.interval_value or
+                        original.interval_unit != self.interval_unit or
                         original.trigger_type != self.trigger_type):
                         # Recalculate next trigger value for meter PMs
                         self.recalculate_next_trigger()
+                        print(f"🔧 Recalculated meter PM trigger: {self.next_trigger_value}")
                 elif self.trigger_type == PMTriggerTypes.CALENDAR:
                     if (original.start_date != self.start_date or
                         original.interval_value != self.interval_value or
+                        original.interval_unit != self.interval_unit or
                         original.trigger_type != self.trigger_type):
                         # Recalculate next due date for calendar PMs
                         self.next_due_date = self.calculate_next_calendar_due_date()
+                        print(f"📅 Recalculated calendar PM due date: {self.next_due_date}")
             except Exception:
                 # This shouldn't happen, but if it does, just recalculate based on type
                 if self.trigger_type == PMTriggerTypes.METER_READING:
