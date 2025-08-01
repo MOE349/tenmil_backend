@@ -164,9 +164,9 @@ class FileAttachmentSerializerMixin:
         
         return response
     
-    def to_representation(self, instance):
+    def mod_to_representation(self, instance):
         """Override to automatically add file information"""
-        response = super().to_representation(instance)
+        response = super().mod_to_representation(instance)
         
         # Add file information if the instance has file capabilities
         if hasattr(instance, 'files') or hasattr(instance, 'image'):

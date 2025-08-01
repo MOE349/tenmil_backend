@@ -15,8 +15,8 @@ class AssetBaseSerializer(FileAttachmentSerializerMixin, BaseSerializer):
     #     instance = 
     
 
-    def to_representation(self, instance):
-        response = super().to_representation(instance)
+    def mod_to_representation(self, instance):
+        response = super().mod_to_representation(instance)
         response['id'] = str(instance.id)
         response['location'] = {
             "id": str(instance.location.id),
@@ -71,10 +71,10 @@ class EquipmentBaseSerializer(AssetBaseSerializer):
         model = Equipment
         fields = '__all__'
 
-    def to_representation(self, instance): 
-        response = super().to_representation(instance)
+    def mod_to_representation(self, instance): 
+        response = super().mod_to_representation(instance)
         response['type'] = 'equipment'
-        response['weight_class'] = EquipmentWeightClassBaseSerializer(instance.weight_class).data
+        response['weight_class'] = EquipmentWeightClassBaseSerializer(instance.weight_class).data if instance.weight_class else None
         return response
 
 
@@ -83,8 +83,8 @@ class AttachmentBaseSerializer(AssetBaseSerializer):
         model = Attachment
         fields = '__all__'
 
-    def to_representation(self, instance): 
-        response = super().to_representation(instance)
+    def mod_to_representation(self, instance): 
+        response = super().mod_to_representation(instance)
         response['type'] = 'attachment'
         return response
 
@@ -106,9 +106,9 @@ class AssetMoveBaseSerializer(BaseSerializer):
         model = AssetMovementLog
         fields = '__all__'
 
-    def to_representation(self, instance):
-        response = super().to_representation(instance)
-        response['from_location'] = LocationBaseSerializer(instance.from_location).data
-        response['to_location'] = LocationBaseSerializer(instance.to_location).data
-        response['moved_by'] = TenantUserBaseSerializer(instance.moved_by).data
+    def mod_to_representation(self, instance):
+        response = super().mod_to_representation(instance)
+        response['from_location'] = LocationBaseSerializer(instance.from_location).data if instance.from_location else None
+        response['to_location'] = LocationBaseSerializer(instance.to_location).data if instance.to_location else None
+        response['moved_by'] = TenantUserBaseSerializer(instance.moved_by).data if instance.moved_by else None
         return response
