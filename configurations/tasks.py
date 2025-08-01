@@ -104,9 +104,9 @@ def check_calendar_pms(self):
         total_work_orders = []
         tenant_results = {}
         
-        # Get all tenant schemas
+        # Get all tenant schemas (exclude public schema since pm_automation is a TENANT_APP)
         tenant_model = get_tenant_model()
-        tenants = tenant_model.objects.all()
+        tenants = tenant_model.objects.exclude(schema_name='public')
         
         for tenant in tenants:
             try:
@@ -169,9 +169,9 @@ def check_overdue_meter_pms(self):
         total_work_orders = []
         tenant_results = {}
         
-        # Get all tenant schemas
+        # Get all tenant schemas (exclude public schema since pm_automation is a TENANT_APP)
         tenant_model = get_tenant_model()
-        tenants = tenant_model.objects.all()
+        tenants = tenant_model.objects.exclude(schema_name='public')
         
         for tenant in tenants:
             try:
