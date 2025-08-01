@@ -1,14 +1,14 @@
 from assets.services import get_assets_by_gfk, get_content_type_and_asset_id, move_asset
 from configurations.base_features.exceptions.base_exceptions import LocalBaseException
 from configurations.base_features.views.base_api_view import BaseAPIView
+from configurations.mixins.file_attachment_mixins import FileAttachmentViewMixin
 from assets.models import *
 from assets.platforms.base.serializers import *
 from django.utils.translation import gettext_lazy as _
 from django.contrib.contenttypes.models import ContentType
-from file_uploads.models import FileUpload
 
 
-class AssetBaseView(BaseAPIView):
+class AssetBaseView(FileAttachmentViewMixin, BaseAPIView):
     serializer_class = AssetBaseSerializer
     model_class = Equipment
     http_method_names = ["get"]
@@ -39,51 +39,8 @@ class AssetBaseView(BaseAPIView):
             move_asset(asset=instance, to_location=data["location"], user=self.get_request_user(self.request))
         return self.format_response(data=response, status_code=200)
     
-    def set_image(self, request, pk, *args, **kwargs):
-        """
-        Set the main image for an asset from one of its uploaded files.
-        Expects: {"file_id": "uuid-of-uploaded-file"} or {"file_id": null} to remove image
-        """
-        try:
-            # Get the asset instance
-            instance = self.get_instance(pk)
-            
-            # Get request data
-            data = request.data
-            file_id = data.get('file_id')
-            
-            if file_id is None:
-                # Remove the current image
-                instance.set_image(None)
-                message = "Asset image removed successfully"
-            else:
-                # Get the file upload instance
-                try:
-                    file_upload = FileUpload.objects.get(id=file_id, is_deleted=False)
-                except FileUpload.DoesNotExist:
-                    raise LocalBaseException(
-                        exception="File not found or has been deleted",
-                        status_code=404
-                    )
-                
-                # Set the image (this will validate that the file belongs to the asset)
-                try:
-                    instance.set_image(file_upload)
-                    message = f"Asset image set to {file_upload.original_filename}"
-                except ValueError as e:
-                    raise LocalBaseException(
-                        exception=str(e),
-                        status_code=400
-                    )
-            
-            # Return updated asset data
-            response_data = self.serializer_class(instance).data
-            response_data['message'] = message
-            
-            return self.format_response(data=response_data, status_code=200)
-            
-        except Exception as e:
-            return self.handle_exception(e)
+    # FileAttachmentViewMixin automatically provides:
+    # - set_image(request, pk): Method to set main image from uploaded files
     
 
 class EquipmentWeightClassBaseView(BaseAPIView):

@@ -48,6 +48,25 @@ class FileUploadView(BaseAPIView):
     
     def get_queryset(self, params=None, ordering=None):
         """Override to filter deleted files and apply access control"""
+        # Handle model name filtering before calling super()
+        if params and 'link_to_model' in params:
+            model_name = params.pop('link_to_model')
+            object_id = params.get('object_id')
+            
+            # Handle case where model_name might be a list
+            if isinstance(model_name, list):
+                model_name = model_name[0] if model_name else ""
+            
+            try:
+                if isinstance(model_name, str) and '.' in model_name:
+                    # Convert model name to content_type_ref
+                    app_label, model = model_name.split('.')
+                    content_type = ContentType.objects.get(app_label=app_label, model=model)
+                    params['content_type_ref'] = content_type.id
+            except (ValueError, ContentType.DoesNotExist, AttributeError):
+                # Invalid model reference, let it fail naturally
+                pass
+        
         queryset = super().get_queryset(params, ordering)
         
         # Filter out soft-deleted files
@@ -79,14 +98,25 @@ class FileUploadView(BaseAPIView):
             model_name = data.pop('link_to_model')
             object_id = data.pop('link_to_id')
             
+            # Handle case where model_name might be a list (from form data)
+            if isinstance(model_name, list):
+                model_name = model_name[0] if model_name else ""
+            
+            # Handle case where object_id might be a list
+            if isinstance(object_id, list):
+                object_id = object_id[0] if object_id else ""
+            
             try:
-                # Get content type from model name
-                app_label, model = model_name.split('.')
-                content_type = ContentType.objects.get(app_label=app_label, model=model)
-                data['content_type_ref'] = content_type.id
-                data['object_id'] = object_id
-            except (ValueError, ContentType.DoesNotExist):
-                pass  # Invalid model reference, let validation handle it
+                # Validate model_name format
+                if isinstance(model_name, str) and '.' in model_name:
+                    # Get content type from model name
+                    app_label, model = model_name.split('.')
+                    content_type = ContentType.objects.get(app_label=app_label, model=model)
+                    data['content_type_ref'] = content_type.id
+                    data['object_id'] = object_id
+            except (ValueError, ContentType.DoesNotExist, AttributeError):
+                # Invalid model reference, let validation handle it
+                pass
         
         return data
     

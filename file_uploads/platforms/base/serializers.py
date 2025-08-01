@@ -93,11 +93,15 @@ class FileUploadCreateSerializer(BaseSerializer):
     """
     Serializer for creating file uploads with validation
     """
+    # Additional fields for easier API usage (these are converted in the view)
+    link_to_model = serializers.CharField(required=False, write_only=True, help_text="Model to link to (e.g., 'assets.equipment')")
+    link_to_id = serializers.CharField(required=False, write_only=True, help_text="ID of the object to link to")
+    
     class Meta:
         model = FileUpload
         fields = [
             'file', 'description', 'tags', 'is_public', 'access_level',
-            'content_type_ref', 'object_id'
+            'content_type_ref', 'object_id', 'link_to_model', 'link_to_id'
         ]
     
     def validate_file(self, value):
@@ -120,6 +124,26 @@ class FileUploadCreateSerializer(BaseSerializer):
             raise serializers.ValidationError(f"File type {ext} is not allowed")
         
         return value
+    
+    def validate(self, attrs):
+        """Cross-field validation"""
+        link_to_model = attrs.get('link_to_model')
+        link_to_id = attrs.get('link_to_id')
+        
+        # If linking to a model, both fields are required
+        if link_to_model or link_to_id:
+            if not (link_to_model and link_to_id):
+                raise serializers.ValidationError(
+                    "Both 'link_to_model' and 'link_to_id' are required when linking to an object"
+                )
+            
+            # Validate model format
+            if '.' not in link_to_model:
+                raise serializers.ValidationError(
+                    "'link_to_model' must be in format 'app_label.model_name' (e.g., 'assets.equipment')"
+                )
+        
+        return attrs
     
     def mod_create(self, validated_data):
         """Override to set metadata and validate"""
