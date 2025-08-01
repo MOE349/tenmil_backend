@@ -179,12 +179,23 @@ class CalendarPMService:
             # Update PM settings with completion date
             pm_settings = pm_trigger.pm_settings
             if pm_settings.trigger_type == PMTriggerTypes.CALENDAR:
-                # Update last completion date and calculate next due date
-                pm_settings.last_completion_date = timezone.now()
+                # Use work order completion_end_date if available, otherwise current time
+                completion_date = None
+                if work_order.completion_end_date:
+                    # Convert date to datetime for consistency
+                    completion_date = timezone.datetime.combine(
+                        work_order.completion_end_date, 
+                        timezone.datetime.min.time()
+                    ).replace(tzinfo=timezone.get_current_timezone())
+                else:
+                    completion_date = timezone.now()
+                
+                # Update last completion date and calculate next due date based on actual completion
+                pm_settings.last_completion_date = completion_date
                 pm_settings.next_due_date = pm_settings.calculate_next_calendar_due_date()
                 pm_settings.save(update_fields=['last_completion_date', 'next_due_date'])
                 
-                logger.info(f"Updated calendar PM: last_completion={pm_settings.last_completion_date}, next_due={pm_settings.next_due_date}")
+                logger.info(f"Updated calendar PM: last_completion={pm_settings.last_completion_date}, next_due={pm_settings.next_due_date} (based on completion_end_date: {work_order.completion_end_date})")
                 
         except Exception as e:
             logger.error(f"Error handling calendar PM work order completion for {work_order.id}: {e}")

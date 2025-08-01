@@ -86,6 +86,13 @@ class WorkOrderBaseView(BaseAPIView):
         if status == "Closed":
             instance.is_closed = True
             instance.status = status_instance
+            
+            # Auto-set completion_end_date if not provided by user
+            if not instance.completion_end_date:
+                from django.utils import timezone
+                instance.completion_end_date = timezone.now().date()
+                print(f"Auto-set completion_end_date to: {instance.completion_end_date}")
+            
             instance.save()
             WorkOrderLog.objects.create(work_order=instance, amount=amount, log_type=WorkOrderLog.LogTypeChoices.COMPLETED, user=params['user'], description="Work Order Closed")
             
