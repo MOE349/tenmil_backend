@@ -46,13 +46,22 @@ class FileUploadView(BaseAPIView):
             return FileUploadListSerializer
         return FileUploadSerializer
     
-    def get_queryset(self, params=None, ordering=None):
-        """Override to filter deleted files and apply access control"""
-        # Handle model name filtering before calling super()
-        if params and 'link_to_model' in params:
-            model_name = params.pop('link_to_model')
-            object_id = params.get('object_id')
-            
+    def get_request_params(self, request):
+        """Override to handle custom file upload parameters"""
+        params = super().get_request_params(request)
+        
+        # Handle link_to_model parameter (BaseAPIView adds __icontains automatically)
+        link_to_model_key = None
+        model_name = None
+        
+        # Check for various forms of the parameter
+        for key in ['link_to_model', 'link_to_model__icontains']:
+            if key in params:
+                link_to_model_key = key
+                model_name = params.pop(key)
+                break
+        
+        if model_name:
             # Handle case where model_name might be a list
             if isinstance(model_name, list):
                 model_name = model_name[0] if model_name else ""
@@ -64,9 +73,13 @@ class FileUploadView(BaseAPIView):
                     content_type = ContentType.objects.get(app_label=app_label, model=model)
                     params['content_type_ref'] = content_type.id
             except (ValueError, ContentType.DoesNotExist, AttributeError):
-                # Invalid model reference, let it fail naturally
+                # Invalid model reference, ignore it
                 pass
         
+        return params
+    
+    def get_queryset(self, params=None, ordering=None):
+        """Override to filter deleted files and apply access control"""
         queryset = super().get_queryset(params, ordering)
         
         # Filter out soft-deleted files
