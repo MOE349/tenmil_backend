@@ -48,6 +48,11 @@ class FileAttachmentMixin(models.Model):
         related_query_name='%(class)s'
     )
     
+    @property
+    def _files_manager(self):
+        """Helper property to ensure we get the proper manager with QuerySet methods"""
+        return self.files
+    
     class Meta:
         abstract = True
     

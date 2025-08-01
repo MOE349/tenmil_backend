@@ -225,8 +225,8 @@ class FileUpload(BaseModel):
         return None
 
 
-class FileUploadManager(models.Manager):
-    """Custom manager for FileUpload"""
+class FileUploadQuerySet(models.QuerySet):
+    """Custom QuerySet for FileUpload with chainable methods"""
     
     def not_deleted(self):
         """Return only non-deleted files"""
@@ -238,6 +238,7 @@ class FileUploadManager(models.Manager):
     
     def for_object(self, obj):
         """Get files for a specific object"""
+        from django.contrib.contenttypes.models import ContentType
         content_type = ContentType.objects.get_for_model(obj)
         return self.filter(content_type_ref=content_type, object_id=obj.pk)
     
@@ -258,6 +259,34 @@ class FileUploadManager(models.Manager):
             'text/csv'
         ]
         return self.filter(content_type__in=doc_types)
+
+
+class FileUploadManager(models.Manager):
+    """Custom manager for FileUpload"""
+    
+    def get_queryset(self):
+        """Return custom QuerySet with our methods"""
+        return FileUploadQuerySet(self.model, using=self._db)
+    
+    def not_deleted(self):
+        """Return only non-deleted files"""
+        return self.get_queryset().not_deleted()
+    
+    def validated(self):
+        """Return only validated files"""
+        return self.get_queryset().validated()
+    
+    def for_object(self, obj):
+        """Get files for a specific object"""
+        return self.get_queryset().for_object(obj)
+    
+    def images(self):
+        """Return only image files"""
+        return self.get_queryset().images()
+    
+    def documents(self):
+        """Return only document files"""
+        return self.get_queryset().documents()
 
 
 # Add the custom manager to the model
