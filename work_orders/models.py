@@ -33,8 +33,48 @@ class WorkOrder(BaseModel):
 
     def save(self, *args, force_insert=False, force_update=False, using=None, update_fields=None):
         if not self.code:
-            self.code = f"WO_{WorkOrder.objects.count() + 1}"
+            self.code = self.generate_unique_code()
         return super().save(*args, force_insert=force_insert, force_update=force_update, using=using, update_fields=update_fields)
+    
+    def generate_unique_code(self):
+        """Generate a unique work order code with retry logic"""
+        from django.db import transaction
+        import time
+        import re
+        
+        max_attempts = 10
+        for attempt in range(max_attempts):
+            try:
+                with transaction.atomic():
+                    # Get all existing WO codes and find the highest number
+                    existing_codes = WorkOrder.objects.filter(
+                        code__startswith='WO_'
+                    ).values_list('code', flat=True)
+                    
+                    max_number = 0
+                    for code in existing_codes:
+                        match = re.match(r'WO_(\d+)$', code)
+                        if match:
+                            number = int(match.group(1))
+                            max_number = max(max_number, number)
+                    
+                    next_number = max_number + 1
+                    code = f"WO_{next_number}"
+                    
+                    # Double-check uniqueness before returning
+                    if not WorkOrder.objects.filter(code=code).exists():
+                        return code
+                        
+            except Exception:
+                pass
+            
+            # If we get here, there was a conflict. Wait a bit and retry
+            time.sleep(0.01 * (attempt + 1))  # Exponential backoff
+        
+        # Final fallback: use timestamp-based code if all attempts fail
+        import datetime
+        timestamp = datetime.datetime.now().strftime('%Y%m%d%H%M%S%f')[:-3]
+        return f"WO_{timestamp}"
     
 
 class WorkOrderChecklist(BaseModel):
