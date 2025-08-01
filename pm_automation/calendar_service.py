@@ -120,7 +120,7 @@ class CalendarPMService:
             PMTrigger.objects.create(
                 pm_settings=pm_settings,
                 work_order=work_order,
-                trigger_value=0,  # Not applicable for calendar PMs
+                trigger_value=new_counter,  # Use the incremented counter for uniqueness
                 trigger_unit=pm_settings.interval_unit,  # Use the PM interval unit
             )
             
