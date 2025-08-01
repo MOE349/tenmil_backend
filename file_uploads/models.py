@@ -4,6 +4,7 @@ from django.db import models
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from configurations.base_features.db.base_model import BaseModel
+from configurations.base_features.db.base_manager import BaseManager
 from tenant_users.models import TenantUser as User
 
 
@@ -261,7 +262,7 @@ class FileUploadQuerySet(models.QuerySet):
         return self.filter(content_type__in=doc_types)
 
 
-class FileUploadManager(models.Manager):
+class FileUploadManager(BaseManager):
     """Custom manager for FileUpload"""
     
     def get_queryset(self):
