@@ -401,3 +401,111 @@ class PMAutomationService:
             'pending_triggers': pending_triggers,
             'has_active_settings': pm_settings_list.filter(is_active=True).exists()
         }
+    
+    @staticmethod
+    def check_overdue_meter_pms():
+        """
+        Check for meter-based PMs that are overdue and should have work orders created
+        This method is designed to be called by Celery tasks to catch any missed PM triggers
+        """
+        from meter_readings.models import MeterReading
+        from pm_automation.models import PMTriggerTypes
+        
+        logger.info("Starting overdue meter PM check")
+        
+        # Get all active meter-based PM settings
+        meter_pm_settings = PMSettings.objects.filter(
+            trigger_type=PMTriggerTypes.METER_READING,
+            is_active=True
+        ).select_related('content_type')
+        
+        if not meter_pm_settings.exists():
+            logger.info("No active meter-based PM settings found")
+            return []
+        
+        logger.info(f"Found {meter_pm_settings.count()} active meter-based PM settings to check")
+        
+        created_work_orders = []
+        
+        for pm_settings in meter_pm_settings:
+            try:
+                # Get the latest meter reading for this asset
+                latest_reading = MeterReading.objects.filter(
+                    content_type=pm_settings.content_type,
+                    object_id=pm_settings.object_id
+                ).order_by('-meter_reading').first()
+                
+                if not latest_reading:
+                    logger.debug(f"No meter readings found for PM settings {pm_settings.id}")
+                    continue
+                
+                # Check if there are any overdue triggers
+                triggers = PMAutomationService._calculate_next_triggers(pm_settings, latest_reading.meter_reading)
+                
+                if not triggers:
+                    continue
+                
+                logger.info(f"PM Settings {pm_settings.id} has {len(triggers)} potential triggers: {triggers}")
+                
+                # Check each trigger to see if it's overdue
+                for trigger_value in triggers:
+                    # Calculate if this trigger is overdue (current reading >= trigger - lead_time)
+                    lead_time = pm_settings.lead_time_value or 0
+                    early_create_window = trigger_value - lead_time
+                    
+                    if latest_reading.meter_reading >= early_create_window:
+                        # Check if work order already exists for this trigger
+                        existing_trigger = PMTrigger.objects.filter(
+                            pm_settings=pm_settings,
+                            trigger_value=trigger_value,
+                            is_handled=False
+                        ).first()
+                        
+                        if existing_trigger and existing_trigger.work_order:
+                            logger.debug(f"Work order already exists for trigger {trigger_value}")
+                            continue
+                        
+                        # Check if there's already an open PM work order for this asset
+                        open_pm_wo = WorkOrder.objects.filter(
+                            content_type=pm_settings.content_type,
+                            object_id=pm_settings.object_id,
+                            maint_type='PM',
+                            is_closed=False
+                        ).first()
+                        
+                        if open_pm_wo:
+                            logger.debug(f"Open PM work order {open_pm_wo.id} already exists for asset")
+                            continue
+                        
+                        logger.info(f"Creating overdue work order for PM {pm_settings.id}, trigger {trigger_value}")
+                        
+                        # Create work order using the latest reading's created_by user
+                        user = latest_reading.created_by if latest_reading.created_by else PMAutomationService._get_system_user()
+                        
+                        work_order = PMAutomationService._check_and_create_work_order(
+                            pm_settings, trigger_value, latest_reading.meter_reading, user
+                        )
+                        
+                        if work_order:
+                            created_work_orders.append(work_order)
+                            logger.info(f"Created overdue PM work order {work_order.id} for PM Settings {pm_settings.id}")
+                        
+            except Exception as e:
+                logger.error(f"Error checking overdue PM for settings {pm_settings.id}: {e}")
+                continue
+        
+        logger.info(f"Overdue meter PM check complete: {len(created_work_orders)} work orders created")
+        return created_work_orders
+    
+    @staticmethod
+    def _get_system_user():
+        """Get system user for automated work order creation"""
+        from tenant_users.models import TenantUser
+        system_user = TenantUser.objects.filter(
+            is_superuser=True
+        ).order_by('created_at').first()
+        
+        if not system_user:
+            logger.warning("No system user found for work order creation")
+        
+        return system_user

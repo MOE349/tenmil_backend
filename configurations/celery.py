@@ -53,6 +53,10 @@ app.conf.beat_schedule = {
         'task': 'configurations.tasks.check_calendar_pms',
         'schedule': crontab(minute='*/15'),  # Every 15 minutes
     },
+    'check-overdue-meter-pms': {
+        'task': 'configurations.tasks.check_overdue_meter_pms',
+        'schedule': crontab(hour=2, minute=0),  # Daily at 2:00 AM
+    },
 }
 
 app.conf.timezone = 'UTC' 

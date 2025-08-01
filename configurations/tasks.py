@@ -151,4 +151,69 @@ def check_calendar_pms(self):
         
     except Exception as exc:
         logger.error(f"Error in calendar PM check task: {str(exc)}")
+        raise self.retry(exc=exc)
+
+@shared_task(bind=True)
+def check_overdue_meter_pms(self):
+    """
+    Daily Celery task to check for overdue meter-based PMs
+    Runs once per day to check for meter-based PM work orders that should have been created
+    but might have been missed (e.g., if no new meter readings were entered)
+    Multi-tenant aware: checks all tenant schemas
+    """
+    try:
+        from pm_automation.services import PMAutomationService
+        from django_tenants.utils import get_tenant_model, schema_context
+        from django.db import connection
+        
+        total_work_orders = []
+        tenant_results = {}
+        
+        # Get all tenant schemas
+        tenant_model = get_tenant_model()
+        tenants = tenant_model.objects.all()
+        
+        for tenant in tenants:
+            try:
+                # Switch to tenant schema
+                with schema_context(tenant.schema_name):
+                    print(f"⚙️ Checking overdue meter PMs for tenant: {tenant.schema_name}")
+                    
+                    # Check overdue meter PMs for this tenant
+                    created_work_orders = PMAutomationService.check_overdue_meter_pms()
+                    
+                    if created_work_orders:
+                        total_work_orders.extend(created_work_orders)
+                        tenant_results[tenant.schema_name] = {
+                            'work_orders_created': len(created_work_orders),
+                            'work_order_ids': [str(wo.id) for wo in created_work_orders]
+                        }
+                        logger.info(f"⚙️ Created {len(created_work_orders)} overdue meter PM work orders for tenant {tenant.schema_name}")
+                        print(f"⚙️ Tenant {tenant.schema_name}: Created {len(created_work_orders)} overdue work orders")
+                    else:
+                        print(f"⚙️ Tenant {tenant.schema_name}: No overdue meter PMs found")
+                        
+            except Exception as tenant_exc:
+                logger.error(f"Error checking overdue meter PMs for tenant {tenant.schema_name}: {str(tenant_exc)}")
+                tenant_results[tenant.schema_name] = {'error': str(tenant_exc)}
+        
+        result = {
+            'status': 'completed',
+            'total_work_orders_created': len(total_work_orders),
+            'tenants_processed': len(tenants),
+            'tenant_results': tenant_results,
+            'timestamp': timezone.now().isoformat(),
+            'task_id': self.request.id
+        }
+        
+        if total_work_orders:
+            logger.info(f"⚙️ Total: Created {len(total_work_orders)} overdue meter PM work orders across {len(tenants)} tenants")
+            print(f"⚙️ Overdue Meter PM Check Complete: {len(total_work_orders)} work orders created across {len(tenants)} tenants")
+        else:
+            print(f"⚙️ Overdue Meter PM Check Complete: No overdue PMs found across {len(tenants)} tenants at {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        return result
+        
+    except Exception as exc:
+        logger.error(f"Error in overdue meter PM check task: {str(exc)}")
         raise self.retry(exc=exc) 
