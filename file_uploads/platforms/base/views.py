@@ -1,10 +1,10 @@
 import os
-from django.http import HttpResponse, Http404
-from django.core.exceptions import PermissionDenied
+from django.http import HttpResponse
 from django.contrib.contenttypes.models import ContentType
 from rest_framework.parsers import MultiPartParser, FormParser
 
 from configurations.base_features.views.base_api_view import BaseAPIView
+from configurations.base_features.exceptions.base_exceptions import LocalBaseException
 from file_uploads.models import FileUpload
 from .serializers import (
     FileUploadSerializer, 
@@ -162,7 +162,7 @@ class FileUploadView(BaseAPIView):
             # Check if user has permission to delete
             user = request.user
             if not user or (instance.uploaded_by != user and not user.is_staff):
-                raise PermissionDenied("You don't have permission to delete this file")
+                raise LocalBaseException(exception="You don't have permission to delete this file", status_code=403)
             
             # Soft delete
             instance.delete(hard_delete=False)
@@ -179,7 +179,7 @@ class FileUploadView(BaseAPIView):
         try:
             user = request.user
             if not user or not user.is_staff:
-                raise PermissionDenied("Only staff can permanently delete files")
+                raise LocalBaseException(exception="Only staff can permanently delete files", status_code=403)
             
             instance = self.get_instance(pk)
             instance.delete(hard_delete=True)
@@ -199,11 +199,11 @@ class FileUploadView(BaseAPIView):
             # Check access permissions
             user = request.user if hasattr(request, 'user') else None
             if not self._can_access_file(instance, user):
-                raise PermissionDenied("You don't have permission to access this file")
+                raise LocalBaseException(exception="You don't have permission to access this file", status_code=403)
             
             # Check if file exists
             if not instance.file or not os.path.exists(instance.file.path):
-                raise Http404("File not found")
+                raise LocalBaseException(exception="File not found", status_code=404)
             
             # Prepare response
             file_path = instance.file.path
@@ -220,8 +220,12 @@ class FileUploadView(BaseAPIView):
                 
                 return response
                 
+        except LocalBaseException:
+            # Re-raise LocalBaseException to be handled by the exception handler
+            raise
         except Exception as e:
-            return self.handle_exception(e)
+            # Wrap other exceptions in LocalBaseException
+            raise LocalBaseException(exception=f"Error downloading file: {str(e)}", status_code=500)
     
     def serve(self, request, pk=None):
         """Serve a file inline (for images, PDFs, etc.)"""
@@ -231,11 +235,11 @@ class FileUploadView(BaseAPIView):
             # Check access permissions
             user = request.user if hasattr(request, 'user') else None
             if not self._can_access_file(instance, user):
-                raise PermissionDenied("You don't have permission to access this file")
+                raise LocalBaseException(exception="You don't have permission to access this file", status_code=403)
             
             # Check if file exists
             if not instance.file or not os.path.exists(instance.file.path):
-                raise Http404("File not found")
+                raise LocalBaseException(exception="File not found", status_code=404)
             
             # Prepare response
             file_path = instance.file.path
@@ -251,15 +255,19 @@ class FileUploadView(BaseAPIView):
                 
                 return response
                 
+        except LocalBaseException:
+            # Re-raise LocalBaseException to be handled by the exception handler
+            raise
         except Exception as e:
-            return self.handle_exception(e)
+            # Wrap other exceptions in LocalBaseException
+            raise LocalBaseException(exception=f"Error serving file: {str(e)}", status_code=500)
     
     def stats(self, request):
         """Get file upload statistics"""
         try:
             user = request.user if hasattr(request, 'user') else None
             if not user:
-                raise PermissionDenied("Authentication required")
+                raise LocalBaseException(exception="Authentication required", status_code=401)
             
             queryset = self.get_queryset()
             user_files = queryset.filter(uploaded_by=user)
