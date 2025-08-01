@@ -59,6 +59,16 @@ class Asset(BaseModel):
 
     objects = AssetManager()
 
+    # Image field - references one of the uploaded files as the main asset image
+    image = models.ForeignKey(
+        "file_uploads.FileUpload",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="%(class)s_as_image",
+        help_text="Main image for this asset (must be one of the uploaded files)"
+    )
+
     # Generic Relations
     gr_params = {
         "content_type_field":"content_type",
@@ -69,6 +79,14 @@ class Asset(BaseModel):
     meter_readings = GenericRelation("meter_readings.MeterReading", **gr_params)
     work_orders = GenericRelation("work_orders.WorkOrder", **gr_params)
     pm_settings = GenericRelation("pm_automation.PMSettings", **gr_params)
+    
+    # Files relation - for all file attachments
+    files = GenericRelation(
+        "file_uploads.FileUpload",
+        content_type_field='content_type_ref',
+        object_id_field='object_id',
+        related_query_name='asset'
+    )
 
 
 
@@ -77,6 +95,46 @@ class Asset(BaseModel):
 
     def __str__(self):
         return f"[{self.code}] {self.name}"
+    
+    def get_image_files(self):
+        """Get all image files uploaded for this asset"""
+        return self.files.not_deleted().images()
+    
+    def get_all_files(self):
+        """Get all files uploaded for this asset (excluding deleted)"""
+        return self.files.not_deleted()
+    
+    def set_image(self, file_upload):
+        """
+        Set the main image for this asset.
+        Validates that the file belongs to this asset and is an image.
+        """
+        if file_upload is None:
+            self.image = None
+            self.save(update_fields=['image'])
+            return True
+            
+        # Validate that the file belongs to this asset
+        if not self.files.filter(id=file_upload.id).exists():
+            raise ValueError("File must be uploaded for this asset first")
+        
+        # Validate that the file is an image
+        if not file_upload.is_image():
+            raise ValueError("File must be an image")
+        
+        # Validate that the file is not deleted
+        if file_upload.is_deleted:
+            raise ValueError("Cannot use deleted file as image")
+        
+        self.image = file_upload
+        self.save(update_fields=['image'])
+        return True
+    
+    def get_image_url(self):
+        """Get the URL for the asset's main image"""
+        if self.image and not self.image.is_deleted:
+            return self.image.get_file_url()
+        return None
 
 class Equipment(Asset):
     category = models.ForeignKey(EquipmentCategory, on_delete=models.PROTECT, related_name="equipment")

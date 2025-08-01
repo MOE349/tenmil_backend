@@ -49,6 +49,30 @@ class AssetBaseSerializer(BaseSerializer):
         response['created_at'] = instance.created_at
         response['updated_at'] = instance.updated_at
         response['purchase_date'] = instance.purchase_date
+        
+        # Add image information
+        response['image'] = None
+        if instance.image and not instance.image.is_deleted:
+            response['image'] = {
+                "id": str(instance.image.id),
+                "url": instance.image.get_file_url(),
+                "original_filename": instance.image.original_filename,
+                "file_size": instance.image.file_size,
+                "download_url": instance.image.get_download_url()
+            }
+        
+        # Add files information
+        files_count = instance.files.not_deleted().count()
+        images_count = instance.files.not_deleted().images().count()
+        response['files'] = {
+            "total_count": files_count,
+            "images_count": images_count,
+            "documents_count": instance.files.not_deleted().documents().count(),
+            "files_endpoint": f"/v1/api/file-uploads/files/?link_to_model=assets.{instance.__class__.__name__.lower()}&link_to_id={instance.id}",
+            "upload_endpoint": "/v1/api/file-uploads/files/",
+            "set_image_endpoint": f"/v1/api/assets/{instance.__class__.__name__.lower()}/{instance.id}/set-image/"
+        }
+        
         if hasattr(instance, 'equipment'):
             response['equipment'] = EquipmentBaseSerializer(instance.equipment).data
         return response

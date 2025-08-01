@@ -5,6 +5,7 @@ from assets.models import *
 from assets.platforms.base.serializers import *
 from django.utils.translation import gettext_lazy as _
 from django.contrib.contenttypes.models import ContentType
+from file_uploads.models import FileUpload
 
 
 class AssetBaseView(BaseAPIView):
@@ -38,47 +39,73 @@ class AssetBaseView(BaseAPIView):
             move_asset(asset=instance, to_location=data["location"], user=self.get_request_user(self.request))
         return self.format_response(data=response, status_code=200)
     
+    def set_image(self, request, pk, *args, **kwargs):
+        """
+        Set the main image for an asset from one of its uploaded files.
+        Expects: {"file_id": "uuid-of-uploaded-file"} or {"file_id": null} to remove image
+        """
+        try:
+            # Get the asset instance
+            instance = self.get_instance(pk)
+            
+            # Get request data
+            data = request.data
+            file_id = data.get('file_id')
+            
+            if file_id is None:
+                # Remove the current image
+                instance.set_image(None)
+                message = "Asset image removed successfully"
+            else:
+                # Get the file upload instance
+                try:
+                    file_upload = FileUpload.objects.get(id=file_id, is_deleted=False)
+                except FileUpload.DoesNotExist:
+                    raise LocalBaseException(
+                        exception="File not found or has been deleted",
+                        status_code=404
+                    )
+                
+                # Set the image (this will validate that the file belongs to the asset)
+                try:
+                    instance.set_image(file_upload)
+                    message = f"Asset image set to {file_upload.original_filename}"
+                except ValueError as e:
+                    raise LocalBaseException(
+                        exception=str(e),
+                        status_code=400
+                    )
+            
+            # Return updated asset data
+            response_data = self.serializer_class(instance).data
+            response_data['message'] = message
+            
+            return self.format_response(data=response_data, status_code=200)
+            
+        except Exception as e:
+            return self.handle_exception(e)
+    
 
 class EquipmentWeightClassBaseView(BaseAPIView):
     serializer_class = EquipmentWeightClassBaseSerializer
     model_class = EquipmentWeightClass
 
  
-class EquipmentBaseView(BaseAPIView):
+class EquipmentBaseView(AssetBaseView):
     serializer_class = EquipmentBaseSerializer
     model_class = Equipment
 
-    
+    def get_instance(self, pk, params=None):
+        """Override to get Equipment instance directly"""
+        return Equipment.objects.get(pk=pk)
 
-    def update(self, data, params,  pk, partial, *args, **kwargs):
-        user_lang = params.pop('lang', 'en')
-        instance = self.get_instance(pk)
-        location = instance.location
-        serializer = self.serializer_class(instance, data=data, partial=partial)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        response = serializer.data
-        if "location" in data:
-            to_location = Location.objects.get(id=data["location"])
-            move_asset(asset=instance, from_location=location, to_location=to_location, user=self.get_request_user(self.request))
-        return self.format_response(data=serializer.data, status_code=200)
-            
-
-class AttachmentBaseView(BaseAPIView):
+class AttachmentBaseView(AssetBaseView):
     serializer_class = AttachmentBaseSerializer
     model_class = Attachment
 
-    def update(self, data, params,  pk, partial, *args, **kwargs):
-        user_lang = params.pop('lang', 'en')
-        instance = self.get_instance(pk)
-        location = instance.location
-        serializer = self.serializer_class(instance, data=data, partial=partial)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        response = serializer.data
-        if "location" in data:
-            move_asset(asset=instance, from_location=location, to_location=data["location"], user=self.get_request_user(self.request))
-        return self.format_response(data=serializer.data, status_code=200)
+    def get_instance(self, pk, params=None):
+        """Override to get Attachment instance directly"""
+        return Attachment.objects.get(pk=pk)
 
 
 class EquipmentCategoryBaseView(BaseAPIView):
