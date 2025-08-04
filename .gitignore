@@ -10,3 +10,6 @@ __pycache__
 */migrations/*
 !*/migrations/__init__.py
 backend.pem
+quick-security-check.py
+.gitignore
+complete-security-test-suite.py
