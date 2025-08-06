@@ -33,10 +33,15 @@ class AssetBaseView(FileAttachmentViewMixin, BaseAPIView):
 
     def update(self, data, params,  pk, partial, *args, **kwargs):
         print(f"Asset update data: {data}")
+        
+        # Capture current location before update for move tracking
+        instance = self.get_instance(pk)
+        current_location = instance.location if hasattr(instance, 'location') else None
+        
         instance, response = super().update(data, params,  pk, partial, return_instance=True, *args, **kwargs)    
-        if "location" in data:
+        if "location" in data and data["location"]:
             print(f"update location: {data['location']}")
-            move_asset(asset=instance, to_location=data["location"], user=self.get_request_user(self.request))
+            move_asset(asset=instance, from_location=current_location, to_location=data["location"], user=self.get_request_user(self.request))
         return self.format_response(data=response, status_code=200)
     
     # FileAttachmentViewMixin automatically provides:

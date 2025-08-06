@@ -180,7 +180,7 @@ class WorkOrderBaseView(BaseAPIView):
             from assets.services import get_content_type_and_asset_id
             
             # Get previous meter reading for validation
-            asset_id = f"{work_order_instance.content_type.app_label}.{work_order_instance.content_type.model}.{work_order_instance.object_id}"
+            asset_id = str(work_order_instance.object_id)  # Use just the UUID
             previous_meter_reading = get_previous_meter_reading(asset_id)
             old_meter_reading = previous_meter_reading.meter_reading if previous_meter_reading else 0
             
