@@ -1,12 +1,9 @@
-from assets.models import Equipment
-from assets.platforms.base.serializers import AssetBaseSerializer
 from assets.services import get_asset_serializer
 from configurations.base_features.db.db_helpers import get_object_by_content_type_and_id
 from configurations.base_features.serializers.base_serializer import BaseSerializer
 from core.models import WorkOrderStatusControls
 from tenant_users.platforms.base.serializers import TenantUserBaseSerializer
 from work_orders.models import *
-from django.shortcuts import get_object_or_404
 from rest_framework import serializers
 from django.utils import timezone
 

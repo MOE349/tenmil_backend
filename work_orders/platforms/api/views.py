@@ -1,8 +1,5 @@
 from work_orders.platforms.base.views import *
 from work_orders.platforms.api.serializers import *
-from rest_framework import status
-from rest_framework.decorators import action
-from work_orders.models import WorkOrder, WorkOrderChecklist
 from work_orders.platforms.api.serializers import WorkOrderChecklistApiSerializer
 
 

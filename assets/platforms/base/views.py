@@ -33,7 +33,7 @@ class AssetBaseView(FileAttachmentViewMixin, BaseAPIView):
 
     def update(self, data, params,  pk, partial, *args, **kwargs):
         print(f"Asset update data: {data}")
-        instance, response = super().update(data, params,  pk, partial, *args, **kwargs)    
+        instance, response = super().update(data, params,  pk, partial, return_instance=True, *args, **kwargs)    
         if "location" in data:
             print(f"update location: {data['location']}")
             move_asset(asset=instance, to_location=data["location"], user=self.get_request_user(self.request))

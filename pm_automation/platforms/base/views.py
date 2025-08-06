@@ -95,6 +95,27 @@ class PMIterationBaseView(BaseAPIView):
     model_class = PMIteration
 
 
+    def delete(self, request, pk, *args, **kwargs):
+        
+        # Get the iteration to check if it's the default one
+        try:
+            iteration = PMIteration.objects.get(id=pk)
+            
+            # Check if this iteration matches the PM settings' interval_value
+            if iteration.interval_value == iteration.pm_settings.interval_value:
+                raise LocalBaseException(
+                    exception="Cannot delete the default iteration that matches the PM settings interval",
+                    status_code=400
+                )
+            
+        except PMIteration.DoesNotExist:
+            raise LocalBaseException(
+                exception="Iteration not found",
+                status_code=404
+            )
+        
+        return super().delete(request, pk, *args, **kwargs)
+
 class PMIterationChecklistBaseView(BaseAPIView):
     serializer_class = PMIterationChecklistSerializer
     model_class = PMIterationChecklist
