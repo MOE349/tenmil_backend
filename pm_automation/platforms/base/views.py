@@ -138,8 +138,8 @@ class ManualPMGenerationBaseView(BaseAPIView):
             # Get PM settings
             pm_settings = self.get_instance(pm_settings_id)
             
-            # Validate that manual generation is possible
-            self._validate_manual_generation(pm_settings)
+            # Validate basic configuration (iterations exist)
+            self._validate_pm_configuration(pm_settings)
             
             # Calculate next available iterations
             next_iterations = self._calculate_next_iterations(pm_settings)
@@ -160,8 +160,9 @@ class ManualPMGenerationBaseView(BaseAPIView):
             # Get PM settings using BaseAPIView method
             pm_settings = self.get_instance(pm_settings_id)
             
-            # Validate that manual generation is possible
-            self._validate_manual_generation(pm_settings)
+            # Validate configuration and check for conflicts
+            self._validate_pm_configuration(pm_settings)
+            self._validate_no_open_work_orders(pm_settings)
             
             # Calculate iteration_number locally - find what would naturally trigger next
             next_counter = pm_settings.trigger_counter + 1
@@ -214,8 +215,8 @@ class ManualPMGenerationBaseView(BaseAPIView):
         except Exception as e:
             return self.handle_exception(e)
     
-    def _validate_manual_generation(self, pm_settings):
-        """Validate that manual PM generation is possible"""
+    def _validate_pm_configuration(self, pm_settings):
+        """Validate basic PM configuration (used for both GET and POST)"""
         
         # Check if there are any iterations configured
         iterations = list(pm_settings.get_iterations())
@@ -224,6 +225,9 @@ class ManualPMGenerationBaseView(BaseAPIView):
                 exception="No PM iterations configured for this PM Settings",
                 status_code=400
             )
+    
+    def _validate_no_open_work_orders(self, pm_settings):
+        """Validate no open work orders exist (used only for POST)"""
         
         # Check if there are any open PM work orders that might conflict
         from work_orders.models import WorkOrder
