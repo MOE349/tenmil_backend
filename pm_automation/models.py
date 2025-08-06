@@ -32,7 +32,7 @@ class PMSettings(BaseModel):
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     object_id = models.UUIDField()
     asset = GenericForeignKey("content_type", "object_id")
-    name = models.CharField(max_length=255, null=True, blank=True)
+    name = models.CharField(max_length=255)
     
     # Interval settings - Every [value] [unit]
     interval_value = models.FloatField(_("Interval Value"), help_text="Every X units")
