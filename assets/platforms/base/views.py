@@ -41,7 +41,13 @@ class AssetBaseView(FileAttachmentViewMixin, BaseAPIView):
         instance, response = super().update(data, params,  pk, partial, return_instance=True, *args, **kwargs)    
         if "location" in data and data["location"]:
             print(f"update location: {data['location']}")
-            move_asset(asset=instance, from_location=current_location, to_location=data["location"], user=self.get_request_user(self.request))
+            # Convert location ID to Location instance
+            from company.models import Location
+            try:
+                to_location = Location.objects.get(pk=data["location"])
+                move_asset(asset=instance, from_location=current_location, to_location=to_location, user=self.get_request_user(self.request))
+            except Location.DoesNotExist:
+                raise LocalBaseException(exception=f"Location with ID {data['location']} not found", status_code=400)
         return self.format_response(data=response, status_code=200)
     
     # FileAttachmentViewMixin automatically provides:
