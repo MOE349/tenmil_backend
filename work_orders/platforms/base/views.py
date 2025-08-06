@@ -53,7 +53,8 @@ class WorkOrderBaseView(BaseAPIView):
 
         if status == "Closed":
             # Check if completion meter reading is provided
-            if ('completion_meter_reading' not in data or data.get('completion_meter_reading') is None) and not instance.completion_meter_reading:
+            completion_reading = data.get('completion_meter_reading')
+            if (completion_reading is None or completion_reading == '') and not instance.completion_meter_reading:
                 # We'll handle this after getting the instance
                 needs_meter_reading = True
             else:
@@ -79,9 +80,11 @@ class WorkOrderBaseView(BaseAPIView):
                 raise LocalBaseException(exception="No meter readings found for this asset")
         
         # Create new meter reading if user provided completion_meter_reading
-        elif status == "Closed" and not needs_meter_reading and data.get('completion_meter_reading') is not None and str(data.get('completion_meter_reading')).strip() != '':
-            print(f"User provided completion meter reading: {data.get('completion_meter_reading')}")
-            self._create_meter_reading_from_completion(instance, data.get('completion_meter_reading'), params.get('user'))
+        elif status == "Closed" and not needs_meter_reading:
+            completion_reading = data.get('completion_meter_reading')
+            if completion_reading is not None and str(completion_reading).strip() != '':
+                print(f"User provided completion meter reading: {completion_reading}")
+                self._create_meter_reading_from_completion(instance, completion_reading, params.get('user'))
         
         is_closed = instance.is_closed
         serializer = self.serializer_class(instance, data=data, partial=partial)

@@ -13,6 +13,15 @@ class WorkOrderBaseSerializer(BaseSerializer):
         model = WorkOrder
         fields = '__all__'
     
+    def validate_completion_meter_reading(self, value):
+        """Handle empty strings and make completion_meter_reading truly optional"""
+        if value == '' or value is None:
+            return None
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            raise serializers.ValidationError("completion_meter_reading must be a valid integer or empty")
+    
     def to_representation(self, instance):
         response = super().to_representation(instance)
         asset = get_object_by_content_type_and_id(instance.content_type.id, instance.object_id)
