@@ -78,6 +78,11 @@ class WorkOrderBaseView(BaseAPIView):
             else:
                 raise LocalBaseException(exception="No meter readings found for this asset")
         
+        # Create new meter reading if user provided completion_meter_reading
+        elif status == "Closed" and not needs_meter_reading and data.get('completion_meter_reading') is not None:
+            print(f"User provided completion meter reading: {data.get('completion_meter_reading')}")
+            self._create_meter_reading_from_completion(instance, data.get('completion_meter_reading'), params.get('user'))
+        
         is_closed = instance.is_closed
         serializer = self.serializer_class(instance, data=data, partial=partial)
         serializer.is_valid(raise_exception=True)
@@ -163,6 +168,60 @@ class WorkOrderBaseView(BaseAPIView):
             WorkOrderLog.objects.create(work_order=instance, amount=amount, log_type=WorkOrderLog.LogTypeChoices.UPDATED, user=params['user'], description=" ".join(list(data.keys())))
         response['status'] = WorkOrderStatusNamesBaseSerializer(instance.status).data
         return self.format_response(data=response, status_code=200)
+    
+    def _create_meter_reading_from_completion(self, work_order_instance, completion_meter_reading, user):
+        """
+        Create a new meter reading when user provides completion_meter_reading
+        Validates that the new reading is larger than the previous one
+        """
+        try:
+            from meter_readings.models import MeterReading
+            from meter_readings.helpers import get_previous_meter_reading
+            from assets.services import get_content_type_and_asset_id
+            
+            # Get previous meter reading for validation
+            asset_id = f"{work_order_instance.content_type.app_label}.{work_order_instance.content_type.model}.{work_order_instance.object_id}"
+            previous_meter_reading = get_previous_meter_reading(asset_id)
+            old_meter_reading = previous_meter_reading.meter_reading if previous_meter_reading else 0
+            
+            # Validate that new reading is larger than previous
+            if old_meter_reading >= float(completion_meter_reading):
+                raise LocalBaseException(
+                    exception=f'Completion meter reading ({completion_meter_reading}) must be greater than the last meter reading ({old_meter_reading})', 
+                    status_code=400
+                )
+            
+            # Check if meter reading already exists to avoid duplicates
+            existing_meter_reading = MeterReading.objects.filter(
+                content_type=work_order_instance.content_type,
+                object_id=work_order_instance.object_id,
+                meter_reading=float(completion_meter_reading)
+            ).first()
+            
+            if existing_meter_reading:
+                print(f"Meter reading {completion_meter_reading} already exists for this asset")
+                return existing_meter_reading
+            
+            # Create new meter reading
+            new_meter_reading = MeterReading.objects.create(
+                content_type=work_order_instance.content_type,
+                object_id=work_order_instance.object_id,
+                meter_reading=float(completion_meter_reading),
+                created_by=user
+            )
+            
+            print(f"Created new meter reading: {new_meter_reading.meter_reading} for asset {asset_id}")
+            return new_meter_reading
+            
+        except LocalBaseException:
+            # Re-raise validation errors
+            raise
+        except Exception as e:
+            print(f"Error creating meter reading from completion: {e}")
+            raise LocalBaseException(
+                exception=f"Failed to create meter reading: {str(e)}", 
+                status_code=500
+            )
     
 
 class WorkOrderChecklistBaseView(BaseAPIView):
