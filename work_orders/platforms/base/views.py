@@ -79,7 +79,7 @@ class WorkOrderBaseView(BaseAPIView):
                 raise LocalBaseException(exception="No meter readings found for this asset")
         
         # Create new meter reading if user provided completion_meter_reading
-        elif status == "Closed" and not needs_meter_reading and data.get('completion_meter_reading') is not None:
+        elif status == "Closed" and not needs_meter_reading and data.get('completion_meter_reading') is not None and str(data.get('completion_meter_reading')).strip() != '':
             print(f"User provided completion meter reading: {data.get('completion_meter_reading')}")
             self._create_meter_reading_from_completion(instance, data.get('completion_meter_reading'), params.get('user'))
         
@@ -179,15 +179,30 @@ class WorkOrderBaseView(BaseAPIView):
             from meter_readings.helpers import get_previous_meter_reading
             from assets.services import get_content_type_and_asset_id
             
+            # Validate completion_meter_reading is not empty and is numeric
+            if not completion_meter_reading or str(completion_meter_reading).strip() == '':
+                raise LocalBaseException(
+                    exception="Completion meter reading cannot be empty",
+                    status_code=400
+                )
+            
+            try:
+                completion_meter_reading_float = float(completion_meter_reading)
+            except (ValueError, TypeError):
+                raise LocalBaseException(
+                    exception=f"Completion meter reading '{completion_meter_reading}' is not a valid number",
+                    status_code=400
+                )
+            
             # Get previous meter reading for validation
             asset_id = str(work_order_instance.object_id)  # Use just the UUID
             previous_meter_reading = get_previous_meter_reading(asset_id)
             old_meter_reading = previous_meter_reading.meter_reading if previous_meter_reading else 0
             
             # Validate that new reading is larger than previous
-            if old_meter_reading >= float(completion_meter_reading):
+            if old_meter_reading >= completion_meter_reading_float:
                 raise LocalBaseException(
-                    exception=f'Completion meter reading ({completion_meter_reading}) must be greater than the last meter reading ({old_meter_reading})', 
+                    exception=f'Completion meter reading ({completion_meter_reading_float}) must be greater than the last meter reading ({old_meter_reading})', 
                     status_code=400
                 )
             
@@ -195,18 +210,18 @@ class WorkOrderBaseView(BaseAPIView):
             existing_meter_reading = MeterReading.objects.filter(
                 content_type=work_order_instance.content_type,
                 object_id=work_order_instance.object_id,
-                meter_reading=float(completion_meter_reading)
+                meter_reading=completion_meter_reading_float
             ).first()
             
             if existing_meter_reading:
-                print(f"Meter reading {completion_meter_reading} already exists for this asset")
+                print(f"Meter reading {completion_meter_reading_float} already exists for this asset")
                 return existing_meter_reading
             
             # Create new meter reading
             new_meter_reading = MeterReading.objects.create(
                 content_type=work_order_instance.content_type,
                 object_id=work_order_instance.object_id,
-                meter_reading=float(completion_meter_reading),
+                meter_reading=completion_meter_reading_float,
                 created_by=user
             )
             
