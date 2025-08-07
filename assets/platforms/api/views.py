@@ -45,3 +45,7 @@ class AssetMoveApiView(AssetBaseMoveView):
 
 class EquipmentWeightClassApiView(EquipmentWeightClassBaseView):
     serializer_class = EquipmentWeightClassApiSerializer
+
+
+class AssetOnlineStatusLogApiView(AssetOnlineStatusLogBaseView):
+    serializer_class = AssetOnlineStatusLogApiSerializer

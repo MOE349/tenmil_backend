@@ -25,5 +25,9 @@ class AssetMoveApiSerializer(AssetMoveBaseSerializer):
     pass
 
 
+class AssetOnlineStatusLogApiSerializer(AssetOnlineStatusLogBaseSerializer):
+    pass
+
+
 class EquipmentWeightClassApiSerializer(EquipmentWeightClassBaseSerializer):
     pass

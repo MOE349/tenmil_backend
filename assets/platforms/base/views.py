@@ -36,9 +36,27 @@ class AssetBaseView(FileAttachmentViewMixin, BaseAPIView):
         
         # Capture current location before update for move tracking
         instance = self.get_instance(pk)
+        previous_is_online = getattr(instance, 'is_online', None)
         current_location = instance.location if hasattr(instance, 'location') else None
         
-        instance, response = super().update(data, params,  pk, partial, return_instance=True, *args, **kwargs)    
+        instance, response = super().update(data, params,  pk, partial, return_instance=True, *args, **kwargs)
+
+        # Log online status changes done directly from Asset update (no work order context)
+        try:
+            if 'is_online' in data and previous_is_online is not None:
+                # After update, instance should reflect the new state
+                if getattr(instance, 'is_online', previous_is_online) != previous_is_online:
+                    AssetOnlineStatusLog.objects.create(
+                        content_type=ContentType.objects.get_for_model(instance.__class__),
+                        object_id=instance.id,
+                        user=params.get('user'),
+                        work_order=None,
+                        is_online=getattr(instance, 'is_online')
+                    )
+        except Exception as e:
+            # Do not block asset update on logging errors
+            print(f"Failed to log asset is_online change: {e}")
+
         if "location" in data and data["location"]:
             print(f"update location: {data['location']}")
             # Convert location ID to Location instance
@@ -100,5 +118,20 @@ class AssetBaseMoveView(BaseAPIView):
         except Exception as e:
             self.handle_exception(e)
 
+
+class AssetOnlineStatusLogBaseView(BaseAPIView):
+    serializer_class = AssetOnlineStatusLogBaseSerializer
+    model_class = AssetOnlineStatusLog
+    http_method_names = ["get"]
+
+    def get(self, request, *args, **kwargs):
+        try:
+            params = self.get_request_params(request)
+            # Support querying by asset via unified `asset` param (id string)
+            instances = self.get_queryset(params=params)
+            response = self.serializer_class(instances, many=True).data
+            return self.format_response(data=response, status_code=200)
+        except Exception as e:
+            return self.handle_exception(e)
 
     

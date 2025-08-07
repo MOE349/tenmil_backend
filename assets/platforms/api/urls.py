@@ -4,6 +4,7 @@ from assets.platforms.api.views import *
 
 urlpatterns = [
     path("movement-log", AssetMoveApiView.as_view(), name="assets-move"),
+    path("online-status-log", AssetOnlineStatusLogApiView.as_view(), name="assets-online-status-log"),
     path('assets', AssetApiView.as_view(), name='Assets'),
     path('assets/<str:pk>', AssetApiView.as_view(), name='Asset details'),
     path('assets/<str:pk>/set-image/', AssetApiView.as_view(), {'action': 'set_image'}, name='Asset set image'),

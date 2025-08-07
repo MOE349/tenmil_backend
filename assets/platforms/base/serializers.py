@@ -112,3 +112,22 @@ class AssetMoveBaseSerializer(BaseSerializer):
         response['to_location'] = LocationBaseSerializer(instance.to_location).data if instance.to_location else None
         response['moved_by'] = TenantUserBaseSerializer(instance.moved_by).data if instance.moved_by else None
         return response
+
+
+class AssetOnlineStatusLogBaseSerializer(BaseSerializer):
+    class Meta:
+        model = AssetOnlineStatusLog
+        fields = '__all__'
+
+    def mod_to_representation(self, instance):
+        response = super().mod_to_representation(instance)
+        # Expand related fields for convenience
+        response['user'] = TenantUserBaseSerializer(instance.user).data if instance.user else None
+        response['work_order'] = {
+            'id': str(instance.work_order.id),
+            'code': getattr(instance.work_order, 'code', None)
+        } if instance.work_order else None
+        response['asset'] = {
+            'id': str(instance.object_id)
+        }
+        return response
