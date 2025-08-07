@@ -8,6 +8,7 @@ from company.models import Location
 admin.site.register(Attachment)
 admin.site.register(EquipmentCategory)
 admin.site.register(AttachmentCategory)
+admin.site.register(AssetOnlineStatusLog)
 
 class AttachmentInline(admin.TabularInline):
     model = Attachment

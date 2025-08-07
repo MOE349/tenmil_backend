@@ -51,6 +51,52 @@ class WorkOrderBaseView(BaseAPIView):
         user_lang = params.pop('lang', 'en')
         instance = self.get_instance(pk)
 
+        # Handle asset online status update from payload key 'asset__is_online'
+        try:
+            asset_is_online = data.pop('asset__is_online', None)
+            if asset_is_online is not None:
+                # Coerce to boolean from common string/number representations
+                desired_is_online = None
+                if isinstance(asset_is_online, str):
+                    normalized = asset_is_online.strip().lower()
+                    if normalized in ["true", "1", "yes", "y", "on"]:
+                        desired_is_online = True
+                    elif normalized in ["false", "0", "no", "n", "off"]:
+                        desired_is_online = False
+                    else:
+                        raise LocalBaseException(exception="asset__is_online must be a boolean value", status_code=400)
+                elif isinstance(asset_is_online, (int, float)):
+                    desired_is_online = bool(asset_is_online)
+                elif isinstance(asset_is_online, bool):
+                    desired_is_online = asset_is_online
+                else:
+                    raise LocalBaseException(exception="asset__is_online must be a boolean value", status_code=400)
+
+                # Update related asset if available
+                try:
+                    related_asset = getattr(instance, 'asset', None)
+                    if related_asset is not None and hasattr(related_asset, 'is_online'):
+                        if related_asset.is_online != desired_is_online:
+                            related_asset.is_online = desired_is_online
+                            related_asset.save(update_fields=["is_online"]) 
+
+                            # Log the change
+                            from django.contrib.contenttypes.models import ContentType
+                            from assets.models import AssetOnlineStatusLog
+                            AssetOnlineStatusLog.objects.create(
+                                content_type=instance.content_type,
+                                object_id=instance.object_id,
+                                user=params.get('user'),
+                                work_order=instance,
+                                is_online=desired_is_online
+                            )
+                except Exception as e:
+                    # Do not block work order update on asset update failure
+                    print(f"Failed to update related asset is_online: {e}")
+        except LocalBaseException:
+            # Re-raise validation error for clear API feedback
+            raise
+
         if status == "Closed":
             # Check if completion meter reading is provided
             completion_reading = data.get('completion_meter_reading')

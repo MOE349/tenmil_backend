@@ -10,6 +10,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericRelation
 from tenant_users.models import TenantUser
 from projects.models import Project, AccountCode, JobCode, AssetStatus
+from work_orders.models import *
 
 class Category(BaseModel):
     name = models.CharField(_("Name"), max_length=255)
@@ -123,4 +124,36 @@ class AssetMovementLog(BaseModel):
     def __str__(self):
         return f"{self.asset} moved to {self.to_location} @ {self.timestamp}"
 
+
+
+class AssetOnlineStatusLog(BaseModel):
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.UUIDField()
+    asset = GenericForeignKey("content_type", "object_id")
+
+    user = models.ForeignKey(
+        TenantUser,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="asset_online_status_logs",
+        verbose_name=("Changed By")
+    )
+
+    # Optional reference to the work order that triggered the change
+    work_order = models.ForeignKey(
+        'work_orders.WorkOrder',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="asset_online_status_logs"
+    )
+
+    is_online = models.BooleanField()
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Asset {self.object_id} online={self.is_online}"
 
