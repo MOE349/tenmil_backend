@@ -131,4 +131,7 @@ class AssetOnlineStatusLogBaseSerializer(BaseSerializer):
         response['work_order'] = _WorkOrderBaseSerializer(instance.work_order).data if instance.work_order else None
         asset = get_object_by_content_type_and_id(instance.content_type.id, instance.object_id)
         response['asset'] = _get_asset_serializer(asset).data if asset else None
+        # Business rule: if no online_user yet, updated_at should be null in API response
+        if instance.online_user is None:
+            response['updated_at'] = None
         return response
