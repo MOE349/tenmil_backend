@@ -1,6 +1,9 @@
 from company.models import Location
 from company.platforms.base.serializers import LocationBaseSerializer
 from configurations.base_features.serializers.base_serializer import BaseSerializer
+from configurations.base_features.db.db_helpers import get_object_by_content_type_and_id
+from assets.services import get_asset_serializer
+from work_orders.platforms.base.serializers import WorkOrderBaseSerializer
 from configurations.mixins.file_attachment_mixins import FileAttachmentSerializerMixin
 from assets.models import *
 from projects.platforms.base.serializers import ProjectBaseSerializer, AccountCodeBaseSerializer, JobCodeBaseSerializer, AssetStatusBaseSerializer
@@ -124,11 +127,7 @@ class AssetOnlineStatusLogBaseSerializer(BaseSerializer):
         # Expand related fields for convenience
         response['offline_user'] = TenantUserBaseSerializer(instance.offline_user).data if instance.offline_user else None
         response['online_user'] = TenantUserBaseSerializer(instance.online_user).data if instance.online_user else None
-        response['work_order'] = {
-            'id': str(instance.work_order.id),
-            'code': getattr(instance.work_order, 'code', None)
-        } if instance.work_order else None
-        response['asset'] = {
-            'id': str(instance.object_id)
-        }
+        response['work_order'] = WorkOrderBaseSerializer(instance.work_order).data if instance.work_order else None
+        asset = get_object_by_content_type_and_id(instance.content_type.id, instance.object_id)
+        response['asset'] = get_asset_serializer(asset).data if asset else None
         return response
