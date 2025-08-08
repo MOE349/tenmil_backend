@@ -75,7 +75,14 @@ class WorkOrderBaseView(BaseAPIView):
 
                 # Update related asset/logs if available following business rules
                 try:
-                    related_asset = getattr(instance, 'asset', None)
+                    # Resolve asset robustly (prefer explicit helper over GFK to avoid lazy/GFK edge cases)
+                    from configurations.base_features.db.db_helpers import get_object_by_content_type_and_id
+                    related_asset = get_object_by_content_type_and_id(instance.content_type.id, instance.object_id)
+                    if not related_asset:
+                        # Fallback to GFK
+                        related_asset = getattr(instance, 'asset', None)
+                    print(f"Resolved asset: {related_asset} (has is_online: {hasattr(related_asset, 'is_online')})")
+
                     if related_asset is not None and hasattr(related_asset, 'is_online'):
                         current_is_online = bool(related_asset.is_online)
                         print(f"current_is_online: {current_is_online}, desired_is_online: {desired_is_online}, asset_id={getattr(related_asset, 'id', None)}")
