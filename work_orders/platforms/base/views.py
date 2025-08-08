@@ -54,7 +54,7 @@ class WorkOrderBaseView(BaseAPIView):
         # Handle asset online status update from payload key 'asset__is_online'
         try:
             asset_is_online = data.pop('asset__is_online', None)
-            print(f"asset_is_online: {asset_is_online}")
+            print(f"asset__is_online payload: {asset_is_online}")
             if asset_is_online is not None:
                 # Coerce to boolean from common string/number representations
                 desired_is_online = None
@@ -78,8 +78,9 @@ class WorkOrderBaseView(BaseAPIView):
                     related_asset = getattr(instance, 'asset', None)
                     if related_asset is not None and hasattr(related_asset, 'is_online'):
                         current_is_online = bool(related_asset.is_online)
+                        print(f"current_is_online: {current_is_online}, desired_is_online: {desired_is_online}, asset_id={getattr(related_asset, 'id', None)}")
                         if desired_is_online == current_is_online:
-                            pass  # no change
+                            print("No change to asset.is_online")
                         elif desired_is_online is False and current_is_online is True:
                             # Online -> Offline from Work Order: create a new log with offline_user and set work_order
                             from assets.models import AssetOnlineStatusLog
@@ -91,6 +92,13 @@ class WorkOrderBaseView(BaseAPIView):
                             )
                             related_asset.is_online = False
                             related_asset.save(update_fields=["is_online"]) 
+                            print(f"Asset set offline and saved. New is_online={related_asset.is_online}")
+                            try:
+                                # Double-check from DB
+                                refreshed = related_asset.__class__.objects.get(pk=related_asset.pk)
+                                print(f"Refreshed is_online from DB: {refreshed.is_online}")
+                            except Exception as _e:
+                                pass
                         elif desired_is_online is True and current_is_online is False:
                             # Offline -> Online from Work Order: only if latest log for THIS work order has no online_user
                             from assets.models import AssetOnlineStatusLog
@@ -104,9 +112,10 @@ class WorkOrderBaseView(BaseAPIView):
                                 latest_log_for_wo.save(update_fields=["online_user", "updated_at"])                                
                                 related_asset.is_online = True
                                 related_asset.save(update_fields=["is_online"]) 
+                                print("Asset set online and saved from WO flow")
                             else:
                                 # If no matching log or it belongs to another WO or already closed, ignore
-                                pass
+                                print("No matching WO log to bring asset online; skipping")
                 except Exception as e:
                     # Do not block work order update on asset update failure
                     print(f"Failed to update related asset is_online: {e}")
