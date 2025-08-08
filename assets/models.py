@@ -131,16 +131,23 @@ class AssetOnlineStatusLog(BaseModel):
     object_id = models.UUIDField()
     asset = GenericForeignKey("content_type", "object_id")
 
-    user = models.ForeignKey(
+    offline_user = models.ForeignKey(
         TenantUser,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
-        related_name="asset_online_status_logs",
-        verbose_name=("Changed By")
+        related_name="asset_offline_logs",
     )
 
-    # Optional reference to the work order that triggered the change
+    online_user = models.ForeignKey(
+        TenantUser,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="asset_online_logs",
+    )
+
+    # Only set when the asset becomes offline via Work Order action
     work_order = models.ForeignKey(
         'work_orders.WorkOrder',
         null=True,
@@ -149,11 +156,9 @@ class AssetOnlineStatusLog(BaseModel):
         related_name="asset_online_status_logs"
     )
 
-    is_online = models.BooleanField()
-
     class Meta:
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"Asset {self.object_id} online={self.is_online}"
+        return f"Asset {self.object_id} offline_by={getattr(self.offline_user, 'id', None)} online_by={getattr(self.online_user, 'id', None)}"
 

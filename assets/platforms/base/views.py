@@ -44,15 +44,27 @@ class AssetBaseView(FileAttachmentViewMixin, BaseAPIView):
         # Log online status changes done directly from Asset update (no work order context)
         try:
             if 'is_online' in data and previous_is_online is not None:
-                # After update, instance should reflect the new state
-                if getattr(instance, 'is_online', previous_is_online) != previous_is_online:
-                    AssetOnlineStatusLog.objects.create(
-                        content_type=ContentType.objects.get_for_model(instance.__class__),
-                        object_id=instance.id,
-                        user=params.get('user'),
-                        work_order=None,
-                        is_online=getattr(instance, 'is_online')
-                    )
+                new_state = getattr(instance, 'is_online', previous_is_online)
+                if new_state != previous_is_online:
+                    from assets.models import AssetOnlineStatusLog
+                    # Rules:
+                    # - If asset goes online -> do not create a new log; if it was offline and has logs, fill the latest log's online_user if empty.
+                    # - If asset goes offline -> create a new log with offline_user (work_order is null for asset view changes)
+                    if previous_is_online is False and new_state is True:
+                        latest_log = AssetOnlineStatusLog.objects.filter(
+                            content_type=ContentType.objects.get_for_model(instance.__class__),
+                            object_id=instance.id
+                        ).order_by('-created_at').first()
+                        if latest_log and latest_log.online_user is None:
+                            latest_log.online_user = params.get('user')
+                            latest_log.save(update_fields=["online_user", "updated_at"])    
+                    elif previous_is_online is True and new_state is False:
+                        AssetOnlineStatusLog.objects.create(
+                            content_type=ContentType.objects.get_for_model(instance.__class__),
+                            object_id=instance.id,
+                            offline_user=params.get('user'),
+                            work_order=None
+                        )
         except Exception as e:
             # Do not block asset update on logging errors
             print(f"Failed to log asset is_online change: {e}")

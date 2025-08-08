@@ -122,7 +122,8 @@ class AssetOnlineStatusLogBaseSerializer(BaseSerializer):
     def mod_to_representation(self, instance):
         response = super().mod_to_representation(instance)
         # Expand related fields for convenience
-        response['user'] = TenantUserBaseSerializer(instance.user).data if instance.user else None
+        response['offline_user'] = TenantUserBaseSerializer(instance.offline_user).data if instance.offline_user else None
+        response['online_user'] = TenantUserBaseSerializer(instance.online_user).data if instance.online_user else None
         response['work_order'] = {
             'id': str(instance.work_order.id),
             'code': getattr(instance.work_order, 'code', None)

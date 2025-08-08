@@ -72,24 +72,40 @@ class WorkOrderBaseView(BaseAPIView):
                 else:
                     raise LocalBaseException(exception="asset__is_online must be a boolean value", status_code=400)
 
-                # Update related asset if available
+                # Update related asset/logs if available following business rules
                 try:
                     related_asset = getattr(instance, 'asset', None)
                     if related_asset is not None and hasattr(related_asset, 'is_online'):
-                        if related_asset.is_online != desired_is_online:
-                            related_asset.is_online = desired_is_online
-                            related_asset.save(update_fields=["is_online"]) 
-
-                            # Log the change
-                            from django.contrib.contenttypes.models import ContentType
+                        current_is_online = bool(related_asset.is_online)
+                        if desired_is_online == current_is_online:
+                            pass  # no change
+                        elif desired_is_online is False and current_is_online is True:
+                            # Online -> Offline from Work Order: create a new log with offline_user and set work_order
                             from assets.models import AssetOnlineStatusLog
                             AssetOnlineStatusLog.objects.create(
                                 content_type=instance.content_type,
                                 object_id=instance.object_id,
-                                user=params.get('user'),
+                                offline_user=params.get('user'),
                                 work_order=instance,
-                                is_online=desired_is_online
                             )
+                            related_asset.is_online = False
+                            related_asset.save(update_fields=["is_online"]) 
+                        elif desired_is_online is True and current_is_online is False:
+                            # Offline -> Online from Work Order: only if latest log for THIS work order has no online_user
+                            from assets.models import AssetOnlineStatusLog
+                            latest_log_for_wo = AssetOnlineStatusLog.objects.filter(
+                                content_type=instance.content_type,
+                                object_id=instance.object_id,
+                                work_order=instance
+                            ).order_by('-created_at').first()
+                            if latest_log_for_wo and latest_log_for_wo.online_user is None:
+                                latest_log_for_wo.online_user = params.get('user')
+                                latest_log_for_wo.save(update_fields=["online_user", "updated_at"])                                
+                                related_asset.is_online = True
+                                related_asset.save(update_fields=["is_online"]) 
+                            else:
+                                # If no matching log or it belongs to another WO or already closed, ignore
+                                pass
                 except Exception as e:
                     # Do not block work order update on asset update failure
                     print(f"Failed to update related asset is_online: {e}")
