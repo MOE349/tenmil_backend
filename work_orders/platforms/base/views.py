@@ -54,6 +54,7 @@ class WorkOrderBaseView(BaseAPIView):
         # Handle asset online status update from payload key 'asset__is_online'
         try:
             asset_is_online = data.pop('asset__is_online', None)
+            print(f"asset_is_online: {asset_is_online}")
             if asset_is_online is not None:
                 # Coerce to boolean from common string/number representations
                 desired_is_online = None
