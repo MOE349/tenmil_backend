@@ -18,13 +18,18 @@ def create_default_status_names(sender, **kwargs):
 
 def create_default_maint_types(sender, **kwargs):
     try:
-        if MaintenanceType.objects.count() == 1:
-            for control in HighLevelMaintenanceType.objects.all():
-                MaintenanceType.objects.get_or_create(
-                    name=control.name,
-                    control=control,
-                    is_system_level=True
-                )
+        print(f"Creating default maintenance types: {HighLevelMaintenanceType.objects.count()}, {MaintenanceType.objects.count()}")
+        if MaintenanceType.objects.count() < HighLevelMaintenanceType.objects.count():
+            for hlmtype in HighLevelMaintenanceType.objects.all():
+                try:
+                    MaintenanceType.objects.get_or_create(
+                        name=hlmtype.name,
+                        hlmtype=hlmtype,
+                        is_system_level=True
+                    )
+                    print(f"Created maintenance type: {hlmtype.name}")
+                except:
+                    continue
     except (ProgrammingError, OperationalError):
         # Tables might not exist yet during first migration or test runs
         pass

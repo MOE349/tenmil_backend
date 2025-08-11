@@ -30,6 +30,8 @@ class WorkOrderBaseSerializer(BaseSerializer):
         response['status'] = WorkOrderStatusNamesBaseSerializer(instance.status).data
         if instance.maint_type:
             response['maint_type'] = MaintenanceTypeBaseSerializer(instance.maint_type).data
+        if instance.priority:
+            response['priority'] = PriorityBaseSerializer(instance.priority).data
         return response
 
 
@@ -102,6 +104,12 @@ class MaintenanceTypeBaseSerializer(BaseSerializer):
         response = super().to_representation(instance)
         response['hlmtype'] = {"name": instance.hlmtype.name, "id": instance.hlmtype.id}
         return response
+
+
+class PriorityBaseSerializer(BaseSerializer):
+    class Meta:
+        model = Priority
+        fields = '__all__'
 
 class WorkOrderStatusControlsBaseSerializer(BaseSerializer):
     class Meta:

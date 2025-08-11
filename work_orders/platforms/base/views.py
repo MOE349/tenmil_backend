@@ -381,6 +381,10 @@ class MaintenanceTypeBaseView(SystemLevelView):
     model_class = MaintenanceType
     
 
+class PriorityBaseView(SystemLevelView):
+    serializer_class = PriorityBaseSerializer
+    model_class = Priority
+
 class WorkOrderCompletionNoteBaseView(BaseAPIView):
     serializer_class = WorkOrderCompletionNoteBaseSerializer
     model_class = WorkOrderCompletionNote

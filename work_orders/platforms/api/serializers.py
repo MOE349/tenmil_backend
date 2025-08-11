@@ -34,6 +34,10 @@ class MaintenanceTypeApiSerializer(MaintenanceTypeBaseSerializer):
     pass
 
 
+class PriorityApiSerializer(PriorityBaseSerializer):
+    pass
+
+
 class HighLevelMaintenanceTypeApiSerializer(HighLevelMaintenanceTypeBaseSerializer):
     pass
 

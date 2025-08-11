@@ -23,6 +23,15 @@ class MaintenanceType(BaseModel):
         verbose_name_plural = "Maintenance Types"
 
 
+class Priority(BaseModel):
+    name = models.CharField(max_length=50, unique=True)
+    is_system_level = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "Priority"
+        verbose_name_plural = "Priorities"
+
+
 class WorkOrder(BaseModel):
     code = models.CharField(max_length=50, unique=True, null=True, blank=True)
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
@@ -30,7 +39,7 @@ class WorkOrder(BaseModel):
     asset = GenericForeignKey("content_type", "object_id")
     status = models.ForeignKey(WorkOrderStatusNames, on_delete=models.PROTECT)
     maint_type = models.ForeignKey(MaintenanceType, on_delete=models.PROTECT, null=True, blank=True)
-    priority = models.CharField(max_length=50,null=True, blank=True)
+    priority = models.ForeignKey(Priority, on_delete=models.PROTECT, null=True, blank=True)
     suggested_start_date = models.DateField(null=True, blank=True)
     completion_end_date = models.DateField(null=True, blank=True)
     suggested_completion_date = models.DateField(null=True, blank=True)

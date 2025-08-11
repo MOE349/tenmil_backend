@@ -36,4 +36,7 @@ path('maintenance-types/<str:pk>', MaintenanceTypeApiView.as_view(), name='Maint
 path('high-level-maintenance-types', HighLevelMaintenanceTypeApiView.as_view(), name='HighLevelMaintenanceType'),
 path('high-level-maintenance-types/<str:pk>', HighLevelMaintenanceTypeApiView.as_view(), name='HighLevelMaintenanceTypeDetails'),
 
+path('priorities', PriorityApiView.as_view(), name='Priority'),
+path('priorities/<str:pk>', PriorityApiView.as_view(), name='PriorityDetails'),
+ 
 ]

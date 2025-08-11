@@ -49,3 +49,6 @@ class MaintenanceTypeApiView(MaintenanceTypeBaseView):
 
 class HighLevelMaintenanceTypeApiView(HighLevelMaintenanceTypeBaseView):
     serializer_class = HighLevelMaintenanceTypeApiSerializer
+
+class PriorityApiView(PriorityBaseView):
+    serializer_class = PriorityApiSerializer
