@@ -19,7 +19,7 @@ class Domain(DomainMixin, BaseModel):
     def __str__(self):
         return self.domain
 
-class WorkOrderStatusControls(BaseModel):
+class BaseStatusControls(BaseModel):
     key = models.SlugField(max_length=50, unique=True)  # e.g., "in_progress"
     name = models.CharField(max_length=100)             # e.g., "In Progress"
     color = models.CharField(max_length=20, null=True, blank=True)  # optional UI color
@@ -28,3 +28,14 @@ class WorkOrderStatusControls(BaseModel):
     
     def __str__(self):
         return self.name
+    
+    class Meta:
+        abstract = True
+
+class WorkOrderStatusControls(BaseStatusControls):
+    pass
+
+class HighLevelMaintenanceType(BaseStatusControls):
+    pass
+
+    

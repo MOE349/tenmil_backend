@@ -44,3 +44,8 @@ class WorkOrderCompletionApiView(WorkOrderCompletionView):
     pass
 
 
+class MaintenanceTypeApiView(MaintenanceTypeBaseView):
+    serializer_class = MaintenanceTypeApiSerializer
+
+class HighLevelMaintenanceTypeApiView(HighLevelMaintenanceTypeBaseView):
+    serializer_class = HighLevelMaintenanceTypeApiSerializer

@@ -30,3 +30,10 @@ class WorkOrderCompletionNoteApiSerializer(WorkOrderCompletionNoteBaseSerializer
     pass
 
 
+class MaintenanceTypeApiSerializer(MaintenanceTypeBaseSerializer):
+    pass
+
+
+class HighLevelMaintenanceTypeApiSerializer(HighLevelMaintenanceTypeBaseSerializer):
+    pass
+

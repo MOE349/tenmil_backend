@@ -1,5 +1,7 @@
 from configurations.base_features.exceptions.base_exceptions import LocalBaseException
 from configurations.base_features.views.base_api_view import BaseAPIView
+from configurations.base_features.views.system_level_view import SystemLevelView
+from core.models import HighLevelMaintenanceType
 from meter_readings.models import MeterReading
 from work_orders.models import *
 from work_orders.platforms.base.serializers import *
@@ -357,23 +359,26 @@ class WorkOrderMiscCostBaseView(BaseAPIView):
         return self.format_response(data=response, status_code=200)
 
 
-class WorkOrderStatusNamesBaseView(BaseAPIView):
+class WorkOrderStatusControlsBaseView(BaseAPIView):
+    serializer_class = WorkOrderStatusControlsBaseSerializer
+    model_class = WorkOrderStatusControls
+    http_method_names = ['get']
+
+
+class HighLevelMaintenanceTypeBaseView(BaseAPIView):
+    serializer_class = HighLevelMaintenanceTypeBaseSerializer
+    model_class = HighLevelMaintenanceType
+    http_method_names = ['get']
+
+
+class WorkOrderStatusNamesBaseView(SystemLevelView):
     serializer_class = WorkOrderStatusNamesBaseSerializer
     model_class = WorkOrderStatusNames
 
 
-class WorkOrderStatusControlsBaseView(BaseAPIView):
-    serializer_class = WorkOrderStatusControlsBaseSerializer
-    model_class = WorkOrderStatusControls
-
-    def destroy(self, request, pk, *args, **kwargs):
-        params = self.get_request_params(request)
-        user_lang = params.pop('lang', 'en')
-        instance = self.get_instance(pk)
-        if instance.is_system_level:
-            raise LocalBaseException(exception="System level status cannot be deleted")
-        instance.delete()
-        return self.format_response(data={}, status_code=204)
+class MaintenanceTypeBaseView(SystemLevelView):
+    serializer_class = MaintenanceTypeBaseSerializer
+    model_class = MaintenanceType
     
 
 class WorkOrderCompletionNoteBaseView(BaseAPIView):

@@ -9,7 +9,6 @@ class DashboardApiSerializer(Serializer):
         attachments =  Attachment.objects.all().order_by("-created_at")
         work_orders = WorkOrder.objects.all().order_by("-created_at")
         work_order_logs = WorkOrderLog.objects.all().order_by("-created_at")[:10]
-        work_order_checklist = WorkOrderChecklist.objects.filter(assigned_to=None)
         number = 1
         for wo in work_orders:
             if not wo.code:
@@ -30,7 +29,6 @@ class DashboardApiSerializer(Serializer):
             for wo in work_orders.order_by("status__control__name")[:8]
             ]
         
-        response['unassigned_taskes_count'] = work_order_checklist.count()
         response['upcomming_maintenance'] = ["Under constraction"]
         response['recent_user_activity'] = [f"{wol.user.name.title()} {wol.log_type.lower()} {wol.work_order.code}" for wol in work_order_logs]
 

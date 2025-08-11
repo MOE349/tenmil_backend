@@ -29,4 +29,11 @@ path('work_order/<str:pk>/import-backlogs', WorkOrderImportBacklogsApiView.as_vi
 # Work order completion endpoint
 path('work_order/<str:pk>/complete', WorkOrderCompletionApiView.as_view(), name='WorkOrderCompletion'),
 
+# Maintenance Types
+path('maintenance-types', MaintenanceTypeApiView.as_view(), name='MaintenanceType'),
+path('maintenance-types/<str:pk>', MaintenanceTypeApiView.as_view(), name='MaintenanceTypeDetails'),
+
+path('high-level-maintenance-types', HighLevelMaintenanceTypeApiView.as_view(), name='HighLevelMaintenanceType'),
+path('high-level-maintenance-types/<str:pk>', HighLevelMaintenanceTypeApiView.as_view(), name='HighLevelMaintenanceTypeDetails'),
+
 ]

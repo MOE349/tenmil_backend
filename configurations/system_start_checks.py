@@ -1,7 +1,7 @@
 
 
 from django.conf import settings
-from core.models import Domain, Tenant, WorkOrderStatusControls
+from core.models import Domain, HighLevelMaintenanceType, Tenant, WorkOrderStatusControls
 from django_tenants.utils import schema_context
 
 from tenant_users.models import TenantUser
@@ -74,6 +74,39 @@ def work_order_status_actions_check():
     for action in default_actions:
         WorkOrderStatusControls.objects.get_or_create(**action)
 
+def scheduled_maintenance_actions_check():
+    """
+        all scheduled maintenance actions should be added here
+    """
+    default_actions = [
+        {
+            "key": "pm",
+            "name": "PM",
+            "color": "#4caf50",
+            "order": 1
+        },
+        {
+            "key": "wear",
+            "name": "Wear",
+            "color": "#f44336",
+            "order": 2
+        },
+        {
+            "key": "damage",
+            "name": "Damage",
+            "color": "#9e9e9e",
+            "order": 3
+        },
+        {
+            "key": "repair",
+            "name": "Repair",
+            "color": "#2196f3",
+            "order": 4
+        }
+    ]
+    for action in default_actions:
+        HighLevelMaintenanceType.objects.get_or_create(**action)
+
 def ittiration_cycle_checklist():
     """
     """
@@ -100,6 +133,7 @@ def system_start_checks():
     try:
         public_tenant_check()
         work_order_status_actions_check()
+        scheduled_maintenance_actions_check()
         ittiration_cycle_checklist()
         system_user()
         print("system_start_checks Succeed")

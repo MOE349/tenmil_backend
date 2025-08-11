@@ -1,7 +1,8 @@
 from assets.services import get_asset_serializer
 from configurations.base_features.db.db_helpers import get_object_by_content_type_and_id
 from configurations.base_features.serializers.base_serializer import BaseSerializer
-from core.models import WorkOrderStatusControls
+from configurations.base_features.exceptions.base_exceptions import LocalBaseException
+from core.models import HighLevelMaintenanceType, WorkOrderStatusControls
 from tenant_users.platforms.base.serializers import TenantUserBaseSerializer
 from work_orders.models import *
 from rest_framework import serializers
@@ -27,6 +28,8 @@ class WorkOrderBaseSerializer(BaseSerializer):
         asset = get_object_by_content_type_and_id(instance.content_type.id, instance.object_id)
         response['asset'] = get_asset_serializer(asset).data
         response['status'] = WorkOrderStatusNamesBaseSerializer(instance.status).data
+        if instance.maint_type:
+            response['maint_type'] = MaintenanceTypeBaseSerializer(instance.maint_type).data
         return response
 
 
@@ -84,9 +87,25 @@ class WorkOrderStatusNamesBaseSerializer(BaseSerializer):
         response['control'] = {"name": instance.control.name, "id": instance.control.id}
         return response
 
+
+class MaintenanceTypeBaseSerializer(BaseSerializer):
+    class Meta:
+        model = MaintenanceType
+        fields = '__all__'
+
+    def mod_update(self, instance, validated_data):
+        if instance.is_system_level:
+            raise LocalBaseException(exception="System level maintenance type cannot be updated", status_code=400)
+        return super().mod_update(instance, validated_data)
+
 class WorkOrderStatusControlsBaseSerializer(BaseSerializer):
     class Meta:
         model = WorkOrderStatusControls
+        fields = '__all__'
+
+class HighLevelMaintenanceTypeBaseSerializer(BaseSerializer):
+    class Meta:
+        model = HighLevelMaintenanceType
         fields = '__all__'
 
 class WorkOrderCompletionNoteBaseSerializer(BaseSerializer):

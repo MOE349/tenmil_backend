@@ -13,13 +13,23 @@ class WorkOrderStatusNames(BaseModel):
     is_system_level = models.BooleanField(default=False)
 
 
+class MaintenanceType(BaseModel):
+    name = models.CharField(max_length=50, unique=True)
+    hlmtype = models.ForeignKey("core.HighLevelMaintenanceType", on_delete=models.CASCADE)
+    is_system_level = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "Maintenance Type"
+        verbose_name_plural = "Maintenance Types"
+
+
 class WorkOrder(BaseModel):
     code = models.CharField(max_length=50, unique=True, null=True, blank=True)
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     object_id = models.UUIDField()
     asset = GenericForeignKey("content_type", "object_id")
     status = models.ForeignKey(WorkOrderStatusNames, on_delete=models.PROTECT)
-    maint_type = models.CharField(max_length=50,null=True, blank=True)
+    maint_type = models.ForeignKey(MaintenanceType, on_delete=models.PROTECT, null=True, blank=True)
     priority = models.CharField(max_length=50,null=True, blank=True)
     suggested_start_date = models.DateField(null=True, blank=True)
     completion_end_date = models.DateField(null=True, blank=True)
