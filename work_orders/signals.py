@@ -18,7 +18,7 @@ def create_default_status_names(sender, **kwargs):
 
 def create_default_maint_types(sender, **kwargs):
     try:
-        if MaintenanceType.objects.count() == 0:
+        if MaintenanceType.objects.count() == 1:
             for control in HighLevelMaintenanceType.objects.all():
                 MaintenanceType.objects.get_or_create(
                     name=control.name,
