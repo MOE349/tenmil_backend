@@ -97,6 +97,11 @@ class MaintenanceTypeBaseSerializer(BaseSerializer):
         if instance.is_system_level:
             raise LocalBaseException(exception="System level maintenance type cannot be updated", status_code=400)
         return super().mod_update(instance, validated_data)
+    
+    def to_representation(self, instance):
+        response = super().to_representation(instance)
+        response['hlmtype'] = {"name": instance.hlmtype.name, "id": instance.hlmtype.id}
+        return response
 
 class WorkOrderStatusControlsBaseSerializer(BaseSerializer):
     class Meta:
@@ -107,6 +112,8 @@ class HighLevelMaintenanceTypeBaseSerializer(BaseSerializer):
     class Meta:
         model = HighLevelMaintenanceType
         fields = '__all__'
+
+    
 
 class WorkOrderCompletionNoteBaseSerializer(BaseSerializer):
     class Meta:
