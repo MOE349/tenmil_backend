@@ -23,7 +23,7 @@ class CalendarPMService:
         ).exclude(
             # Exclude if already has open PM work order
             object_id__in=WorkOrder.objects.filter(
-                maint_type='PM',
+                is_pm_generated=True,  # Use is_pm_generated flag instead of maint_type
                 is_closed=False
             ).values_list('object_id', flat=True)
         )
@@ -107,7 +107,7 @@ class CalendarPMService:
                 content_type=pm_settings.content_type,
                 object_id=pm_settings.object_id,
                 status=active_status,
-                maint_type='PM',
+                maint_type=pm_settings.maint_type,  # Use maint_type from PMSettings
                 priority='medium',
                 description=description,
                 is_pm_generated=True,

@@ -75,7 +75,7 @@ def handle_work_order_completion(sender, instance, **kwargs):
     Handle work order completion and update PM settings
     """
     # Check if this is a PM work order that was just completed
-    if instance.maint_type == 'PM' and instance.is_closed and not instance.is_reopened:
+    if instance.is_pm_generated and instance.is_closed and not instance.is_reopened:
         logger.info(f"PM work order {instance.id} completed")
         
         # Find the PM trigger to determine PM type

@@ -311,7 +311,7 @@ class PMAutomationService:
             content_type=pm_settings.content_type,
             object_id=pm_settings.object_id,
             status=active_status,
-            maint_type='PM',
+            maint_type=pm_settings.maint_type,  # Use maint_type from PMSettings
             priority='medium',
             description=description,
             is_pm_generated=True,

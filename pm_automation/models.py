@@ -3,7 +3,7 @@ from django.utils.translation import gettext_lazy as _
 from configurations.base_features.db.base_model import BaseModel
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
-from work_orders.models import WorkOrderChecklist
+from work_orders.models import WorkOrderChecklist, MaintenanceType
 import logging
 
 logger = logging.getLogger(__name__)
@@ -94,6 +94,23 @@ class PMSettings(BaseModel):
         _("Calendar Lead Time (Days)"),
         default=0,
         help_text=_("Create work order X days before due date (calendar PMs only)")
+    )
+    
+    # NEW: Maintenance type relationship
+    maint_type = models.ForeignKey(
+        MaintenanceType,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name=_("Maintenance Type"),
+        help_text=_("Type of maintenance for this PM")
+    )
+    
+    # NEW: Fixed trigger behavior
+    is_fixed_trigger = models.BooleanField(
+        _("Fixed Trigger"),
+        default=False,
+        help_text=_("If True, next trigger = old trigger + PM interval regardless of completion meter reading. If False, uses current floating logic.")
     )
     
     class Meta:
@@ -259,7 +276,7 @@ class PMSettings(BaseModel):
         return self.next_trigger_value
     
     def update_next_trigger(self, closing_value):
-        """Update next trigger after work order completion - Floating system"""
+        """Update next trigger after work order completion - Floating or Fixed system"""
         # NOTE: Don't increment trigger_counter here - it's already incremented during work order creation
         
         # Calculate the next trigger interval based on what iteration will trigger next
@@ -274,8 +291,14 @@ class PMSettings(BaseModel):
                 next_trigger_interval = iteration.interval_value
                 break
         
-        # Floating trigger: completion_meter_reading + next_trigger_interval
-        self.next_trigger_value = closing_value + next_trigger_interval
+        if self.is_fixed_trigger:
+            # Fixed trigger: old trigger + next_trigger_interval (regardless of completion meter reading)
+            old_trigger = self.next_trigger_value or (self.start_threshold_value + self.interval_value)
+            self.next_trigger_value = old_trigger + next_trigger_interval
+        else:
+            # Floating trigger: completion_meter_reading + next_trigger_interval
+            self.next_trigger_value = closing_value + next_trigger_interval
+        
         self.last_handled_trigger = closing_value
         self.save()
     

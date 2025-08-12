@@ -426,6 +426,7 @@ class ManualPMGenerationBaseView(BaseAPIView):
             content_type=pm_settings.content_type,
             object_id=pm_settings.object_id,
             status=active_status,
+            maint_type=pm_settings.maint_type,  # Use maint_type from PMSettings
             description=description,
             is_pm_generated=True,
             trigger_meter_reading=trigger_meter_reading
