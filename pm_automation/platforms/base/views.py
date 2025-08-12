@@ -234,9 +234,8 @@ class ManualPMGenerationBaseView(BaseAPIView):
         open_pm_work_orders = WorkOrder.objects.filter(
             content_type=pm_settings.content_type,
             object_id=pm_settings.object_id,
-            maint_type='PM',
             is_closed=False,
-            is_pm_generated=True
+            is_pm_generated=True  # Use is_pm_generated flag instead of maint_type
         ).count()
         
         if open_pm_work_orders > 0:

@@ -393,7 +393,7 @@ class PMAutomationService:
             pm_work_orders = WorkOrder.objects.filter(
                 content_type=pm_settings.content_type,
                 object_id=pm_settings.object_id,
-                maint_type='PM',
+                is_pm_generated=True,  # Use is_pm_generated flag instead of maint_type
                 is_closed=False
             )
             open_work_orders = open_work_orders.union(pm_work_orders)
