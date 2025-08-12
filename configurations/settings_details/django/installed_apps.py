@@ -34,4 +34,5 @@ TENANT_APPS = [
     "projects.apps.ProjectsConfig",
     "asset_backlogs.apps.AssetBacklogsConfig",
     "file_uploads.apps.FileUploadsConfig",
+    "components.apps.ComponentsConfig",
 ]

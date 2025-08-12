@@ -26,6 +26,7 @@ api_urls = [
     path('projects/', include('projects.platforms.api.urls')),
     path('asset-backlogs/', include('asset_backlogs.platforms.api.urls')),
     path('file-uploads/', include('file_uploads.platforms.api.urls')),
+    path('components/', include('components.platforms.api.urls')),
     path('tasks/', include('configurations.task_urls')),
 ]
 # dashboard_urls = [
