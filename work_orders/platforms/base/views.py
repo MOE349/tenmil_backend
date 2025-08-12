@@ -19,7 +19,7 @@ class WorkOrderBaseView(BaseAPIView):
         data['trigger_meter_reading'] = MeterReading.objects.filter(
             content_type=data.get('content_type'),
             object_id=data.get('object_id')
-        ).order_by('-created_at').first().meter_reading
+        ).order_by('-created_at').first().meter_reading or None
         return data
     
     # def validate_post_data(self, data):

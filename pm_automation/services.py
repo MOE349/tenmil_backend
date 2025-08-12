@@ -304,9 +304,12 @@ class PMAutomationService:
             description = f"{iteration_value} {unit_formatted} PM"
         
         # Create work order (do NOT set created_by)
-        trigger_meter_reading = MeterReading.objects.filter(
-            object_id=asset.id
-        ).order_by('-created_at').first().meter_reading
+        try:
+            trigger_meter_reading = MeterReading.objects.filter(
+                object_id=asset.id
+            ).order_by('-created_at').first().meter_reading
+        except:
+            trigger_meter_reading = None
         work_order = WorkOrder.objects.create(
             content_type=pm_settings.content_type,
             object_id=pm_settings.object_id,
