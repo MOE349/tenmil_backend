@@ -43,7 +43,6 @@ class WorkOrderChecklistTestCase(APITestCase):
             object_id='12345678-1234-1234-1234-123456789012',
             status=self.status,
             maint_type='PM',
-            priority='medium',
             description='Test work order'
         )
         
@@ -288,7 +287,6 @@ class WorkOrderNestedLookupTestCase(TestCase):
             object_id='12345678-1234-1234-1234-123456789012',
             status=self.active_status,
             maint_type='PM',
-            priority='medium',
             description='Active work order'
         )
         
