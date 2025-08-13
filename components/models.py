@@ -8,7 +8,8 @@ from work_orders.models import WorkOrder
 class Component(BaseModel):
     name = models.CharField(max_length=255)
     initial_meter_reading = models.IntegerField(default=0)
-    work_order = models.ForeignKey(WorkOrder, on_delete=models.CASCADE, related_name='components')
+    work_order = models.ForeignKey(WorkOrder, on_delete=models.SET_NULL, related_name='components', null=True, blank=True)
+    changed_at_meter_reading = models.IntegerField(default=0)
     
     # Generic foreign key to asset (Equipment or Attachment)
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
@@ -23,7 +24,7 @@ class Component(BaseModel):
     is_warranty_expired = models.BooleanField(default=False)
 
     def __str__(self):
-        return f"{self.name} - {self.work_order}"
+        return f"{self.name} - {self.work_order}" if self.work_order else f"{self.name} - No Work Order"
     
     def save(self, *args, **kwargs):
         # Check warranty expiration before saving
@@ -65,7 +66,14 @@ class Component(BaseModel):
             wo_completion_reading = self.work_order.completion_meter_reading
             
         # Calculate: asset latest meter reading - work order completion meter reading (if closed) or 0 + initial meter reading
-        component_meter_reading = asset_latest_reading - wo_completion_reading + self.initial_meter_reading
+        if wo_completion_reading == 0 and self.changed_at_meter_reading == 0:
+            component_meter_reading = self.initial_meter_reading
+
+        elif wo_completion_reading == 0 and self.changed_at_meter_reading > 0:
+            component_meter_reading = asset_latest_reading - self.changed_at_meter_reading + self.initial_meter_reading
+
+        else:
+            component_meter_reading = asset_latest_reading - wo_completion_reading + self.initial_meter_reading
         
         return component_meter_reading
 
