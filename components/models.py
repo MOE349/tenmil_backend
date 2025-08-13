@@ -62,7 +62,7 @@ class Component(BaseModel):
         
         # Get work order completion meter reading if work order is closed
         wo_completion_reading = 0
-        if self.work_order.is_closed and self.work_order.completion_meter_reading:
+        if self.work_order and self.work_order.is_closed and self.work_order.completion_meter_reading:
             wo_completion_reading = self.work_order.completion_meter_reading
             
         # Calculate: asset latest meter reading - work order completion meter reading (if closed) or 0 + initial meter reading
