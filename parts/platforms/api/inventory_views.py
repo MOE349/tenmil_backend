@@ -406,7 +406,7 @@ class PartLocationsSummaryApiView(BaseAPIView):
                 })
 
             return self.format_response(
-                data={'locations': result},
+                data=result,
                 errors=None,
                 status_code=status.HTTP_200_OK
             )
