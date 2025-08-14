@@ -107,7 +107,7 @@ class InventoryBatch(BaseModel):
         validators=[MinValueValidator(0)],
         help_text="Quantity reserved for work orders"
     )
-    unit_cost = models.DecimalField(
+    last_unit_cost = models.DecimalField(
         max_digits=12, 
         decimal_places=2,
         validators=[MinValueValidator(Decimal('0.00'))],
@@ -120,11 +120,9 @@ class InventoryBatch(BaseModel):
     class Meta:
         verbose_name = "Inventory Batch"
         verbose_name_plural = "Inventory Batches"
-        unique_together = ['part', 'location', 'unit_cost', 'received_date']
         indexes = [
-            models.Index(fields=['part', 'location']),
-            models.Index(fields=['received_date']),
-            models.Index(fields=['qty_on_hand']),
+            models.Index(fields=['part', 'location', 'received_date']),
+            models.Index(fields=['part', 'location'], condition=models.Q(qty_on_hand__gt=0), name='idx_inventory_batch_available'),
         ]
 
     def __str__(self):
@@ -138,7 +136,7 @@ class InventoryBatch(BaseModel):
     @property
     def total_value(self):
         """Total value of this batch"""
-        return self.qty_on_hand * self.unit_cost
+        return self.qty_on_hand * self.last_unit_cost
 
     def clean(self):
         """Validate that reserved quantity doesn't exceed on hand"""
@@ -214,7 +212,7 @@ class WorkOrderPart(BaseModel):
             )
 
 
-class PartMovementLog(BaseModel):
+class PartMovement(BaseModel):
     """
     Comprehensive log of all part movements.
     Tracks all inventory transactions and movements.
@@ -232,13 +230,13 @@ class PartMovementLog(BaseModel):
     part = models.ForeignKey(
         Part,
         on_delete=models.CASCADE,
-        related_name='movement_logs',
+        related_name='movements',
         help_text="Part that was moved"
     )
     inventory_batch = models.ForeignKey(
         InventoryBatch,
         on_delete=models.CASCADE,
-        related_name='movement_logs',
+        related_name='movements',
         null=True,
         blank=True,
         help_text="Inventory batch (nullable for pre-batch actions)"
@@ -246,7 +244,7 @@ class PartMovementLog(BaseModel):
     from_location = models.ForeignKey(
         'company.Location',
         on_delete=models.CASCADE,
-        related_name='part_movements_from',
+        related_name='movements_from',
         null=True,
         blank=True,
         help_text="Source location for the movement"
@@ -254,7 +252,7 @@ class PartMovementLog(BaseModel):
     to_location = models.ForeignKey(
         'company.Location',
         on_delete=models.CASCADE,
-        related_name='part_movements_to',
+        related_name='movements_to',
         null=True,
         blank=True,
         help_text="Destination location for the movement"
@@ -270,7 +268,7 @@ class PartMovementLog(BaseModel):
     work_order = models.ForeignKey(
         'work_orders.WorkOrder',
         on_delete=models.CASCADE,
-        related_name='part_movements',
+        related_name='movements',
         null=True,
         blank=True,
         help_text="Associated work order (if applicable)"
@@ -289,17 +287,17 @@ class PartMovementLog(BaseModel):
     created_by = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='part_movements',
+        related_name='movements',
         help_text="User who performed the movement"
     )
 
     class Meta:
-        verbose_name = "Part Movement Log"
-        verbose_name_plural = "Part Movement Logs"
+        verbose_name = "Part Movement"
+        verbose_name_plural = "Part Movements"
         indexes = [
             models.Index(fields=['part', 'created_at']),
             models.Index(fields=['movement_type', 'created_at']),
-            models.Index(fields=['work_order']),
+            models.Index(fields=['work_order', 'created_at']),
             models.Index(fields=['from_location']),
             models.Index(fields=['to_location']),
             models.Index(fields=['receipt_id']),
@@ -336,4 +334,45 @@ class PartMovementLog(BaseModel):
                 raise ValidationError(
                     "From and to locations cannot be the same for transfers."
                 )
+
+
+class IdempotencyKey(BaseModel):
+    """
+    Idempotency tracking to prevent duplicate operations.
+    """
+    key = models.CharField(
+        max_length=255,
+        unique=True,
+        help_text="Unique idempotency key"
+    )
+    operation_type = models.CharField(
+        max_length=50,
+        help_text="Type of operation (receive, issue, return, transfer)"
+    )
+    request_data = models.JSONField(
+        help_text="Original request data for the operation"
+    )
+    response_data = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Response data from the successful operation"
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='idempotency_keys',
+        help_text="User who performed the operation"
+    )
+
+    class Meta:
+        verbose_name = "Idempotency Key"
+        verbose_name_plural = "Idempotency Keys"
+        indexes = [
+            models.Index(fields=['key']),
+            models.Index(fields=['operation_type', 'created_at']),
+        ]
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.operation_type}: {self.key}"
 
