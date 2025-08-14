@@ -1,5 +1,10 @@
-from parts.platforms.base.views import *
-from parts.platforms.mobile.serializers import *
+from parts.platforms.base.views import (
+    PartBaseView, InventoryBatchBaseView, WorkOrderPartBaseView, PartMovementBaseView
+)
+from parts.platforms.mobile.serializers import (
+    PartMobileSerializer, InventoryBatchMobileSerializer, 
+    WorkOrderPartMobileSerializer, PartMovementMobileSerializer
+)
 
 
 class PartMobileView(PartBaseView):
@@ -14,7 +19,7 @@ class WorkOrderPartMobileView(WorkOrderPartBaseView):
     serializer_class = WorkOrderPartMobileSerializer
 
 
-class PartMovementLogMobileView(PartMovementLogBaseView):
-    serializer_class = PartMovementLogMobileSerializer
+class PartMovementMobileView(PartMovementBaseView):
+    serializer_class = PartMovementMobileSerializer
 
 

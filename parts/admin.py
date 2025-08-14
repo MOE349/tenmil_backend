@@ -1,5 +1,5 @@
-from parts.models import *
 from django.contrib import admin
+from parts.models import Part, InventoryBatch, WorkOrderPart, PartMovement, IdempotencyKey
 
 
 admin.site.register(Part)

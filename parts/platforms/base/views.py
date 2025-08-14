@@ -1,6 +1,9 @@
 from configurations.base_features.views.base_api_view import BaseAPIView
-from parts.models import *
-from parts.platforms.base.serializers import *
+from parts.models import Part, InventoryBatch, WorkOrderPart, PartMovement
+from parts.platforms.base.serializers import (
+    PartBaseSerializer, InventoryBatchBaseSerializer, WorkOrderPartBaseSerializer, 
+    PartMovementBaseSerializer
+)
 
 
 class PartBaseView(BaseAPIView):
@@ -18,8 +21,8 @@ class WorkOrderPartBaseView(BaseAPIView):
     model_class = WorkOrderPart
 
 
-class PartMovementLogBaseView(BaseAPIView):
-    serializer_class = PartMovementLogBaseSerializer
-    model_class = PartMovementLog
+class PartMovementBaseView(BaseAPIView):
+    serializer_class = PartMovementBaseSerializer
+    model_class = PartMovement
 
 

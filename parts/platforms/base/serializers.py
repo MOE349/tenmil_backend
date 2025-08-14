@@ -1,5 +1,5 @@
 from configurations.base_features.serializers.base_serializer import BaseSerializer
-from parts.models import *
+from parts.models import Part, InventoryBatch, WorkOrderPart, PartMovement
 
 
 class PartBaseSerializer(BaseSerializer):
@@ -20,9 +20,9 @@ class WorkOrderPartBaseSerializer(BaseSerializer):
         fields = '__all__'
 
 
-class PartMovementLogBaseSerializer(BaseSerializer):
+class PartMovementBaseSerializer(BaseSerializer):
     class Meta:
-        model = PartMovementLog
+        model = PartMovement
         fields = '__all__'
 
 

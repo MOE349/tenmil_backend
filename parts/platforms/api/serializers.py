@@ -4,7 +4,6 @@ API Serializers for Parts & Inventory Module
 
 from rest_framework import serializers
 from decimal import Decimal
-from django.core.exceptions import ValidationError as DjangoValidationError
 
 from configurations.base_features.serializers.base_serializer import BaseSerializer
 from parts.models import Part, InventoryBatch, WorkOrderPart, PartMovement

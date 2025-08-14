@@ -2,8 +2,7 @@
 API URLs for Parts & Inventory Module
 """
 
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
+from django.urls import path
 
 from .views import (
     PartApiView, InventoryBatchApiView, WorkOrderPartApiView, PartMovementApiView
@@ -13,12 +12,6 @@ from .inventory_views import (
     InventoryTransferApiView, InventoryOnHandApiView, InventoryBatchesApiView, 
     InventoryMovementsApiView, WorkOrderPartsApiView
 )
-
-# Create router for standard CRUD operations
-router = DefaultRouter()
-
-# Register viewsets (if using ViewSet pattern)
-# For now, we'll use manual URL patterns since we're extending BaseAPIView
 
 app_name = 'parts_api'
 
@@ -50,6 +43,3 @@ urlpatterns = [
     # Work order specific endpoints
     path('work-orders/<uuid:pk>/parts/', WorkOrderPartsApiView.as_view(), name='work-order-parts'),
 ]
-
-# Add router URLs if using ViewSets
-urlpatterns += router.urls
