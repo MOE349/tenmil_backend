@@ -28,7 +28,7 @@ api_urls = [
     path('file-uploads/', include('file_uploads.platforms.api.urls')),
     path('components/', include('components.platforms.api.urls')),
     path('parts/', include('parts.platforms.api.urls')),
-    path('tasks/', include('configurations.task.urls')),
+    path('tasks/', include('configurations.task_urls')),
 ]
 # dashboard_urls = [
 #     # path('users/', include('users.platforms.dashboard.urls')),

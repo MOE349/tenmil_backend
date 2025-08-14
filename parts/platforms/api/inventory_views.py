@@ -4,7 +4,6 @@ Handles receive, issue, return, and transfer operations.
 """
 
 from rest_framework import status
-from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -23,7 +22,7 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 
-class InventoryOperationsApiView(BaseAPIView):
+class BaseInventoryApiView(BaseAPIView):
     """
     API view for inventory operations (receive, issue, return, transfer)
     """
@@ -78,12 +77,16 @@ class InventoryOperationsApiView(BaseAPIView):
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    @action(detail=False, methods=['post'], url_path='receive')
-    def receive_parts(self, request):
-        """
-        Receive parts into inventory
-        POST /inventory/receive/
-        """
+
+
+class InventoryReceiveApiView(BaseInventoryApiView):
+    """
+    API view for receiving parts into inventory
+    POST /inventory/receive/
+    """
+    
+    def post(self, request):
+        """Receive parts into inventory"""
         try:
             # Validate input
             serializer = ReceivePartsInputSerializer(data=request.data)
@@ -115,12 +118,15 @@ class InventoryOperationsApiView(BaseAPIView):
         except Exception as e:
             return self.handle_inventory_error(e)
 
-    @action(detail=False, methods=['post'], url_path='issue')
-    def issue_parts(self, request):
-        """
-        Issue parts to work order
-        POST /inventory/issue/
-        """
+
+class InventoryIssueApiView(BaseInventoryApiView):
+    """
+    API view for issuing parts to work order
+    POST /inventory/issue/
+    """
+    
+    def post(self, request):
+        """Issue parts to work order"""
         try:
             # Validate input
             serializer = IssuePartsInputSerializer(data=request.data)
@@ -150,12 +156,15 @@ class InventoryOperationsApiView(BaseAPIView):
         except Exception as e:
             return self.handle_inventory_error(e)
 
-    @action(detail=False, methods=['post'], url_path='return')
-    def return_parts(self, request):
-        """
-        Return parts from work order
-        POST /inventory/return/
-        """
+
+class InventoryReturnApiView(BaseInventoryApiView):
+    """
+    API view for returning parts from work order
+    POST /inventory/return/
+    """
+    
+    def post(self, request):
+        """Return parts from work order"""
         try:
             # Validate input
             serializer = ReturnPartsInputSerializer(data=request.data)
@@ -185,12 +194,15 @@ class InventoryOperationsApiView(BaseAPIView):
         except Exception as e:
             return self.handle_inventory_error(e)
 
-    @action(detail=False, methods=['post'], url_path='transfer')
-    def transfer_parts(self, request):
-        """
-        Transfer parts between locations
-        POST /inventory/transfer/
-        """
+
+class InventoryTransferApiView(BaseInventoryApiView):
+    """
+    API view for transferring parts between locations
+    POST /inventory/transfer/
+    """
+    
+    def post(self, request):
+        """Transfer parts between locations"""
         try:
             # Validate input
             serializer = TransferPartsInputSerializer(data=request.data)
@@ -220,12 +232,15 @@ class InventoryOperationsApiView(BaseAPIView):
         except Exception as e:
             return self.handle_inventory_error(e)
 
-    @action(detail=False, methods=['get'], url_path='on-hand')
-    def get_on_hand(self, request):
-        """
-        Get on-hand inventory summary
-        GET /inventory/on-hand/?part_id=&location_id=
-        """
+
+class InventoryOnHandApiView(BaseInventoryApiView):
+    """
+    API view for getting on-hand inventory summary
+    GET /inventory/on-hand/?part_id=&location_id=
+    """
+    
+    def get(self, request):
+        """Get on-hand inventory summary"""
         try:
             # Validate query parameters
             serializer = OnHandQuerySerializer(data=request.query_params)
@@ -251,12 +266,15 @@ class InventoryOperationsApiView(BaseAPIView):
         except Exception as e:
             return self.handle_inventory_error(e)
 
-    @action(detail=False, methods=['get'], url_path='batches')
-    def get_batches(self, request):
-        """
-        Get detailed batch information
-        GET /inventory/batches/?part_id=&location_id=
-        """
+
+class InventoryBatchesApiView(BaseInventoryApiView):
+    """
+    API view for getting detailed batch information
+    GET /inventory/batches/?part_id=&location_id=
+    """
+    
+    def get(self, request):
+        """Get detailed batch information"""
         try:
             # Validate query parameters
             serializer = BatchQuerySerializer(data=request.query_params)
@@ -282,12 +300,15 @@ class InventoryOperationsApiView(BaseAPIView):
         except Exception as e:
             return self.handle_inventory_error(e)
 
-    @action(detail=False, methods=['get'], url_path='movements')
-    def get_movements(self, request):
-        """
-        Get movement history
-        GET /inventory/movements/?part_id=&location_id=&work_order_id=&from_date=&to_date=&limit=
-        """
+
+class InventoryMovementsApiView(BaseInventoryApiView):
+    """
+    API view for getting movement history
+    GET /inventory/movements/?part_id=&location_id=&work_order_id=&from_date=&to_date=&limit=
+    """
+    
+    def get(self, request):
+        """Get movement history"""
         try:
             # Validate query parameters
             serializer = MovementQuerySerializer(data=request.query_params)
@@ -321,14 +342,11 @@ class InventoryOperationsApiView(BaseAPIView):
 class WorkOrderPartsApiView(BaseAPIView):
     """
     Specialized view for work order parts operations
+    GET /work-orders/{work_order_id}/parts/
     """
     
-    @action(detail=True, methods=['get'], url_path='parts')
-    def get_work_order_parts(self, request, pk=None):
-        """
-        Get all parts for a specific work order
-        GET /work-orders/{work_order_id}/parts/
-        """
+    def get(self, request, pk=None):
+        """Get all parts for a specific work order"""
         try:
             # Call service
             result = InventoryService.get_work_order_parts(work_order_id=pk)
