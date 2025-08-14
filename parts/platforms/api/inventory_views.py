@@ -10,11 +10,12 @@ from django.db import IntegrityError
 import logging
 
 from configurations.base_features.views.base_api_view import BaseAPIView
+from django.db.models import Sum, Q
 from parts.services import InventoryService, InventoryError, InsufficientStockError, IdempotencyConflictError
 from .serializers import (
     ReceivePartsInputSerializer, IssuePartsInputSerializer,
     ReturnPartsInputSerializer, TransferPartsInputSerializer, OnHandQuerySerializer,
-    BatchQuerySerializer, MovementQuerySerializer
+    BatchQuerySerializer, MovementQuerySerializer, PartLocationSummaryQuerySerializer
 )
 
 logger = logging.getLogger(__name__)
@@ -362,6 +363,61 @@ class WorkOrderPartsApiView(BaseAPIView):
                 errors=[{
                     'code': 'INTERNAL_ERROR',
                     'message': 'An error occurred while retrieving work order parts'
+                }],
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class PartLocationsSummaryApiView(BaseAPIView):
+    """
+    Returns all locations in company with total on-hand for a given part.
+    GET /inventory/locations-summary/?part_id=
+    Response items:
+      {"site": <site code>, "location": <location name>, "QTY_on_hand": <int>}
+    """
+
+    def get(self, request):
+        try:
+            serializer = PartLocationSummaryQuerySerializer(data=request.query_params)
+            if not serializer.is_valid():
+                return self.format_response(
+                    data=None,
+                    errors=serializer.errors,
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+
+            part_id = str(serializer.validated_data['part_id'])
+
+            # Get all locations with optional aggregated qty_on_hand for the part
+            from company.models import Location
+            locations = Location.objects.select_related('site').annotate(
+                qty_on_hand=Sum(
+                    'inventory_batches__qty_on_hand',
+                    filter=Q(inventory_batches__part_id=part_id)
+                )
+            )
+
+            result = []
+            for loc in locations:
+                result.append({
+                    'site': loc.site.code,
+                    'location': loc.name,
+                    'QTY_on_hand': int(loc.qty_on_hand or 0)
+                })
+
+            return self.format_response(
+                data={'locations': result},
+                errors=None,
+                status_code=status.HTTP_200_OK
+            )
+
+        except Exception as e:
+            logger.error(f"Error getting locations summary: {str(e)}")
+            return self.format_response(
+                data=None,
+                errors=[{
+                    'code': 'INTERNAL_ERROR',
+                    'message': 'An error occurred while retrieving locations summary'
                 }],
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

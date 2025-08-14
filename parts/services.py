@@ -167,6 +167,7 @@ class InventoryService:
                 location=location,
                 qty_on_hand=qty,
                 qty_reserved=0,
+                qty_received=qty,
                 last_unit_cost=unit_cost,
                 received_date=received_date
             )

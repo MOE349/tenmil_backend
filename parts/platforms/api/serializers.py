@@ -161,3 +161,8 @@ class MovementQuerySerializer(serializers.Serializer):
     from_date = serializers.DateTimeField(required=False)
     to_date = serializers.DateTimeField(required=False)
     limit = serializers.IntegerField(min_value=1, max_value=1000, default=100)
+
+
+class PartLocationSummaryQuerySerializer(serializers.Serializer):
+    """Query parameters for part locations summary"""
+    part_id = serializers.UUIDField(required=True)

@@ -10,7 +10,7 @@ from .views import (
 from .inventory_views import (
     InventoryReceiveApiView, InventoryIssueApiView, InventoryReturnApiView, 
     InventoryTransferApiView, InventoryOnHandApiView, InventoryBatchesApiView, 
-    InventoryMovementsApiView, WorkOrderPartsApiView
+    InventoryMovementsApiView, WorkOrderPartsApiView, PartLocationsSummaryApiView
 )
 
 app_name = 'parts_api'
@@ -39,6 +39,7 @@ urlpatterns = [
     path('inventory/on-hand/', InventoryOnHandApiView.as_view(), name='inventory-on-hand'),
     path('inventory/batches/', InventoryBatchesApiView.as_view(), name='inventory-batches'),
     path('inventory/movements/', InventoryMovementsApiView.as_view(), name='inventory-movements'),
+    path('inventory/locations-summary/', PartLocationsSummaryApiView.as_view(), name='inventory-locations-summary'),
     
     # Work order specific endpoints
     path('work-orders/<uuid:pk>/parts/', WorkOrderPartsApiView.as_view(), name='work-order-parts'),

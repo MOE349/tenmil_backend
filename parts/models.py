@@ -107,6 +107,11 @@ class InventoryBatch(BaseModel):
         validators=[MinValueValidator(0)],
         help_text="Quantity reserved for work orders"
     )
+    qty_received = models.IntegerField(
+        default=0,
+        validators=[MinValueValidator(0)],
+        help_text="Original quantity received for this batch"
+    )
     last_unit_cost = models.DecimalField(
         max_digits=12, 
         decimal_places=2,
