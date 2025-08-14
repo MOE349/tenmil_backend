@@ -15,7 +15,6 @@ from django.conf import settings
 
 api_urls = [
     path('dashboard', DashboardApiView.as_view(), name='dashboard'),
-    path('tasks/', include('configurations.task.urls')),
     path('users/', include('tenant_users.platforms.api.urls')),
     path('company/', include('company.platforms.api.urls')),
     path('assets/', include('assets.platforms.api.urls')),
@@ -29,6 +28,7 @@ api_urls = [
     path('file-uploads/', include('file_uploads.platforms.api.urls')),
     path('components/', include('components.platforms.api.urls')),
     path('parts/', include('parts.platforms.api.urls')),
+    path('tasks/', include('configurations.task.urls')),
 ]
 # dashboard_urls = [
 #     # path('users/', include('users.platforms.dashboard.urls')),
