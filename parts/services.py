@@ -729,10 +729,9 @@ class InventoryService:
             )
             
             if not created:
-                # Update existing batch
+                # Update existing batch - only qty_on_hand should change
                 dest_batch.qty_on_hand += take
-                dest_batch.qty_received += take
-                dest_batch.save(update_fields=['qty_on_hand', 'qty_received'])
+                dest_batch.save(update_fields=['qty_on_hand'])
             
             # Create transfer_in movement
             in_movement = PartMovement.objects.create(

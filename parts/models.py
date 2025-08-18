@@ -101,6 +101,10 @@ class InventoryBatch(BaseModel):
             raise ValidationError(_("Quantity received must be positive"))
         if self.last_unit_cost < 0:
             raise ValidationError(_("Unit cost cannot be negative"))
+        # Ensure qty_received is never modified after creation (immutable historical record)
+        if self.pk and hasattr(self, '_original_qty_received'):
+            if self.qty_received != self._original_qty_received:
+                raise ValidationError(_("Quantity received is immutable and cannot be changed after creation"))
 
     def __str__(self):
         return f"{self.part.part_number} @ {self.location} - {self.qty_on_hand} on hand"

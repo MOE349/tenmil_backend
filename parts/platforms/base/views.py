@@ -373,7 +373,7 @@ class InventoryOperationsBaseView(BaseAPIView):
                     response_data.append({
                         'site': location.site.code if location.site else '',
                         'location': location.name,
-                        'QTY_on_hand': str(batch.qty_on_hand)
+                        'qty_on_hand': str(batch.qty_on_hand)
                     })
             
             return self.format_response(response_data, None, status.HTTP_200_OK)
