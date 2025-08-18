@@ -330,9 +330,9 @@ class InventoryOperationsBaseView(BaseAPIView):
             
             # Get inventory quantities by location for this specific part
             inventory_by_location = InventoryBatch.objects.filter(
-                part_id=validated_part_id
+                part__id=validated_part_id  # Fixed: use part__id instead of part_id
             ).values(
-                'location_id',
+                'location__id',    # Fixed: use location__id to get the ID
                 'location__name', 
                 'location__site__code'
             ).annotate(
@@ -341,7 +341,7 @@ class InventoryOperationsBaseView(BaseAPIView):
             
             # Create a dictionary for quick lookup
             location_quantities = {
-                item['location_id']: {
+                item['location__id']: {   # Fixed: use location__id to match the values() field
                     'site': item['location__site__code'] or '',
                     'location': item['location__name'] or '',
                     'qty_on_hand': item['total_qty_on_hand'] or Decimal('0')
