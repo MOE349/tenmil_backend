@@ -227,10 +227,10 @@ summary = inventory_service.get_work_order_parts("work_order_uuid")
 
 | Method | Endpoint | Description | Query Parameters |
 |--------|----------|-------------|------------------|
-| GET | `/on-hand/` | Get on-hand quantities | `part_id`, `location_id` |
-| GET | `/batches/` | Get inventory batches | `part_id`, `location_id` |
-| GET | `/movements-query/` | Get movement history | `part_id`, `location_id`, `work_order_id`, `from_date`, `to_date`, `limit` |
-| GET | `/locations-on-hand/` | Get all locations with on-hand for part | `part_id` (required) |
+| GET | `/on-hand/` | Get on-hand quantities | `part_id` or `part`, `location_id` or `location` |
+| GET | `/batches/` | Get inventory batches | `part_id` or `part`, `location_id` or `location` |
+| GET | `/movements-query/` | Get movement history | `part_id` or `part`, `location_id` or `location`, `work_order_id` or `work_order`, `from_date`, `to_date`, `limit` |
+| GET | `/locations-on-hand/` | Get all locations with on-hand for part | `part_id` or `part` (required) |
 | GET | `/work-orders/{id}/parts/` | Get work order parts summary | - |
 
 ### Example API Usage
@@ -263,7 +263,12 @@ curl -X POST /v1/api/parts/issue/ \
 
 #### Get Locations On-Hand
 ```bash
+# Using part_id parameter
 curl -X GET "/v1/api/parts/locations-on-hand/?part_id=123e4567-e89b-12d3-a456-426614174000" \
+  -H "Authorization: Bearer your-jwt-token"
+
+# Using part parameter (alternative format)
+curl -X GET "/v1/api/parts/locations-on-hand/?part=123e4567-e89b-12d3-a456-426614174000" \
   -H "Authorization: Bearer your-jwt-token"
 ```
 

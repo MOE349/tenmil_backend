@@ -215,9 +215,9 @@ class InventoryOperationsBaseView(BaseAPIView):
     def get_on_hand(self, request):
         """Get on-hand quantities by part and location"""
         try:
-            # Get query parameters
-            part_id = request.query_params.get('part_id')
-            location_id = request.query_params.get('location_id')
+            # Support both parameter formats for backward compatibility
+            part_id = request.query_params.get('part_id') or request.query_params.get('part')
+            location_id = request.query_params.get('location_id') or request.query_params.get('location')
             
             data = inventory_service.get_on_hand_by_part_location(
                 part_id=part_id,
@@ -232,8 +232,9 @@ class InventoryOperationsBaseView(BaseAPIView):
     def get_batches(self, request):
         """Get inventory batches with optional filtering"""
         try:
-            part_id = request.query_params.get('part_id')
-            location_id = request.query_params.get('location_id')
+            # Support both 'part' and 'part_id' parameters for backward compatibility
+            part_id = request.query_params.get('part_id') or request.query_params.get('part')
+            location_id = request.query_params.get('location_id') or request.query_params.get('location')
             
             batches = inventory_service.get_batches(
                 part_id=part_id,
@@ -272,10 +273,10 @@ class InventoryOperationsBaseView(BaseAPIView):
     def get_movements(self, request):
         """Get part movements with optional filtering"""
         try:
-            # Parse query parameters
-            part_id = request.query_params.get('part_id')
-            location_id = request.query_params.get('location_id')
-            work_order_id = request.query_params.get('work_order_id')
+            # Parse query parameters - support both formats
+            part_id = request.query_params.get('part_id') or request.query_params.get('part')
+            location_id = request.query_params.get('location_id') or request.query_params.get('location')
+            work_order_id = request.query_params.get('work_order_id') or request.query_params.get('work_order')
             from_date = request.query_params.get('from_date')
             to_date = request.query_params.get('to_date')
             limit = int(request.query_params.get('limit', 100))
@@ -306,10 +307,10 @@ class InventoryOperationsBaseView(BaseAPIView):
     def get_locations_on_hand(self, request):
         """Get all locations with on-hand quantities for a specific part"""
         try:
-            # Validate query parameters
-            part_id = request.query_params.get('part_id')
+            # Validate query parameters - support both formats
+            part_id = request.query_params.get('part_id') or request.query_params.get('part')
             if not part_id:
-                return self.format_response(None, ["part_id is required"], status.HTTP_400_BAD_REQUEST)
+                return self.format_response(None, ["part_id or part parameter is required"], status.HTTP_400_BAD_REQUEST)
             
             serializer = LocationOnHandQuerySerializer(data={'part_id': part_id})
             if not serializer.is_valid():

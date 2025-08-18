@@ -44,6 +44,9 @@ class PartBaseSerializer(BaseSerializer):
 class InventoryBatchBaseSerializer(BaseSerializer):
     """Base serializer for InventoryBatch model"""
     
+    # Explicitly define received_date to handle potential date/datetime issues
+    received_date = serializers.DateTimeField(format='%Y-%m-%dT%H:%M:%S.%fZ', required=False)
+    
     class Meta:
         model = InventoryBatch
         fields = "__all__"
@@ -52,6 +55,18 @@ class InventoryBatchBaseSerializer(BaseSerializer):
     def mod_to_representation(self, instance):
         response = super().mod_to_representation(instance)
         response['id'] = str(instance.id)
+        
+        # Handle potential date/datetime serialization issues
+        if hasattr(instance, 'received_date') and instance.received_date:
+            from datetime import datetime, date
+            if isinstance(instance.received_date, date) and not isinstance(instance.received_date, datetime):
+                # Convert date to datetime for proper serialization
+                from django.utils import timezone
+                response['received_date'] = timezone.make_aware(
+                    datetime.combine(instance.received_date, datetime.min.time())
+                ).isoformat()
+            elif isinstance(instance.received_date, datetime):
+                response['received_date'] = instance.received_date.isoformat()
         
         # Add related object details
         response['part'] = {
