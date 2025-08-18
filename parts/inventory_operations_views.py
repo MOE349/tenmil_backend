@@ -324,34 +324,55 @@ class InventoryOperationsBaseView(BaseAPIView):
             except Part.DoesNotExist:
                 return self.format_response(None, [f"Part with ID {validated_part_id} does not exist"], status.HTTP_404_NOT_FOUND)
             
-            # Query all locations with their on-hand quantities for this part
-            from django.db import models
-            from django.db.models import Sum, Case, When, Value
+            # Get all locations in the company
+            from django.db.models import Sum
             from company.models import Location
             
-            # Get all locations and their on-hand quantities
-            locations_data = Location.objects.select_related('site').annotate(
-                qty_on_hand=Sum(
-                    Case(
-                        When(inventory_batches__part_id=validated_part_id, then='inventory_batches__qty_on_hand'),
-                        default=Value(0),
-                        output_field=models.DecimalField(max_digits=10, decimal_places=3)
-                    )
-                )
+            # Get inventory quantities by location for this specific part
+            inventory_by_location = InventoryBatch.objects.filter(
+                part_id=validated_part_id
             ).values(
-                'site__code',
-                'name',
-                'qty_on_hand'
+                'location_id',
+                'location__name', 
+                'location__site__code'
+            ).annotate(
+                total_qty_on_hand=Sum('qty_on_hand')
+            ).order_by('location__site__code', 'location__name')
+            
+            # Create a dictionary for quick lookup
+            location_quantities = {
+                item['location_id']: {
+                    'site': item['location__site__code'] or '',
+                    'location': item['location__name'] or '',
+                    'qty_on_hand': item['total_qty_on_hand'] or Decimal('0')
+                }
+                for item in inventory_by_location
+            }
+            
+            # Get all locations to include those with 0 qty_on_hand
+            all_locations = Location.objects.select_related('site').values(
+                'id', 'name', 'site__code'
             ).order_by('site__code', 'name')
             
             # Format the response data
             response_data = []
-            for location in locations_data:
-                response_data.append({
-                    'site': location['site__code'] or '',
-                    'location': location['name'] or '',
-                    'QTY_on_hand': str(location['qty_on_hand'] or '0.000')
-                })
+            for location in all_locations:
+                location_id = location['id']
+                if location_id in location_quantities:
+                    # Location has inventory for this part
+                    location_data = location_quantities[location_id]
+                    response_data.append({
+                        'site': location_data['site'],
+                        'location': location_data['location'],
+                        'QTY_on_hand': str(location_data['qty_on_hand'])
+                    })
+                else:
+                    # Location has no inventory for this part
+                    response_data.append({
+                        'site': location['site__code'] or '',
+                        'location': location['name'] or '',
+                        'QTY_on_hand': '0.000'
+                    })
             
             return self.format_response(response_data, None, status.HTTP_200_OK)
             

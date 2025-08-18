@@ -272,6 +272,11 @@ curl -X GET "/v1/api/parts/locations-on-hand/?part=123e4567-e89b-12d3-a456-42661
   -H "Authorization: Bearer your-jwt-token"
 ```
 
+**Logic:**
+- Filters `InventoryBatch` records by the specified `part_id`
+- Groups by location and sums `qty_on_hand` from all batches for that part at each location
+- Returns ALL locations in the company (shows `0.000` for locations with no inventory)
+
 **Response:**
 ```json
 {
