@@ -333,7 +333,7 @@ class InventoryOperationsBaseView(BaseAPIView):
             return self.handle_exceptions(e)
     
     def get_locations_on_hand(self, request):
-        """Get all locations with on-hand quantities for a specific part"""
+        """Get all locations with individual inventory batch records for a specific part"""
         try:
             # Validate query parameters - support both formats
             part_id = request.query_params.get('part_id') or request.query_params.get('part')
@@ -352,53 +352,28 @@ class InventoryOperationsBaseView(BaseAPIView):
             except Part.DoesNotExist:
                 return self.format_response(None, [f"Part with ID {validated_part_id} does not exist"], status.HTTP_404_NOT_FOUND)
             
-            # Get inventory quantities by location for this specific part
-            from django.db.models import Sum
+            # Get all company locations
             from company.models import Location
             
-            inventory_by_location = InventoryBatch.objects.filter(
-                part__id=validated_part_id  # Fixed: use part__id instead of part_id
-            ).values(
-                'location__id',    # Fixed: use location__id to get the ID
-                'location__name', 
-                'location__site__code'
-            ).annotate(
-                total_qty_on_hand=Sum('qty_on_hand')
-            ).order_by('location__site__code', 'location__name')
-            
-            # Create a dictionary for quick lookup
-            location_quantities = {
-                item['location__id']: {   # Fixed: use location__id to match the values() field
-                    'site': item['location__site__code'] or '',
-                    'location': item['location__name'] or '',
-                    'qty_on_hand': item['total_qty_on_hand'] or Decimal('0')
-                }
-                for item in inventory_by_location
-            }
-            
-            # Get all locations to include those with 0 qty_on_hand
-            all_locations = Location.objects.select_related('site').values(
-                'id', 'name', 'site__code'
-            ).order_by('site__code', 'name')
+            # Get all locations
+            all_locations = Location.objects.select_related('site').all()
             
             # Format the response data
             response_data = []
+            
+            # For each location, get inventory batches for this part
             for location in all_locations:
-                location_id = location['id']
-                if location_id in location_quantities:
-                    # Location has inventory for this part
-                    location_data = location_quantities[location_id]
+                inventory_batches = InventoryBatch.objects.filter(
+                    part=part,
+                    location=location
+                ).order_by('received_date')
+                
+                # For each inventory batch record, create a response line
+                for batch in inventory_batches:
                     response_data.append({
-                        'site': location_data['site'],
-                        'location': location_data['location'],
-                        'QTY_on_hand': str(location_data['qty_on_hand'])
-                    })
-                else:
-                    # Location has no inventory for this part
-                    response_data.append({
-                        'site': location['site__code'] or '',
-                        'location': location['name'] or '',
-                        'QTY_on_hand': '0.000'
+                        'site': location.site.code if location.site else '',
+                        'location': location.name,
+                        'QTY_on_hand': str(batch.qty_on_hand)
                     })
             
             return self.format_response(response_data, None, status.HTTP_200_OK)
