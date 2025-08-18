@@ -10,18 +10,12 @@ Service-based views for parts & inventory operations including:
 """
 
 from rest_framework import status
-from rest_framework.response import Response
 from decimal import Decimal
 from datetime import datetime
 
 from configurations.base_features.views.base_api_view import BaseAPIView
-from parts.models import Part, InventoryBatch, WorkOrderPart, PartMovement
-from parts.platforms.base.serializers import (
-    InventoryBatchBaseSerializer, WorkOrderPartBaseSerializer, 
-    PartMovementBaseSerializer, ReceivePartsSerializer, IssuePartsSerializer,
-    ReturnPartsSerializer, TransferPartsSerializer, OnHandQuerySerializer,
-    MovementQuerySerializer, LocationOnHandQuerySerializer
-)
+from parts.models import Part, InventoryBatch
+from parts.platforms.base.serializers import *
 from parts.services import inventory_service, InsufficientStockError, InvalidOperationError
 
 
@@ -319,29 +313,34 @@ class InventoryOperationsBaseView(BaseAPIView):
             validated_part_id = serializer.validated_data['part_id']
             
             # Verify part exists
-            try:
-                part = Part.objects.get(id=validated_part_id)
-            except Part.DoesNotExist:
-                return self.format_response(None, [f"Part with ID {validated_part_id} does not exist"], status.HTTP_404_NOT_FOUND)
+            part = Part.objects.get_object_or_404(id=validated_part_id, raise_exception=True)
             
             # Get all locations in the company
             from django.db.models import Sum
             from company.models import Location
             
             # Get inventory quantities by location for this specific part
+            # Debug: Check what inventory batches exist for this part
+            debug_batches = InventoryBatch.objects.filter(part__id=validated_part_id)
+            print(f"DEBUG: Found {debug_batches.count()} inventory batches for part {validated_part_id}")
+            for batch in debug_batches:
+                print(f"DEBUG: Batch {batch.id} - Location: {batch.location.name} - Qty: {batch.qty_on_hand}")
+            
             inventory_by_location = InventoryBatch.objects.filter(
                 part__id=validated_part_id  # Fixed: use part__id instead of part_id
             ).values(
-                'location__id',    # Fixed: use location__id to get the ID
+                'location_id',
                 'location__name', 
                 'location__site__code'
             ).annotate(
                 total_qty_on_hand=Sum('qty_on_hand')
             ).order_by('location__site__code', 'location__name')
             
+            print(f"DEBUG: Inventory by location query result: {list(inventory_by_location)}")
+            
             # Create a dictionary for quick lookup
             location_quantities = {
-                item['location__id']: {   # Fixed: use location__id to match the values() field
+                item['location_id']: {
                     'site': item['location__site__code'] or '',
                     'location': item['location__name'] or '',
                     'qty_on_hand': item['total_qty_on_hand'] or Decimal('0')

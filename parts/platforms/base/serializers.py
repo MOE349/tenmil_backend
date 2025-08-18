@@ -253,5 +253,6 @@ class MovementQuerySerializer(serializers.Serializer):
 class LocationOnHandQuerySerializer(serializers.Serializer):
     """Serializer for location on-hand quantity queries"""
     part_id = serializers.UUIDField(required=True, help_text="Part ID to get location quantities for")
+    location_id = serializers.UUIDField(required=True, help_text="Location ID to get location quantities for")
 
 
