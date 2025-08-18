@@ -1,13 +1,11 @@
 from django.urls import path
-from parts.platforms.mobile.views import (
-    PartMobileView, InventoryBatchMobileView, WorkOrderPartMobileView, 
-    PartMovementMobileView
-)
+from parts.platforms.mobile.views import *
 
 
 urlpatterns = [
-    path('part', PartMobileView.as_view(), name='Part'), 
-    path('inventory_batch', InventoryBatchMobileView.as_view(), name='InventoryBatch'), 
-    path('work_order_part', WorkOrderPartMobileView.as_view(), name='WorkOrderPart'), 
-    path('part_movement', PartMovementMobileView.as_view(), name='PartMovement'), 
+path('Part', PartMobileView.as_view(), name='Part'), 
+path('InventoryBatch', InventorybatchMobileView.as_view(), name='Inventorybatch'), 
+path('WorkOrderPart', WorkorderpartMobileView.as_view(), name='Workorderpart'), 
+path('PartMovement', PartmovementMobileView.as_view(), name='Partmovement'), 
+
 ]

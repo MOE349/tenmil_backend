@@ -1,25 +1,20 @@
-from parts.platforms.base.views import (
-    PartBaseView, InventoryBatchBaseView, WorkOrderPartBaseView, PartMovementBaseView
-)
-from parts.platforms.dashboard.serializers import (
-    PartDashboardSerializer, InventoryBatchDashboardSerializer, 
-    WorkOrderPartDashboardSerializer, PartMovementDashboardSerializer
-)
+from parts.platforms.base.views import *
+from parts.platforms.dashboard.serializers import *
 
 
 class PartDashboardView(PartBaseView):
     serializer_class = PartDashboardSerializer
 
 
-class InventoryBatchDashboardView(InventoryBatchBaseView):
-    serializer_class = InventoryBatchDashboardSerializer
+class InventorybatchDashboardView(InventorybatchBaseView):
+    serializer_class = InventorybatchDashboardSerializer
 
 
-class WorkOrderPartDashboardView(WorkOrderPartBaseView):
-    serializer_class = WorkOrderPartDashboardSerializer
+class WorkorderpartDashboardView(WorkorderpartBaseView):
+    serializer_class = WorkorderpartDashboardSerializer
 
 
-class PartMovementDashboardView(PartMovementBaseView):
-    serializer_class = PartMovementDashboardSerializer
+class PartmovementDashboardView(PartmovementBaseView):
+    serializer_class = PartmovementDashboardSerializer
 
 

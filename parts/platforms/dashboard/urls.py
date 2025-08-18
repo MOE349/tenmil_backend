@@ -1,13 +1,11 @@
 from django.urls import path
-from parts.platforms.dashboard.views import (
-    PartDashboardView, InventoryBatchDashboardView, WorkOrderPartDashboardView, 
-    PartMovementDashboardView
-)
+from parts.platforms.dashboard.views import *
 
 
 urlpatterns = [
-    path('part', PartDashboardView.as_view(), name='Part'), 
-    path('inventory_batch', InventoryBatchDashboardView.as_view(), name='InventoryBatch'), 
-    path('work_order_part', WorkOrderPartDashboardView.as_view(), name='WorkOrderPart'), 
-    path('part_movement', PartMovementDashboardView.as_view(), name='PartMovement'), 
+path('Part', PartDashboardView.as_view(), name='Part'), 
+path('InventoryBatch', InventorybatchDashboardView.as_view(), name='Inventorybatch'), 
+path('WorkOrderPart', WorkorderpartDashboardView.as_view(), name='Workorderpart'), 
+path('PartMovement', PartmovementDashboardView.as_view(), name='Partmovement'), 
+
 ]

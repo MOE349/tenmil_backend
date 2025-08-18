@@ -1,837 +1,919 @@
 """
-Comprehensive tests for Parts & Inventory Module
-Tests FIFO correctness, concurrency safety, idempotency, and all business logic.
+Comprehensive tests for Parts & Inventory module
+
+Tests cover:
+- FIFO correctness
+- Concurrent operations
+- Return then re-issue scenarios
+- Transfer operations
+- Insufficient stock handling
+- Idempotency
+- Data integrity
+- Edge cases
 """
 
-from django.test import TestCase, TransactionTestCase
-from django.db import transaction, IntegrityError
-from django.core.exceptions import ValidationError
-from django.utils import timezone
-from decimal import Decimal
-from datetime import date, timedelta
-import threading
-import time
 import uuid
-from unittest.mock import Mock
+from decimal import Decimal
+from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import patch
+import threading
 
-# Mock classes for testing since tenant models require tenant schema
-class MockUser:
-    def __init__(self, id=1, email='test@example.com', name='Test User'):
-        self.id = id
-        self.email = email
-        self.name = name
+from django.test import TestCase, TransactionTestCase
+from django.utils import timezone
+from django.core.exceptions import ValidationError
+from django.db import transaction
 
-class MockSite:
-    def __init__(self, id=1, name='Test Site', code='TS001'):
-        self.id = id
-        self.name = name
-        self.code = code
-
-class MockLocation:
-    def __init__(self, id=1, name='Test Location', slug='test-location', site=None):
-        self.id = id
-        self.name = name
-        self.slug = slug
-        self.site = site or MockSite()
-
-class MockWorkOrder:
-    def __init__(self, id=1, code='WO-001', description='Test WO'):
-        self.id = id
-        self.code = code
-        self.description = description
-
-class MockEquipment:
-    def __init__(self, id=1, code='EQ-001', name='Test Equipment', location=None):
-        self.id = id
-        self.code = code
-        self.name = name
-        self.location = location or MockLocation()
-from company.models import Site, Location
+from parts.models import Part, InventoryBatch, WorkOrderPart, PartMovement
+from parts.services import (
+    inventory_service, InsufficientStockError, InvalidOperationError
+)
+from company.models import CompanyProfile, Site, Location
 from work_orders.models import WorkOrder, WorkOrderStatusNames, MaintenanceType, Priority
+from tenant_users.models import TenantUser
 from core.models import WorkOrderStatusControls, HighLevelMaintenanceType
 
-from parts.models import Part, InventoryBatch, WorkOrderPart, PartMovement, IdempotencyKey
-from parts.services import (
-    InventoryService, InsufficientStockError, IdempotencyConflictError, InventoryError
-)
 
-
-class BaseInventoryTestCase(TestCase):
-    """Base test case with common setup for inventory tests"""
+class PartsTestCase(TestCase):
+    """Base test case with common setup"""
     
+    @classmethod
+    def setUpTestData(cls):
+        # Create test company and location
+        cls.company = CompanyProfile.objects.create(
+            name="Test Company",
+            domain_url="test.com"
+        )
+        
+        cls.site = Site.objects.create(
+            name="Test Site",
+            company=cls.company
+        )
+        
+        cls.location1 = Location.objects.create(
+            name="Location 1",
+            site=cls.site
+        )
+        
+        cls.location2 = Location.objects.create(
+            name="Location 2", 
+            site=cls.site
+        )
+        
+        # Create test user
+        cls.user = TenantUser.objects.create_user(
+            username="testuser",
+            email="test@test.com",
+            password="testpass"
+        )
+        
+        # Create work order dependencies
+        cls.status_control = WorkOrderStatusControls.objects.create(
+            name="Open",
+            can_create_work_order=True
+        )
+        
+        cls.wo_status = WorkOrderStatusNames.objects.create(
+            name="Open",
+            control=cls.status_control
+        )
+        
+        cls.hlm_type = HighLevelMaintenanceType.objects.create(
+            name="Corrective"
+        )
+        
+        cls.maint_type = MaintenanceType.objects.create(
+            name="Repair",
+            hlmtype=cls.hlm_type
+        )
+        
+        cls.priority = Priority.objects.create(
+            name="Normal"
+        )
+        
     def setUp(self):
-        """Set up test data"""
-        # Create mock user for testing
-        self.user = MockUser(id=1, email='test@example.com', name='Test User')
-        
-        # Create mock site and locations
-        self.site = MockSite(id=1, name='Test Site', code='TS001')
-        self.location = MockLocation(id=1, name='Warehouse A', slug='warehouse-a', site=self.site)
-        self.location_b = MockLocation(id=2, name='Warehouse B', slug='warehouse-b', site=self.site)
-        
-        # Create test part
-        self.part = Part.objects.create(
-            part_number='TEST-001',
-            name='Test Part',
-            description='A test part for testing',
-            category='Test Category',
-            make='Test Manufacturer'
+        # Create test parts
+        self.part1 = Part.objects.create(
+            part_number="P001",
+            name="Test Part 1",
+            description="Test part for inventory",
+            category="Test Category"
         )
+        
         self.part2 = Part.objects.create(
-            part_number='TEST-002',
-            name='Test Part 2',
-            description='Another test part',
-            category='Test Category',
-            make='Test Manufacturer'
+            part_number="P002", 
+            name="Test Part 2",
+            description="Another test part"
         )
         
-        # Create mock work order and related objects
-        self.equipment = MockEquipment(id=1, code='EQ-001', name='Test Equipment', location=self.location)
-        self.work_order = MockWorkOrder(id=1, code='WO-001', description='Test work order')
+        # Create test work order
+        self.work_order = WorkOrder.objects.create(
+            status=self.wo_status,
+            maint_type=self.maint_type,
+            priority=self.priority,
+            description="Test work order"
+        )
 
 
-class InventoryReceiveTestCase(BaseInventoryTestCase):
-    """Test cases for receiving parts into inventory"""
+class ReceivePartsTests(PartsTestCase):
+    """Tests for receiving parts into inventory"""
     
     def test_receive_parts_success(self):
-        """Test successful parts receipt"""
-        result = InventoryService.receive_parts(
-            part_id=str(self.part.id),
-            location_id=str(self.location.id),
-            qty=100,
-            unit_cost=Decimal('10.50'),
-            received_date=date.today(),
-            created_by=self.user,
-            receipt_id='REC-001'
-        )
+        """Test successful part receipt"""
+        received_date = timezone.now()
         
-        # Verify result
-        self.assertEqual(result['qty_received'], 100)
-        self.assertEqual(result['total_value'], Decimal('1050.00'))
-        
-        # Verify database records
-        batch = InventoryBatch.objects.get(id=result['batch_id'])
-        self.assertEqual(batch.qty_on_hand, 100)
-        self.assertEqual(batch.last_unit_cost, Decimal('10.50'))
-        
-        movement = PartMovement.objects.get(id=result['movement_id'])
-        self.assertEqual(movement.movement_type, 'receive')
-        self.assertEqual(movement.qty_delta, 100)
-        
-        # Verify part last price updated
-        self.part.refresh_from_db()
-        self.assertEqual(self.part.last_price, Decimal('10.50'))
-    
-    def test_receive_parts_invalid_qty(self):
-        """Test receiving with invalid quantity"""
-        with self.assertRaises(ValidationError):
-            InventoryService.receive_parts(
-                part_id=str(self.part.id),
-                location_id=str(self.location.id),
-                qty=0,  # Invalid
-                unit_cost=Decimal('10.50'),
-                received_date=date.today(),
-                created_by=self.user
-            )
-    
-    def test_receive_parts_negative_cost(self):
-        """Test receiving with negative unit cost"""
-        with self.assertRaises(ValidationError):
-            InventoryService.receive_parts(
-                part_id=str(self.part.id),
-                location_id=str(self.location.id),
-                qty=100,
-                unit_cost=Decimal('-10.50'),  # Invalid
-                received_date=date.today(),
-                created_by=self.user
-            )
-    
-    def test_receive_parts_nonexistent_part(self):
-        """Test receiving for nonexistent part"""
-        fake_uuid = str(uuid.uuid4())
-        with self.assertRaises(ValidationError):
-            InventoryService.receive_parts(
-                part_id=fake_uuid,
-                location_id=str(self.location.id),
-                qty=100,
-                unit_cost=Decimal('10.50'),
-                received_date=date.today(),
-                created_by=self.user
-            )
-
-
-class InventoryIssueTestCase(BaseInventoryTestCase):
-    """Test cases for issuing parts to work orders"""
-    
-    def setUp(self):
-        """Set up test data with inventory"""
-        super().setUp()
-        
-        # Create inventory batches for FIFO testing
-        self.batch1 = InventoryBatch.objects.create(
-            part=self.part,
-            location=self.location,
-            qty_on_hand=10,
-            qty_reserved=0,
-            last_unit_cost=Decimal('10.00'),
-            received_date=date.today() - timedelta(days=10)  # Older
-        )
-        self.batch2 = InventoryBatch.objects.create(
-            part=self.part,
-            location=self.location,
-            qty_on_hand=15,
-            qty_reserved=0,
-            last_unit_cost=Decimal('12.00'),
-            received_date=date.today() - timedelta(days=5)   # Newer
-        )
-    
-    def test_issue_parts_fifo_single_batch(self):
-        """Test FIFO logic with single batch consumption"""
-        result = InventoryService.issue_to_work_order(
-            work_order_id=str(self.work_order.id),
-            part_id=str(self.part.id),
-            location_id=str(self.location.id),
-            qty_requested=5,
+        result = inventory_service.receive_parts(
+            part_id=str(self.part1.id),
+            location_id=str(self.location1.id),
+            qty=Decimal('10.5'),
+            unit_cost=Decimal('25.50'),
+            received_date=received_date,
+            receipt_id="REC001",
             created_by=self.user
         )
         
-        # Verify result
-        self.assertEqual(result['total_qty_issued'], 5)
-        self.assertEqual(len(result['allocations']), 1)
-        self.assertEqual(result['allocations'][0]['qty_issued'], 5)
-        self.assertEqual(Decimal(result['allocations'][0]['unit_cost']), Decimal('10.00'))
+        self.assertTrue(result.success)
+        self.assertEqual(len(result.allocations), 1)
+        self.assertEqual(result.allocations[0].qty_allocated, Decimal('10.5'))
+        self.assertEqual(result.allocations[0].unit_cost, Decimal('25.50'))
         
-        # Verify batch quantities updated
-        self.batch1.refresh_from_db()
-        self.assertEqual(self.batch1.qty_on_hand, 5)  # 10 - 5
-        
-        self.batch2.refresh_from_db()
-        self.assertEqual(self.batch2.qty_on_hand, 15)  # Unchanged
+        # Verify batch created
+        batch = InventoryBatch.objects.get(part=self.part1, location=self.location1)
+        self.assertEqual(batch.qty_on_hand, Decimal('10.5'))
+        self.assertEqual(batch.last_unit_cost, Decimal('25.50'))
         
         # Verify movement created
-        movement = PartMovement.objects.filter(
-            part=self.part,
-            movement_type='issue',
-            work_order=self.work_order
-        ).first()
-        self.assertIsNotNone(movement)
-        self.assertEqual(movement.qty_delta, -5)
+        movement = PartMovement.objects.get(part=self.part1)
+        self.assertEqual(movement.movement_type, PartMovement.MovementType.RECEIVE)
+        self.assertEqual(movement.qty_delta, Decimal('10.5'))
+        self.assertEqual(movement.receipt_id, "REC001")
         
-        # Verify work order part created
-        wo_part = WorkOrderPart.objects.filter(
-            work_order=self.work_order,
-            part=self.part
-        ).first()
-        self.assertIsNotNone(wo_part)
-        self.assertEqual(wo_part.qty_used, 5)
-        self.assertEqual(wo_part.unit_cost_snapshot, Decimal('10.00'))
-        self.assertEqual(wo_part.total_parts_cost, Decimal('50.00'))
+        # Verify part last price updated
+        self.part1.refresh_from_db()
+        self.assertEqual(self.part1.last_price, Decimal('25.50'))
     
-    def test_issue_parts_fifo_multiple_batches(self):
-        """Test FIFO logic spanning multiple batches"""
-        result = InventoryService.issue_to_work_order(
-            work_order_id=str(self.work_order.id),
-            part_id=str(self.part.id),
-            location_id=str(self.location.id),
-            qty_requested=15,  # More than first batch
+    def test_receive_parts_idempotency(self):
+        """Test idempotent receipt operations"""
+        # First receipt
+        result1 = inventory_service.receive_parts(
+            part_id=str(self.part1.id),
+            location_id=str(self.location1.id),
+            qty=Decimal('10'),
+            unit_cost=Decimal('25'),
+            idempotency_key="IDEM001",
             created_by=self.user
         )
         
-        # Verify result
-        self.assertEqual(result['total_qty_issued'], 15)
-        self.assertEqual(len(result['allocations']), 2)
+        # Second receipt with same idempotency key
+        result2 = inventory_service.receive_parts(
+            part_id=str(self.part1.id),
+            location_id=str(self.location1.id),
+            qty=Decimal('10'),
+            unit_cost=Decimal('25'),
+            idempotency_key="IDEM001",
+            created_by=self.user
+        )
         
-        # First allocation (older batch)
-        alloc1 = result['allocations'][0]
-        self.assertEqual(alloc1['qty_issued'], 10)
-        self.assertEqual(Decimal(alloc1['unit_cost']), Decimal('10.00'))
+        self.assertTrue(result1.success)
+        self.assertTrue(result2.success)
         
-        # Second allocation (newer batch)
-        alloc2 = result['allocations'][1]
-        self.assertEqual(alloc2['qty_issued'], 5)
-        self.assertEqual(Decimal(alloc2['unit_cost']), Decimal('12.00'))
+        # Should only have one batch
+        batches = InventoryBatch.objects.filter(part=self.part1)
+        self.assertEqual(batches.count(), 1)
+        self.assertEqual(batches.first().qty_on_hand, Decimal('10'))
+        
+        # Should only have one movement
+        movements = PartMovement.objects.filter(part=self.part1)
+        self.assertEqual(movements.count(), 1)
+    
+    def test_receive_parts_validation(self):
+        """Test receipt validation errors"""
+        # Negative quantity
+        with self.assertRaises(ValidationError):
+            inventory_service.receive_parts(
+                part_id=str(self.part1.id),
+                location_id=str(self.location1.id),
+                qty=Decimal('-5'),
+                unit_cost=Decimal('25'),
+                created_by=self.user
+            )
+        
+        # Negative unit cost
+        with self.assertRaises(ValidationError):
+            inventory_service.receive_parts(
+                part_id=str(self.part1.id),
+                location_id=str(self.location1.id),
+                qty=Decimal('5'),
+                unit_cost=Decimal('-25'),
+                created_by=self.user
+            )
+        
+        # Invalid part
+        with self.assertRaises(InvalidOperationError):
+            inventory_service.receive_parts(
+                part_id=str(uuid.uuid4()),
+                location_id=str(self.location1.id),
+                qty=Decimal('5'),
+                unit_cost=Decimal('25'),
+                created_by=self.user
+            )
+
+
+class FIFOTests(PartsTestCase):
+    """Tests for FIFO correctness in issue/return operations"""
+    
+    def setUp(self):
+        super().setUp()
+        
+        # Create multiple batches with different dates and costs
+        self.batch1 = InventoryBatch.objects.create(
+            part=self.part1,
+            location=self.location1,
+            qty_on_hand=Decimal('10'),
+            qty_received=Decimal('10'),
+            last_unit_cost=Decimal('10.00'),
+            received_date=timezone.now() - timedelta(days=3)
+        )
+        
+        self.batch2 = InventoryBatch.objects.create(
+            part=self.part1,
+            location=self.location1,
+            qty_on_hand=Decimal('10'),
+            qty_received=Decimal('10'),
+            last_unit_cost=Decimal('12.00'),
+            received_date=timezone.now() - timedelta(days=2)
+        )
+        
+        self.batch3 = InventoryBatch.objects.create(
+            part=self.part1,
+            location=self.location1,
+            qty_on_hand=Decimal('10'),
+            qty_received=Decimal('10'),
+            last_unit_cost=Decimal('15.00'),
+            received_date=timezone.now() - timedelta(days=1)
+        )
+    
+    def test_fifo_issue_single_batch(self):
+        """Test FIFO issue from single batch"""
+        result = inventory_service.issue_to_work_order(
+            work_order_id=str(self.work_order.id),
+            part_id=str(self.part1.id),
+            location_id=str(self.location1.id),
+            qty_requested=Decimal('5'),
+            created_by=self.user
+        )
+        
+        self.assertTrue(result.success)
+        self.assertEqual(len(result.allocations), 1)
+        
+        # Should use oldest batch (batch1)
+        allocation = result.allocations[0]
+        self.assertEqual(allocation.batch_id, str(self.batch1.id))
+        self.assertEqual(allocation.qty_allocated, Decimal('5'))
+        self.assertEqual(allocation.unit_cost, Decimal('10.00'))
+        
+        # Verify batch quantity updated
+        self.batch1.refresh_from_db()
+        self.assertEqual(self.batch1.qty_on_hand, Decimal('5'))
+    
+    def test_fifo_issue_multiple_batches(self):
+        """Test FIFO issue spanning multiple batches"""
+        result = inventory_service.issue_to_work_order(
+            work_order_id=str(self.work_order.id),
+            part_id=str(self.part1.id),
+            location_id=str(self.location1.id),
+            qty_requested=Decimal('15'),  # More than first batch
+            created_by=self.user
+        )
+        
+        self.assertTrue(result.success)
+        self.assertEqual(len(result.allocations), 2)
+        
+        # Should use batches in FIFO order
+        allocations = sorted(result.allocations, key=lambda x: x.unit_cost)
+        
+        # First allocation from batch1 (oldest, $10)
+        self.assertEqual(allocations[0].qty_allocated, Decimal('10'))
+        self.assertEqual(allocations[0].unit_cost, Decimal('10.00'))
+        
+        # Second allocation from batch2 ($12)  
+        self.assertEqual(allocations[1].qty_allocated, Decimal('5'))
+        self.assertEqual(allocations[1].unit_cost, Decimal('12.00'))
         
         # Verify batch quantities
         self.batch1.refresh_from_db()
-        self.assertEqual(self.batch1.qty_on_hand, 0)  # Fully consumed
-        
         self.batch2.refresh_from_db()
-        self.assertEqual(self.batch2.qty_on_hand, 10)  # 15 - 5
+        self.batch3.refresh_from_db()
         
-        # Verify total cost calculation
-        expected_cost = (10 * Decimal('10.00')) + (5 * Decimal('12.00'))
-        self.assertEqual(Decimal(result['total_cost']), expected_cost)
+        self.assertEqual(self.batch1.qty_on_hand, Decimal('0'))
+        self.assertEqual(self.batch2.qty_on_hand, Decimal('5'))
+        self.assertEqual(self.batch3.qty_on_hand, Decimal('10'))  # Untouched
+        
+        # Verify work order parts created
+        wo_parts = WorkOrderPart.objects.filter(work_order=self.work_order)
+        self.assertEqual(wo_parts.count(), 2)
+        
+        total_cost = sum(wp.total_parts_cost for wp in wo_parts)
+        expected_cost = (Decimal('10') * Decimal('10.00')) + (Decimal('5') * Decimal('12.00'))
+        self.assertEqual(total_cost, expected_cost)
     
-    def test_issue_parts_insufficient_stock(self):
-        """Test issuing more than available stock"""
-        with self.assertRaises(InsufficientStockError) as cm:
-            InventoryService.issue_to_work_order(
-                work_order_id=str(self.work_order.id),
-                part_id=str(self.part.id),
-                location_id=str(self.location.id),
-                qty_requested=30,  # More than total available (25)
-                created_by=self.user
-            )
-        
-        # Verify error details
-        self.assertEqual(cm.exception.available_qty, 25)
-    
-    def test_issue_parts_zero_stock(self):
-        """Test issuing when no stock available"""
-        # Remove all stock
-        InventoryBatch.objects.filter(part=self.part).delete()
-        
-        with self.assertRaises(InsufficientStockError):
-            InventoryService.issue_to_work_order(
-                work_order_id=str(self.work_order.id),
-                part_id=str(self.part.id),
-                location_id=str(self.location.id),
-                qty_requested=1,
-                created_by=self.user
-            )
-
-
-class InventoryReturnTestCase(BaseInventoryTestCase):
-    """Test cases for returning parts from work orders"""
-    
-    def setUp(self):
-        """Set up test data with issued parts"""
-        super().setUp()
-        
-        # Create inventory batch
-        self.batch = InventoryBatch.objects.create(
-            part=self.part,
-            location=self.location,
-            qty_on_hand=5,  # Some remaining after issue
-            qty_reserved=0,
-            last_unit_cost=Decimal('10.00'),
-            received_date=date.today()
-        )
-        
-        # Create existing work order part (simulating previous issue)
-        self.wo_part = WorkOrderPart.objects.create(
-            work_order=self.work_order,
-            part=self.part,
-            inventory_batch=self.batch,
-            qty_used=5,
-            unit_cost_snapshot=Decimal('10.00'),
-            total_parts_cost=Decimal('50.00')
-        )
-    
-    def test_return_parts_success(self):
-        """Test successful parts return"""
-        result = InventoryService.return_from_work_order(
+    def test_fifo_return_to_oldest_batch(self):
+        """Test FIFO return policy (return to oldest available batch)"""
+        # First issue some parts
+        inventory_service.issue_to_work_order(
             work_order_id=str(self.work_order.id),
-            part_id=str(self.part.id),
-            location_id=str(self.location.id),
-            qty_to_return=3,
+            part_id=str(self.part1.id),
+            location_id=str(self.location1.id),
+            qty_requested=Decimal('5'),
             created_by=self.user
         )
         
-        # Verify result
-        self.assertEqual(result['total_qty_returned'], 3)
-        self.assertEqual(len(result['returns']), 1)
+        # Now return parts
+        result = inventory_service.return_from_work_order(
+            work_order_id=str(self.work_order.id),
+            part_id=str(self.part1.id),
+            location_id=str(self.location1.id),
+            qty_to_return=Decimal('3'),
+            created_by=self.user
+        )
         
-        # Verify batch quantity increased
-        self.batch.refresh_from_db()
-        self.assertEqual(self.batch.qty_on_hand, 8)  # 5 + 3
+        self.assertTrue(result.success)
+        self.assertEqual(len(result.allocations), 1)
         
-        # Verify movement created
-        movement = PartMovement.objects.filter(
-            part=self.part,
-            movement_type='return',
-            work_order=self.work_order
-        ).first()
-        self.assertIsNotNone(movement)
-        self.assertEqual(movement.qty_delta, 3)
+        # Should return to oldest batch (batch1)
+        allocation = result.allocations[0]
+        self.assertEqual(allocation.batch_id, str(self.batch1.id))
+        self.assertEqual(allocation.qty_allocated, Decimal('3'))
+        
+        # Verify batch quantity updated
+        self.batch1.refresh_from_db()
+        self.assertEqual(self.batch1.qty_on_hand, Decimal('8'))  # 10 - 5 + 3
         
         # Verify negative work order part created
-        return_wo_part = WorkOrderPart.objects.filter(
+        return_wo_parts = WorkOrderPart.objects.filter(
             work_order=self.work_order,
-            part=self.part,
-            qty_used__lt=0  # Negative for return
-        ).first()
-        self.assertIsNotNone(return_wo_part)
-        self.assertEqual(return_wo_part.qty_used, -3)
-        self.assertEqual(return_wo_part.total_parts_cost, Decimal('-30.00'))
+            qty_used__lt=0
+        )
+        self.assertEqual(return_wo_parts.count(), 1)
+        self.assertEqual(return_wo_parts.first().qty_used, Decimal('-3'))
+
+
+class ConcurrencyTests(TransactionTestCase):
+    """Tests for concurrent operations and locking"""
     
-    def test_return_parts_no_existing_batch(self):
-        """Test returning when no batch exists at location"""
-        # Remove existing batch
-        self.batch.delete()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
         
-        result = InventoryService.return_from_work_order(
-            work_order_id=str(self.work_order.id),
-            part_id=str(self.part.id),
-            location_id=str(self.location.id),
-            qty_to_return=2,
-            created_by=self.user
+        # Create test data
+        cls.company = CompanyProfile.objects.create(
+            name="Test Company",
+            domain_url="test.com"
         )
         
-        # Should create new batch
-        new_batch = InventoryBatch.objects.filter(
-            part=self.part,
-            location=self.location
-        ).first()
-        self.assertIsNotNone(new_batch)
-        self.assertEqual(new_batch.qty_on_hand, 2)
-
-
-class InventoryTransferTestCase(BaseInventoryTestCase):
-    """Test cases for transferring parts between locations"""
+        cls.site = Site.objects.create(
+            name="Test Site",
+            company=cls.company
+        )
+        
+        cls.location = Location.objects.create(
+            name="Test Location",
+            site=cls.site
+        )
+        
+        cls.user = TenantUser.objects.create_user(
+            username="testuser",
+            email="test@test.com",
+            password="testpass"
+        )
+        
+        # Create work order dependencies
+        cls.status_control = WorkOrderStatusControls.objects.create(
+            name="Open",
+            can_create_work_order=True
+        )
+        
+        cls.wo_status = WorkOrderStatusNames.objects.create(
+            name="Open",
+            control=cls.status_control
+        )
+        
+        cls.hlm_type = HighLevelMaintenanceType.objects.create(
+            name="Corrective"
+        )
+        
+        cls.maint_type = MaintenanceType.objects.create(
+            name="Repair",
+            hlmtype=cls.hlm_type
+        )
+        
+        cls.priority = Priority.objects.create(
+            name="Normal"
+        )
+        
+        cls.part = Part.objects.create(
+            part_number="CONCURRENT_TEST",
+            name="Concurrent Test Part",
+            description="For testing concurrent operations"
+        )
+        
+        cls.work_order = WorkOrder.objects.create(
+            status=cls.wo_status,
+            maint_type=cls.maint_type,
+            priority=cls.priority,
+            description="Test work order"
+        )
     
     def setUp(self):
-        """Set up test data with inventory"""
-        super().setUp()
-        
-        # Create inventory at source location
+        # Create fresh batch for each test
         self.batch = InventoryBatch.objects.create(
             part=self.part,
             location=self.location,
-            qty_on_hand=20,
-            qty_reserved=0,
-            last_unit_cost=Decimal('15.00'),
-            received_date=date.today()
-        )
-    
-    def test_transfer_parts_success(self):
-        """Test successful parts transfer"""
-        result = InventoryService.transfer_between_locations(
-            part_id=str(self.part.id),
-            from_location_id=str(self.location.id),
-            to_location_id=str(self.location_b.id),
-            qty=8,
-            created_by=self.user
-        )
-        
-        # Verify result
-        self.assertEqual(result['total_qty_transferred'], 8)
-        self.assertEqual(len(result['transfers_out']), 1)
-        self.assertEqual(len(result['transfers_in']), 1)
-        
-        # Verify source batch quantity reduced
-        self.batch.refresh_from_db()
-        self.assertEqual(self.batch.qty_on_hand, 12)  # 20 - 8
-        
-        # Verify destination batch created
-        dest_batch = InventoryBatch.objects.filter(
-            part=self.part,
-            location=self.location_b
-        ).first()
-        self.assertIsNotNone(dest_batch)
-        self.assertEqual(dest_batch.qty_on_hand, 8)
-        self.assertEqual(dest_batch.last_unit_cost, Decimal('15.00'))
-        
-        # Verify movements created
-        transfer_out = PartMovement.objects.filter(
-            part=self.part,
-            movement_type='transfer_out'
-        ).first()
-        self.assertIsNotNone(transfer_out)
-        self.assertEqual(transfer_out.qty_delta, -8)
-        
-        transfer_in = PartMovement.objects.filter(
-            part=self.part,
-            movement_type='transfer_in'
-        ).first()
-        self.assertIsNotNone(transfer_in)
-        self.assertEqual(transfer_in.qty_delta, 8)
-    
-    def test_transfer_parts_same_location(self):
-        """Test transfer validation for same location"""
-        with self.assertRaises(ValidationError):
-            InventoryService.transfer_between_locations(
-                part_id=str(self.part.id),
-                from_location_id=str(self.location.id),
-                to_location_id=str(self.location.id),  # Same location
-                qty=5,
-                created_by=self.user
-            )
-    
-    def test_transfer_parts_insufficient_stock(self):
-        """Test transfer with insufficient stock"""
-        with self.assertRaises(InsufficientStockError):
-            InventoryService.transfer_between_locations(
-                part_id=str(self.part.id),
-                from_location_id=str(self.location.id),
-                to_location_id=str(self.location_b.id),
-                qty=25,  # More than available (20)
-                created_by=self.user
-            )
-
-
-class IdempotencyTestCase(BaseInventoryTestCase):
-    """Test cases for idempotency handling"""
-    
-    def test_receive_parts_idempotency(self):
-        """Test receive operation idempotency"""
-        idempotency_key = str(uuid.uuid4())
-        
-        # First call
-        result1 = InventoryService.receive_parts(
-            part_id=str(self.part.id),
-            location_id=str(self.location.id),
-            qty=10,
-            unit_cost=Decimal('5.00'),
-            received_date=date.today(),
-            created_by=self.user,
-            idempotency_key=idempotency_key
-        )
-        
-        # Second call with same key should return cached result
-        result2 = InventoryService.receive_parts(
-            part_id=str(self.part.id),
-            location_id=str(self.location.id),
-            qty=10,
-            unit_cost=Decimal('5.00'),
-            received_date=date.today(),
-            created_by=self.user,
-            idempotency_key=idempotency_key
-        )
-        
-        # Results should be identical
-        self.assertEqual(result1['batch_id'], result2['batch_id'])
-        self.assertEqual(result1['movement_id'], result2['movement_id'])
-        
-        # Only one batch should exist
-        batches = InventoryBatch.objects.filter(part=self.part, location=self.location)
-        self.assertEqual(batches.count(), 1)
-        self.assertEqual(batches.first().qty_on_hand, 10)
-        
-        # Only one movement should exist
-        movements = PartMovement.objects.filter(part=self.part, movement_type='receive')
-        self.assertEqual(movements.count(), 1)
-    
-    def test_idempotency_conflict_different_user(self):
-        """Test idempotency conflict with different user"""
-        idempotency_key = str(uuid.uuid4())
-        
-        # Create another mock user
-        user2 = MockUser(id=2, email='test2@example.com', name='Test User 2')
-        
-        # First call with user1
-        InventoryService.receive_parts(
-            part_id=str(self.part.id),
-            location_id=str(self.location.id),
-            qty=10,
-            unit_cost=Decimal('5.00'),
-            received_date=date.today(),
-            created_by=self.user,
-            idempotency_key=idempotency_key
-        )
-        
-        # Second call with user2 and same key should raise error
-        with self.assertRaises(IdempotencyConflictError):
-            InventoryService.receive_parts(
-                part_id=str(self.part.id),
-                location_id=str(self.location.id),
-                qty=10,
-                unit_cost=Decimal('5.00'),
-                received_date=date.today(),
-                created_by=user2,  # Different user
-                idempotency_key=idempotency_key
-            )
-
-
-class ConcurrencyTestCase(TransactionTestCase):
-    """Test cases for concurrency handling"""
-    
-    def setUp(self):
-        """Set up test data"""
-        # Create mock user for testing
-        self.user = MockUser(id=1, email='test@example.com', name='Test User')
-        
-        # Create mock site and location
-        self.site = MockSite(id=1, name='Test Site', code='TS001')
-        self.location = MockLocation(id=1, name='Warehouse A', slug='warehouse-a', site=self.site)
-        
-        # Create test part
-        self.part = Part.objects.create(
-            part_number='TEST-001',
-            name='Test Part',
-            description='A test part for testing'
-        )
-        
-        # Create mock work orders and equipment
-        self.equipment = MockEquipment(id=1, code='EQ-001', name='Test Equipment', location=self.location)
-        self.work_order1 = MockWorkOrder(id=1, code='WO-001', description='Test work order 1')
-        self.work_order2 = MockWorkOrder(id=2, code='WO-002', description='Test work order 2')
-        
-        # Create inventory batch
-        self.batch = InventoryBatch.objects.create(
-            part=self.part,
-            location=self.location,
-            qty_on_hand=10,
-            qty_reserved=0,
+            qty_on_hand=Decimal('20'),
+            qty_received=Decimal('20'),
             last_unit_cost=Decimal('10.00'),
-            received_date=date.today()
+            received_date=timezone.now()
         )
     
-    def test_concurrent_issue_operations(self):
-        """Test concurrent issue operations don't over-allocate"""
+    def test_concurrent_issues_with_locking(self):
+        """Test that concurrent issues don't exceed available stock"""
         results = []
         errors = []
         
-        def issue_parts(work_order, qty):
+        def issue_parts(qty):
             try:
-                result = InventoryService.issue_to_work_order(
-                    work_order_id=str(work_order.id),
+                result = inventory_service.issue_to_work_order(
+                    work_order_id=str(self.work_order.id),
                     part_id=str(self.part.id),
                     location_id=str(self.location.id),
-                    qty_requested=qty,
+                    qty_requested=Decimal(str(qty)),
                     created_by=self.user
                 )
                 results.append(result)
             except Exception as e:
                 errors.append(e)
         
-        # Start concurrent threads
-        thread1 = threading.Thread(target=issue_parts, args=(self.work_order1, 6))
-        thread2 = threading.Thread(target=issue_parts, args=(self.work_order2, 6))
-        
-        thread1.start()
-        thread2.start()
-        
-        thread1.join()
-        thread2.join()
+        # Try to issue 15 parts each in 2 threads (30 total, but only 20 available)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [
+                executor.submit(issue_parts, 15),
+                executor.submit(issue_parts, 15)
+            ]
+            
+            # Wait for completion
+            for future in futures:
+                future.result()
         
         # One should succeed, one should fail
-        self.assertEqual(len(results), 1)
-        self.assertEqual(len(errors), 1)
-        self.assertIsInstance(errors[0], InsufficientStockError)
+        successful_results = [r for r in results if r.success]
+        insufficient_stock_errors = [e for e in errors if isinstance(e, InsufficientStockError)]
         
-        # Verify batch quantity
+        # Should have exactly one success and one failure
+        self.assertEqual(len(successful_results), 1)
+        self.assertEqual(len(insufficient_stock_errors), 1)
+        
+        # Verify total issued doesn't exceed available
         self.batch.refresh_from_db()
-        self.assertEqual(self.batch.qty_on_hand, 4)  # 10 - 6 = 4
+        self.assertGreaterEqual(self.batch.qty_on_hand, Decimal('0'))
+        
+        # Verify movements don't exceed original quantity
+        total_issued = sum(
+            abs(m.qty_delta) for m in PartMovement.objects.filter(
+                part=self.part,
+                movement_type=PartMovement.MovementType.ISSUE
+            )
+        )
+        self.assertLessEqual(total_issued, Decimal('20'))
 
 
-class QueryMethodsTestCase(BaseInventoryTestCase):
-    """Test cases for query/read methods"""
+class TransferTests(PartsTestCase):
+    """Tests for transfer operations between locations"""
     
     def setUp(self):
-        """Set up test data with inventory"""
         super().setUp()
         
-        # Create multiple parts and batches
-        self.batch1 = InventoryBatch.objects.create(
-            part=self.part,
-            location=self.location,
-            qty_on_hand=10,
-            qty_reserved=2,
+        # Create batch at source location
+        self.source_batch = InventoryBatch.objects.create(
+            part=self.part1,
+            location=self.location1,
+            qty_on_hand=Decimal('20'),
+            qty_received=Decimal('20'),
+            last_unit_cost=Decimal('15.00'),
+            received_date=timezone.now() - timedelta(days=1)
+        )
+    
+    def test_transfer_between_locations(self):
+        """Test successful transfer between locations"""
+        result = inventory_service.transfer_between_locations(
+            part_id=str(self.part1.id),
+            from_location_id=str(self.location1.id),
+            to_location_id=str(self.location2.id),
+            qty=Decimal('8'),
+            created_by=self.user
+        )
+        
+        self.assertTrue(result.success)
+        self.assertEqual(len(result.allocations), 1)
+        self.assertEqual(result.allocations[0].qty_allocated, Decimal('8'))
+        
+        # Verify source batch reduced
+        self.source_batch.refresh_from_db()
+        self.assertEqual(self.source_batch.qty_on_hand, Decimal('12'))
+        
+        # Verify destination batch created
+        dest_batch = InventoryBatch.objects.get(
+            part=self.part1,
+            location=self.location2
+        )
+        self.assertEqual(dest_batch.qty_on_hand, Decimal('8'))
+        self.assertEqual(dest_batch.last_unit_cost, Decimal('15.00'))  # Cost preserved
+        
+        # Verify movements created
+        movements = PartMovement.objects.filter(part=self.part1)
+        transfer_out = movements.filter(movement_type=PartMovement.MovementType.TRANSFER_OUT)
+        transfer_in = movements.filter(movement_type=PartMovement.MovementType.TRANSFER_IN)
+        
+        self.assertEqual(transfer_out.count(), 1)
+        self.assertEqual(transfer_in.count(), 1)
+        self.assertEqual(transfer_out.first().qty_delta, Decimal('-8'))
+        self.assertEqual(transfer_in.first().qty_delta, Decimal('8'))
+    
+    def test_transfer_insufficient_stock(self):
+        """Test transfer with insufficient stock"""
+        with self.assertRaises(InsufficientStockError) as cm:
+            inventory_service.transfer_between_locations(
+                part_id=str(self.part1.id),
+                from_location_id=str(self.location1.id),
+                to_location_id=str(self.location2.id),
+                qty=Decimal('25'),  # More than available
+                created_by=self.user
+            )
+        
+        self.assertEqual(cm.exception.requested, Decimal('25'))
+        self.assertEqual(cm.exception.available, Decimal('20'))
+    
+    def test_transfer_same_location_error(self):
+        """Test transfer validation for same source/destination"""
+        with self.assertRaises(ValidationError):
+            inventory_service.transfer_between_locations(
+                part_id=str(self.part1.id),
+                from_location_id=str(self.location1.id),
+                to_location_id=str(self.location1.id),  # Same as source
+                qty=Decimal('5'),
+                created_by=self.user
+            )
+
+
+class ReturnAndReissueTests(PartsTestCase):
+    """Tests for return then re-issue scenarios"""
+    
+    def setUp(self):
+        super().setUp()
+        
+        # Create batch
+        self.batch = InventoryBatch.objects.create(
+            part=self.part1,
+            location=self.location1,
+            qty_on_hand=Decimal('20'),
+            qty_received=Decimal('20'),
             last_unit_cost=Decimal('10.00'),
-            received_date=date.today()
-        )
-        self.batch2 = InventoryBatch.objects.create(
-            part=self.part,
-            location=self.location_b,
-            qty_on_hand=15,
-            qty_reserved=0,
-            last_unit_cost=Decimal('12.00'),
-            received_date=date.today()
-        )
-        self.batch3 = InventoryBatch.objects.create(
-            part=self.part2,
-            location=self.location,
-            qty_on_hand=5,
-            qty_reserved=1,
-            last_unit_cost=Decimal('8.00'),
-            received_date=date.today()
+            received_date=timezone.now()
         )
     
-    def test_get_on_hand_summary(self):
-        """Test on-hand summary query"""
-        # Get all inventory
-        summary = InventoryService.get_on_hand_summary()
-        self.assertEqual(len(summary), 3)
-        
-        # Get by part
-        summary = InventoryService.get_on_hand_summary(part_id=str(self.part.id))
-        self.assertEqual(len(summary), 2)
-        
-        # Get by location
-        summary = InventoryService.get_on_hand_summary(location_id=str(self.location.id))
-        self.assertEqual(len(summary), 2)
-        
-        # Get specific part and location
-        summary = InventoryService.get_on_hand_summary(
-            part_id=str(self.part.id),
-            location_id=str(self.location.id)
-        )
-        self.assertEqual(len(summary), 1)
-        self.assertEqual(summary[0]['total_on_hand'], 10)
-        self.assertEqual(summary[0]['total_reserved'], 2)
-        self.assertEqual(summary[0]['total_available'], 8)
-    
-    def test_get_batches(self):
-        """Test batch detail query"""
-        # Get all batches
-        batches = InventoryService.get_batches()
-        self.assertEqual(len(batches), 3)
-        
-        # Get by part
-        batches = InventoryService.get_batches(part_id=str(self.part.id))
-        self.assertEqual(len(batches), 2)
-        
-        # Verify batch details
-        batch_detail = next(b for b in batches if b['batch_id'] == str(self.batch1.id))
-        self.assertEqual(batch_detail['qty_on_hand'], 10)
-        self.assertEqual(batch_detail['qty_available'], 8)
-        self.assertEqual(Decimal(batch_detail['total_value']), Decimal('100.00'))
-    
-    def test_get_work_order_parts(self):
-        """Test work order parts query"""
-        # Create some work order parts
-        WorkOrderPart.objects.create(
-            work_order=self.work_order,
-            part=self.part,
-            inventory_batch=self.batch1,
-            qty_used=5,
-            unit_cost_snapshot=Decimal('10.00'),
-            total_parts_cost=Decimal('50.00')
-        )
-        WorkOrderPart.objects.create(
-            work_order=self.work_order,
-            part=self.part2,
-            inventory_batch=self.batch3,
-            qty_used=2,
-            unit_cost_snapshot=Decimal('8.00'),
-            total_parts_cost=Decimal('16.00')
-        )
-        
-        parts = InventoryService.get_work_order_parts(str(self.work_order.id))
-        self.assertEqual(len(parts), 2)
-        
-        # Verify part details
-        part_detail = next(p for p in parts if p['part_id'] == str(self.part.id))
-        self.assertEqual(part_detail['qty_used'], 5)
-        self.assertEqual(Decimal(part_detail['total_parts_cost']), Decimal('50.00'))
-    
-    def test_get_movements(self):
-        """Test movement history query"""
-        # Create some movements
-        PartMovement.objects.create(
-            part=self.part,
-            inventory_batch=self.batch1,
-            to_location=self.location,
-            movement_type='receive',
-            qty_delta=10,
-            created_by=self.user
-        )
-        PartMovement.objects.create(
-            part=self.part,
-            inventory_batch=self.batch1,
-            from_location=self.location,
-            movement_type='issue',
-            qty_delta=-5,
-            work_order=self.work_order,
-            created_by=self.user
-        )
-        
-        # Get all movements
-        movements = InventoryService.get_movements()
-        self.assertEqual(len(movements), 2)
-        
-        # Get by part
-        movements = InventoryService.get_movements(part_id=str(self.part.id))
-        self.assertEqual(len(movements), 2)
-        
-        # Get by work order
-        movements = InventoryService.get_movements(work_order_id=str(self.work_order.id))
-        self.assertEqual(len(movements), 1)
-        self.assertEqual(movements[0]['movement_type'], 'issue')
-        self.assertEqual(movements[0]['qty_delta'], -5)
-
-
-class IntegrationTestCase(BaseInventoryTestCase):
-    """Integration tests for complete workflows"""
-    
-    def test_complete_inventory_lifecycle(self):
-        """Test complete inventory lifecycle: receive → issue → return → transfer"""
-        
-        # 1. Receive parts
-        receive_result = InventoryService.receive_parts(
-            part_id=str(self.part.id),
-            location_id=str(self.location.id),
-            qty=100,
-            unit_cost=Decimal('15.00'),
-            received_date=date.today() - timedelta(days=5),
-            created_by=self.user,
-            receipt_id='REC-001'
-        )
-        
-        # Verify receive
-        batch = InventoryBatch.objects.get(id=receive_result['batch_id'])
-        self.assertEqual(batch.qty_on_hand, 100)
-        
-        # 2. Issue parts to work order
-        issue_result = InventoryService.issue_to_work_order(
+    def test_return_then_reissue_reconciliation(self):
+        """Test that return then re-issue maintains proper reconciliation"""
+        # Initial issue
+        issue_result = inventory_service.issue_to_work_order(
             work_order_id=str(self.work_order.id),
-            part_id=str(self.part.id),
-            location_id=str(self.location.id),
-            qty_requested=30,
+            part_id=str(self.part1.id),
+            location_id=str(self.location1.id),
+            qty_requested=Decimal('10'),
             created_by=self.user
         )
+        self.assertTrue(issue_result.success)
         
-        # Verify issue
-        batch.refresh_from_db()
-        self.assertEqual(batch.qty_on_hand, 70)
-        wo_parts = WorkOrderPart.objects.filter(work_order=self.work_order)
-        self.assertEqual(wo_parts.count(), 1)
-        self.assertEqual(wo_parts.first().qty_used, 30)
+        # Verify batch state after issue
+        self.batch.refresh_from_db()
+        self.assertEqual(self.batch.qty_on_hand, Decimal('10'))
         
-        # 3. Return some parts
-        return_result = InventoryService.return_from_work_order(
+        # Return some parts
+        return_result = inventory_service.return_from_work_order(
             work_order_id=str(self.work_order.id),
-            part_id=str(self.part.id),
-            location_id=str(self.location.id),
-            qty_to_return=5,
+            part_id=str(self.part1.id),
+            location_id=str(self.location1.id),
+            qty_to_return=Decimal('3'),
             created_by=self.user
         )
+        self.assertTrue(return_result.success)
         
-        # Verify return
-        batch.refresh_from_db()
-        self.assertEqual(batch.qty_on_hand, 75)
-        return_wo_parts = WorkOrderPart.objects.filter(
-            work_order=self.work_order,
-            qty_used__lt=0
-        )
-        self.assertEqual(return_wo_parts.count(), 1)
-        self.assertEqual(return_wo_parts.first().qty_used, -5)
+        # Verify batch state after return
+        self.batch.refresh_from_db()
+        self.assertEqual(self.batch.qty_on_hand, Decimal('13'))  # 20 - 10 + 3
         
-        # 4. Transfer parts to another location
-        transfer_result = InventoryService.transfer_between_locations(
-            part_id=str(self.part.id),
-            from_location_id=str(self.location.id),
-            to_location_id=str(self.location_b.id),
-            qty=20,
+        # Re-issue parts
+        reissue_result = inventory_service.issue_to_work_order(
+            work_order_id=str(self.work_order.id),
+            part_id=str(self.part1.id),
+            location_id=str(self.location1.id),
+            qty_requested=Decimal('2'),
             created_by=self.user
         )
+        self.assertTrue(reissue_result.success)
         
-        # Verify transfer
-        batch.refresh_from_db()
-        self.assertEqual(batch.qty_on_hand, 55)  # 75 - 20
+        # Final verification
+        self.batch.refresh_from_db()
+        self.assertEqual(self.batch.qty_on_hand, Decimal('11'))  # 13 - 2
         
-        dest_batch = InventoryBatch.objects.filter(
-            part=self.part,
-            location=self.location_b
-        ).first()
-        self.assertIsNotNone(dest_batch)
-        self.assertEqual(dest_batch.qty_on_hand, 20)
-        
-        # 5. Verify movement audit trail
-        movements = PartMovement.objects.filter(part=self.part).order_by('created_at')
-        self.assertEqual(movements.count(), 4)
+        # Verify movement history shows all operations
+        movements = PartMovement.objects.filter(part=self.part1).order_by('created_at')
+        self.assertEqual(movements.count(), 3)
         
         movement_types = [m.movement_type for m in movements]
-        expected_types = ['receive', 'issue', 'return', 'transfer_out']
-        self.assertEqual(movement_types[:4], expected_types)
+        expected_types = [
+            PartMovement.MovementType.ISSUE,
+            PartMovement.MovementType.RETURN,
+            PartMovement.MovementType.ISSUE
+        ]
+        self.assertEqual(movement_types, expected_types)
         
-        # Verify quantities balance
-        total_delta = sum(m.qty_delta for m in movements)
-        total_on_hand = InventoryBatch.objects.filter(part=self.part).aggregate(
-            total=models.Sum('qty_on_hand')
-        )['total']
-        self.assertEqual(total_delta, total_on_hand)
+        movement_deltas = [m.qty_delta for m in movements]
+        expected_deltas = [Decimal('-10'), Decimal('3'), Decimal('-2')]
+        self.assertEqual(movement_deltas, expected_deltas)
+        
+        # Verify work order parts reconciliation
+        wo_parts = WorkOrderPart.objects.filter(work_order=self.work_order)
+        total_qty_used = sum(wp.qty_used for wp in wo_parts)
+        self.assertEqual(total_qty_used, Decimal('9'))  # 10 - 3 + 2
+
+
+class InsufficientStockTests(PartsTestCase):
+    """Tests for insufficient stock scenarios"""
+    
+    def test_insufficient_stock_atomic_failure(self):
+        """Test that insufficient stock fails atomically with no partial writes"""
+        # Create small batch
+        InventoryBatch.objects.create(
+            part=self.part1,
+            location=self.location1,
+            qty_on_hand=Decimal('5'),
+            qty_received=Decimal('5'),
+            last_unit_cost=Decimal('10.00'),
+            received_date=timezone.now()
+        )
+        
+        # Count initial records
+        initial_movements = PartMovement.objects.count()
+        initial_wo_parts = WorkOrderPart.objects.count()
+        
+        # Try to issue more than available
+        with self.assertRaises(InsufficientStockError):
+            inventory_service.issue_to_work_order(
+                work_order_id=str(self.work_order.id),
+                part_id=str(self.part1.id),
+                location_id=str(self.location1.id),
+                qty_requested=Decimal('10'),  # More than available
+                created_by=self.user
+            )
+        
+        # Verify no partial records created
+        self.assertEqual(PartMovement.objects.count(), initial_movements)
+        self.assertEqual(WorkOrderPart.objects.count(), initial_wo_parts)
+        
+        # Verify batch unchanged
+        batch = InventoryBatch.objects.get(part=self.part1, location=self.location1)
+        self.assertEqual(batch.qty_on_hand, Decimal('5'))
+
+
+class IdempotencyTests(PartsTestCase):
+    """Tests for idempotency behavior"""
+    
+    def setUp(self):
+        super().setUp()
+        
+        # Create batch for testing
+        self.batch = InventoryBatch.objects.create(
+            part=self.part1,
+            location=self.location1,
+            qty_on_hand=Decimal('20'),
+            qty_received=Decimal('20'),
+            last_unit_cost=Decimal('10.00'),
+            received_date=timezone.now()
+        )
+    
+    def test_idempotent_issue_operation(self):
+        """Test that re-posting same issue request returns original result"""
+        idempotency_key = "ISSUE_001"
+        
+        # First request
+        result1 = inventory_service.issue_to_work_order(
+            work_order_id=str(self.work_order.id),
+            part_id=str(self.part1.id),
+            location_id=str(self.location1.id),
+            qty_requested=Decimal('5'),
+            created_by=self.user,
+            idempotency_key=idempotency_key
+        )
+        
+        # Second request with same key
+        result2 = inventory_service.issue_to_work_order(
+            work_order_id=str(self.work_order.id),
+            part_id=str(self.part1.id),
+            location_id=str(self.location1.id),
+            qty_requested=Decimal('5'),
+            created_by=self.user,
+            idempotency_key=idempotency_key
+        )
+        
+        # Both should succeed
+        self.assertTrue(result1.success)
+        self.assertTrue(result2.success)
+        
+        # Should have same allocations
+        self.assertEqual(len(result1.allocations), len(result2.allocations))
+        self.assertEqual(result1.allocations[0].qty_allocated, result2.allocations[0].qty_allocated)
+        
+        # Should only have deducted quantity once
+        self.batch.refresh_from_db()
+        self.assertEqual(self.batch.qty_on_hand, Decimal('15'))  # 20 - 5, not 20 - 10
+        
+        # Should only have one set of records
+        movements = PartMovement.objects.filter(
+            part=self.part1,
+            work_order=self.work_order,
+            movement_type=PartMovement.MovementType.ISSUE
+        )
+        self.assertEqual(movements.count(), 1)
+        
+        wo_parts = WorkOrderPart.objects.filter(work_order=self.work_order, part=self.part1)
+        self.assertEqual(wo_parts.count(), 1)
+
+
+class ModelValidationTests(PartsTestCase):
+    """Tests for model validation and constraints"""
+    
+    def test_part_validation(self):
+        """Test Part model validation"""
+        # Duplicate part number should fail
+        with self.assertRaises(Exception):  # IntegrityError
+            Part.objects.create(
+                part_number="P001",  # Same as existing
+                name="Duplicate Part"
+            )
+    
+    def test_inventory_batch_validation(self):
+        """Test InventoryBatch model validation"""
+        batch = InventoryBatch(
+            part=self.part1,
+            location=self.location1,
+            qty_on_hand=Decimal('-5'),  # Invalid
+            qty_received=Decimal('10'),
+            last_unit_cost=Decimal('10.00'),
+            received_date=timezone.now()
+        )
+        
+        with self.assertRaises(ValidationError):
+            batch.clean()
+    
+    def test_work_order_part_calculation(self):
+        """Test WorkOrderPart total cost calculation"""
+        batch = InventoryBatch.objects.create(
+            part=self.part1,
+            location=self.location1,
+            qty_on_hand=Decimal('10'),
+            qty_received=Decimal('10'),
+            last_unit_cost=Decimal('15.50'),
+            received_date=timezone.now()
+        )
+        
+        wo_part = WorkOrderPart.objects.create(
+            work_order=self.work_order,
+            part=self.part1,
+            inventory_batch=batch,
+            qty_used=Decimal('3'),
+            unit_cost_snapshot=Decimal('15.50')
+        )
+        
+        # total_parts_cost should be auto-calculated
+        expected_total = Decimal('3') * Decimal('15.50')
+        self.assertEqual(wo_part.total_parts_cost, expected_total)
+    
+    def test_part_movement_validation(self):
+        """Test PartMovement model validation"""
+        # Test movement type vs qty_delta consistency
+        movement = PartMovement(
+            part=self.part1,
+            movement_type=PartMovement.MovementType.RECEIVE,
+            qty_delta=Decimal('-5'),  # Should be positive for receive
+            to_location=self.location1,
+            created_by=self.user
+        )
+        
+        with self.assertRaises(ValidationError):
+            movement.clean()
+
+
+class ServiceQueryTests(PartsTestCase):
+    """Tests for service query methods"""
+    
+    def setUp(self):
+        super().setUp()
+        
+        # Create test data
+        InventoryBatch.objects.create(
+            part=self.part1,
+            location=self.location1,
+            qty_on_hand=Decimal('15'),
+            qty_received=Decimal('20'),
+            last_unit_cost=Decimal('10.00'),
+            received_date=timezone.now()
+        )
+        
+        InventoryBatch.objects.create(
+            part=self.part1,
+            location=self.location2,
+            qty_on_hand=Decimal('8'),
+            qty_received=Decimal('10'),
+            last_unit_cost=Decimal('12.00'),
+            received_date=timezone.now()
+        )
+        
+        InventoryBatch.objects.create(
+            part=self.part2,
+            location=self.location1,
+            qty_on_hand=Decimal('5'),
+            qty_received=Decimal('5'),
+            last_unit_cost=Decimal('25.00'),
+            received_date=timezone.now()
+        )
+    
+    def test_get_on_hand_by_part_location(self):
+        """Test on-hand quantity queries"""
+        # All parts, all locations
+        all_data = inventory_service.get_on_hand_by_part_location()
+        self.assertEqual(len(all_data), 3)  # 3 part-location combinations
+        
+        # Specific part, all locations
+        part1_data = inventory_service.get_on_hand_by_part_location(part_id=str(self.part1.id))
+        self.assertEqual(len(part1_data), 2)  # part1 in 2 locations
+        
+        total_part1_qty = sum(item['total_on_hand'] for item in part1_data)
+        self.assertEqual(total_part1_qty, Decimal('23'))  # 15 + 8
+        
+        # Specific location, all parts
+        location1_data = inventory_service.get_on_hand_by_part_location(location_id=str(self.location1.id))
+        self.assertEqual(len(location1_data), 2)  # 2 parts in location1
+    
+    def test_get_batches(self):
+        """Test batch queries"""
+        # All batches
+        all_batches = inventory_service.get_batches()
+        self.assertEqual(len(all_batches), 3)
+        
+        # Batches for specific part
+        part1_batches = inventory_service.get_batches(part_id=str(self.part1.id))
+        self.assertEqual(len(part1_batches), 2)
+        
+        # Batches for specific location
+        location1_batches = inventory_service.get_batches(location_id=str(self.location1.id))
+        self.assertEqual(len(location1_batches), 2)
+    
+    def test_get_movements_filtering(self):
+        """Test movement history filtering"""
+        # Create some movements
+        inventory_service.issue_to_work_order(
+            work_order_id=str(self.work_order.id),
+            part_id=str(self.part1.id),
+            location_id=str(self.location1.id),
+            qty_requested=Decimal('5'),
+            created_by=self.user
+        )
+        
+        # Test filtering
+        all_movements = inventory_service.get_movements()
+        self.assertGreater(len(all_movements), 0)
+        
+        part_movements = inventory_service.get_movements(part_id=str(self.part1.id))
+        self.assertGreater(len(part_movements), 0)
+        
+        wo_movements = inventory_service.get_movements(work_order_id=str(self.work_order.id))
+        self.assertGreater(len(wo_movements), 0)
+    
+    def test_get_work_order_parts_summary(self):
+        """Test work order parts summary"""
+        # Issue some parts to work order
+        inventory_service.issue_to_work_order(
+            work_order_id=str(self.work_order.id),
+            part_id=str(self.part1.id),
+            location_id=str(self.location1.id),
+            qty_requested=Decimal('5'),
+            created_by=self.user
+        )
+        
+        summary = inventory_service.get_work_order_parts(str(self.work_order.id))
+        
+        self.assertEqual(summary['work_order_id'], str(self.work_order.id))
+        self.assertGreater(len(summary['parts']), 0)
+        self.assertGreater(summary['total_parts_cost'], Decimal('0'))
 
 
 if __name__ == '__main__':
@@ -843,4 +925,4 @@ if __name__ == '__main__':
     
     TestRunner = get_runner(settings)
     test_runner = TestRunner()
-    failures = test_runner.run_tests(['parts.tests'])
+    failures = test_runner.run_tests(["parts.tests"])

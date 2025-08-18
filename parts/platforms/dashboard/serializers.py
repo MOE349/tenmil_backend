@@ -1,22 +1,19 @@
-from parts.platforms.base.serializers import (
-    PartBaseSerializer, InventoryBatchBaseSerializer, WorkOrderPartBaseSerializer, 
-    PartMovementBaseSerializer
-)
+from parts.platforms.base.serializers import *
 
 
 class PartDashboardSerializer(PartBaseSerializer):
     pass
 
 
-class InventoryBatchDashboardSerializer(InventoryBatchBaseSerializer):
+class InventorybatchDashboardSerializer(InventorybatchBaseSerializer):
     pass
 
 
-class WorkOrderPartDashboardSerializer(WorkOrderPartBaseSerializer):
+class WorkorderpartDashboardSerializer(WorkorderpartBaseSerializer):
     pass
 
 
-class PartMovementDashboardSerializer(PartMovementBaseSerializer):
+class PartmovementDashboardSerializer(PartmovementBaseSerializer):
     pass
 
 
