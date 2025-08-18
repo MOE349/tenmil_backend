@@ -1,11 +1,29 @@
 from rest_framework import serializers
 from decimal import Decimal
 from typing import Dict, Any
+from datetime import datetime, date
+from django.utils import timezone
 
 from configurations.base_features.serializers.base_serializer import BaseSerializer
 from parts.models import Part, InventoryBatch, WorkOrderPart, PartMovement
 from company.platforms.base.serializers import LocationBaseSerializer
 from tenant_users.platforms.base.serializers import TenantUserBaseSerializer
+
+
+class FlexibleDateTimeField(serializers.DateTimeField):
+    """Custom DateTimeField that can handle both date and datetime objects"""
+    
+    def to_representation(self, value):
+        if value is None:
+            return None
+            
+        # Convert date to datetime if needed
+        if isinstance(value, date) and not isinstance(value, datetime):
+            value = timezone.make_aware(
+                datetime.combine(value, datetime.min.time())
+            )
+        
+        return super().to_representation(value)
 
 
 class PartBaseSerializer(BaseSerializer):
@@ -44,8 +62,8 @@ class PartBaseSerializer(BaseSerializer):
 class InventoryBatchBaseSerializer(BaseSerializer):
     """Base serializer for InventoryBatch model"""
     
-    # Explicitly define received_date to handle potential date/datetime issues
-    received_date = serializers.DateTimeField(format='%Y-%m-%dT%H:%M:%S.%fZ', required=False)
+    # Use custom field to handle potential date/datetime issues
+    received_date = FlexibleDateTimeField(required=False)
     
     class Meta:
         model = InventoryBatch
@@ -55,18 +73,6 @@ class InventoryBatchBaseSerializer(BaseSerializer):
     def mod_to_representation(self, instance):
         response = super().mod_to_representation(instance)
         response['id'] = str(instance.id)
-        
-        # Handle potential date/datetime serialization issues
-        if hasattr(instance, 'received_date') and instance.received_date:
-            from datetime import datetime, date
-            if isinstance(instance.received_date, date) and not isinstance(instance.received_date, datetime):
-                # Convert date to datetime for proper serialization
-                from django.utils import timezone
-                response['received_date'] = timezone.make_aware(
-                    datetime.combine(instance.received_date, datetime.min.time())
-                ).isoformat()
-            elif isinstance(instance.received_date, datetime):
-                response['received_date'] = instance.received_date.isoformat()
         
         # Add related object details
         response['part'] = {
