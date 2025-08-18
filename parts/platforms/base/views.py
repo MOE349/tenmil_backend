@@ -1,10 +1,10 @@
 from rest_framework import status
+from decimal import Decimal
+from datetime import datetime
 from configurations.base_features.views.base_api_view import BaseAPIView
 from parts.models import Part, InventoryBatch, WorkOrderPart, PartMovement
-from parts.platforms.base.serializers import (
-    PartBaseSerializer, InventoryBatchBaseSerializer, WorkOrderPartBaseSerializer, 
-    PartMovementBaseSerializer
-)
+from parts.platforms.base.serializers import *
+from parts.services import inventory_service, InsufficientStockError, InvalidOperationError
 
 
 class PartBaseView(BaseAPIView):
@@ -51,27 +51,6 @@ class PartMovementBaseView(BaseAPIView):
             ["Part movements are immutable"], 
             status.HTTP_405_METHOD_NOT_ALLOWED
         )
-
-
-"""
-Inventory Operations Views
-
-Service-based views for parts & inventory operations including:
-- Receive parts
-- Issue to work orders  
-- Return from work orders
-- Transfer between locations
-- Query operations
-"""
-
-from rest_framework import status
-from decimal import Decimal
-from datetime import datetime
-
-from configurations.base_features.views.base_api_view import BaseAPIView
-from parts.models import Part, InventoryBatch
-from parts.platforms.base.serializers import *
-from parts.services import inventory_service, InsufficientStockError, InvalidOperationError
 
 
 class InventoryOperationsBaseView(BaseAPIView):
@@ -368,34 +347,28 @@ class InventoryOperationsBaseView(BaseAPIView):
             validated_part_id = serializer.validated_data['part_id']
             
             # Verify part exists
-            part = Part.objects.get_object_or_404(id=validated_part_id, raise_exception=True)
-            
-            # Get all locations in the company
-            from django.db.models import Sum
-            from company.models import Location
+            try:
+                part = Part.objects.get(id=validated_part_id)
+            except Part.DoesNotExist:
+                return self.format_response(None, [f"Part with ID {validated_part_id} does not exist"], status.HTTP_404_NOT_FOUND)
             
             # Get inventory quantities by location for this specific part
-            # Debug: Check what inventory batches exist for this part
-            debug_batches = InventoryBatch.objects.filter(part__id=validated_part_id)
-            print(f"DEBUG: Found {debug_batches.count()} inventory batches for part {validated_part_id}")
-            for batch in debug_batches:
-                print(f"DEBUG: Batch {batch.id} - Location: {batch.location.name} - Qty: {batch.qty_on_hand}")
+            from django.db.models import Sum
+            from company.models import Location
             
             inventory_by_location = InventoryBatch.objects.filter(
                 part__id=validated_part_id  # Fixed: use part__id instead of part_id
             ).values(
-                'location_id',
+                'location__id',    # Fixed: use location__id to get the ID
                 'location__name', 
                 'location__site__code'
             ).annotate(
                 total_qty_on_hand=Sum('qty_on_hand')
             ).order_by('location__site__code', 'location__name')
             
-            print(f"DEBUG: Inventory by location query result: {list(inventory_by_location)}")
-            
             # Create a dictionary for quick lookup
             location_quantities = {
-                item['location_id']: {
+                item['location__id']: {   # Fixed: use location__id to match the values() field
                     'site': item['location__site__code'] or '',
                     'location': item['location__name'] or '',
                     'qty_on_hand': item['total_qty_on_hand'] or Decimal('0')
@@ -432,3 +405,5 @@ class InventoryOperationsBaseView(BaseAPIView):
             
         except Exception as e:
             return self.handle_exceptions(e)
+
+
