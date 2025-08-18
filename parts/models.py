@@ -97,6 +97,24 @@ class InventoryBatch(BaseModel):
         related_name='inventory_batches',
         help_text="Location where this batch is stored"
     )
+    aisle = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+        help_text="Warehouse aisle"
+    )
+    row = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+        help_text="Warehouse row"
+    )
+    bin = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+        help_text="Warehouse bin/shelf"
+    )
     qty_on_hand = models.IntegerField(
         default=0,
         validators=[MinValueValidator(0)],
