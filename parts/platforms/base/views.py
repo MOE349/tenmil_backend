@@ -337,8 +337,7 @@ class InventoryOperationsBaseView(BaseAPIView):
                 } if location.site else None,
                 'location': {
                     'id': str(location.id),
-                    'name': location.name,
-                    'code': getattr(location, 'code', '') or ''
+                    'name': location.name
                 },
                 'aisle': sample_batch.aisle or '',
                 'row': sample_batch.row or '',
@@ -460,7 +459,6 @@ class InventoryOperationsBaseView(BaseAPIView):
             ).select_related('location', 'location__site').values(
                 'location__id',
                 'location__name',
-                'location__code',
                 'location__site__id',
                 'location__site__code',
                 'location__site__name',
