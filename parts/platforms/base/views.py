@@ -295,7 +295,8 @@ class WorkOrderPartBaseView(BaseAPIView):
                 # Get request data
                 work_order_id = request.data.get('work_order_id')
                 part_id = request.data.get('part_id') 
-                qty_to_return = request.data.get('qty_to_return')
+                new_qty_used = request.data.get('qty_used')  # This is the desired FINAL amount
+                explicit_return_qty = request.data.get('qty_to_return')  # This is explicit return amount
                 
                 # Validate inputs
                 if not work_order_id:
@@ -312,14 +313,12 @@ class WorkOrderPartBaseView(BaseAPIView):
                         status.HTTP_400_BAD_REQUEST
                     )
                 
-                if not qty_to_return or Decimal(str(qty_to_return)) <= 0:
+                if not new_qty_used and not explicit_return_qty:
                     return self.format_response(
                         None, 
-                        ["qty_to_return must be a positive value"], 
+                        ["Either qty_used (final amount) or qty_to_return (return amount) is required"], 
                         status.HTTP_400_BAD_REQUEST
                     )
-                
-                qty_to_return = Decimal(str(qty_to_return))
                 
                 # Validate work order and part exist
                 try:
@@ -347,12 +346,51 @@ class WorkOrderPartBaseView(BaseAPIView):
                         status.HTTP_400_BAD_REQUEST
                     )
                 
-                # Check if we have enough issued quantity to return
+                # Calculate current total issued quantity
                 total_issued = sum(wop.qty_used for wop in work_order_parts)
+                
+                # Determine how much to return
+                if explicit_return_qty is not None:
+                    # Direct return amount specified
+                    qty_to_return = Decimal(str(explicit_return_qty))
+                    if qty_to_return <= 0:
+                        return self.format_response(
+                            None, 
+                            ["qty_to_return must be a positive value"], 
+                            status.HTTP_400_BAD_REQUEST
+                        )
+                else:
+                    # Calculate return amount from desired final qty_used
+                    new_qty_used = Decimal(str(new_qty_used))
+                    if new_qty_used < 0:
+                        return self.format_response(
+                            None, 
+                            ["qty_used (final amount) cannot be negative"], 
+                            status.HTTP_400_BAD_REQUEST
+                        )
+                    if new_qty_used > total_issued:
+                        return self.format_response(
+                            None, 
+                            [f"Cannot set qty_used higher than current amount. Current: {total_issued}, Requested: {new_qty_used}"], 
+                            status.HTTP_400_BAD_REQUEST
+                        )
+                    qty_to_return = total_issued - new_qty_used
+                    
+                    # If no return needed, return early
+                    if qty_to_return == 0:
+                        return self.format_response(
+                            data={
+                                'message': 'No return needed - qty_used is already at the requested amount',
+                                'current_qty_used': str(total_issued)
+                            },
+                            status_code=200
+                        )
+                
+                # Validate we have enough to return
                 if total_issued < qty_to_return:
                     return self.format_response(
                         None, 
-                        [f"Cannot return more than issued. Requested: {qty_to_return}, Available: {total_issued}"], 
+                        [f"Cannot return more than issued. Current: {total_issued}, Requested: {qty_to_return}"], 
                         status.HTTP_400_BAD_REQUEST
                     )
                 
@@ -410,6 +448,9 @@ class WorkOrderPartBaseView(BaseAPIView):
                     
                     remaining_to_return -= qty_from_this_record
                 
+                # Calculate final qty_used after returns
+                final_qty_used = total_issued - qty_to_return
+                
                 # Return success response
                 return self.format_response(
                     data={
@@ -423,7 +464,9 @@ class WorkOrderPartBaseView(BaseAPIView):
                             'part_number': part.part_number,
                             'name': part.name
                         },
-                        'total_qty_returned': str(qty_to_return),
+                        'previous_qty_used': str(total_issued),
+                        'qty_returned': str(qty_to_return),
+                        'final_qty_used': str(final_qty_used),
                         'records_processed': len(returned_records),
                         'returned_records': returned_records
                     },
