@@ -1,6 +1,7 @@
 from rest_framework import status
 from decimal import Decimal
 from datetime import datetime
+from django.core.exceptions import ValidationError
 from configurations.base_features.views.base_api_view import BaseAPIView
 from parts.models import Part, InventoryBatch, WorkOrderPart, PartMovement
 from parts.platforms.base.serializers import *
@@ -101,7 +102,7 @@ class InventoryOperationsBaseView(BaseAPIView):
         except (InsufficientStockError, InvalidOperationError) as e:
             return self.format_response(None, [str(e)], status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return self.handle_exceptions(e)
+            return self.handle_exception(e)
     
     def issue_parts(self, request):
         """Issue parts to work order"""
@@ -149,7 +150,7 @@ class InventoryOperationsBaseView(BaseAPIView):
         except (InvalidOperationError) as e:
             return self.format_response(None, [str(e)], status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return self.handle_exceptions(e)
+            return self.handle_exception(e)
     
     def return_parts(self, request):
         """Return parts from work order"""
@@ -191,7 +192,7 @@ class InventoryOperationsBaseView(BaseAPIView):
         except (InvalidOperationError) as e:
             return self.format_response(None, [str(e)], status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return self.handle_exceptions(e)
+            return self.handle_exception(e)
     
     def transfer_parts(self, request):
         """Transfer parts between locations"""
@@ -238,24 +239,113 @@ class InventoryOperationsBaseView(BaseAPIView):
         except (InvalidOperationError) as e:
             return self.format_response(None, [str(e)], status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return self.handle_exceptions(e)
+            return self.handle_exception(e)
     
     def get_on_hand(self, request):
-        """Get on-hand quantities by part and location"""
+        """Get detailed inventory batch information by part, location, and optional storage details"""
         try:
-            # Support both parameter formats for backward compatibility
+            # Get query parameters - support both parameter formats for backward compatibility
             part_id = request.query_params.get('part_id') or request.query_params.get('part')
             location_id = request.query_params.get('location_id') or request.query_params.get('location')
+            aisle = request.query_params.get('aisle')
+            row = request.query_params.get('row')
+            bin_param = request.query_params.get('bin')
             
-            data = inventory_service.get_on_hand_by_part_location(
-                part_id=part_id,
-                location_id=location_id
+            # Validate required parameters
+            if not part_id:
+                return self.format_response(None, ["part_id or part parameter is required"], status.HTTP_400_BAD_REQUEST)
+            if not location_id:
+                return self.format_response(None, ["location_id or location parameter is required"], status.HTTP_400_BAD_REQUEST)
+            
+            # Verify part exists - try by ID first, then by part_number if ID fails
+            try:
+                # First try to get by ID (UUID)
+                part = Part.objects.get(id=part_id)
+            except (Part.DoesNotExist, ValueError) as e:
+                if "badly formed hexadecimal UUID" in str(e) or "is not a valid UUID" in str(e):
+                    # If UUID is invalid, try to find by part_number
+                    try:
+                        part = Part.objects.get(part_number=part_id)
+                    except Part.DoesNotExist:
+                        return self.format_response(None, [f"Part '{part_id}' not found by ID or part number"], status.HTTP_404_NOT_FOUND)
+                else:
+                    return self.format_response(None, [f"Part with ID {part_id} does not exist"], status.HTTP_404_NOT_FOUND)
+            
+            # Verify location exists - try by ID first, then by name if ID fails
+            from company.models import Location
+            try:
+                # First try to get by ID (UUID)
+                location = Location.objects.select_related('site').get(id=location_id)
+            except (Location.DoesNotExist, ValueError) as e:
+                if "badly formed hexadecimal UUID" in str(e) or "is not a valid UUID" in str(e):
+                    # If UUID is invalid, try to find by name
+                    try:
+                        location = Location.objects.select_related('site').get(name=location_id)
+                    except Location.DoesNotExist:
+                        return self.format_response(None, [f"Location '{location_id}' not found by ID or name"], status.HTTP_404_NOT_FOUND)
+                else:
+                    return self.format_response(None, [f"Location with ID {location_id} does not exist"], status.HTTP_404_NOT_FOUND)
+            
+            # Build queryset with filters
+            queryset = InventoryBatch.objects.filter(
+                part=part,
+                location=location
             )
             
-            return self.format_response(data, None, status.HTTP_200_OK)
+            # Add optional filters
+            if aisle is not None:
+                if aisle.strip() == '':
+                    queryset = queryset.filter(aisle__isnull=True)
+                else:
+                    queryset = queryset.filter(aisle=aisle)
+            
+            if row is not None:
+                if row.strip() == '':
+                    queryset = queryset.filter(row__isnull=True)
+                else:
+                    queryset = queryset.filter(row=row)
+            
+            if bin_param is not None:
+                if bin_param.strip() == '':
+                    queryset = queryset.filter(bin__isnull=True)
+                else:
+                    queryset = queryset.filter(bin=bin_param)
+            
+            # Get all matching batches and calculate totals
+            batches = queryset.all()
+            
+            if not batches:
+                return self.format_response(None, ["No inventory batches found matching the criteria"], status.HTTP_404_NOT_FOUND)
+            
+            # Calculate total quantities
+            total_qty_on_hand = sum(batch.qty_on_hand for batch in batches)
+            total_qty_reserved = sum(batch.qty_reserved for batch in batches)
+            
+            # Get the newest batch for last_unit_cost (by received_date)
+            newest_batch = max(batches, key=lambda b: b.received_date)
+            
+            # Use the first batch's location details (they should all be the same since we filtered by them)
+            sample_batch = batches[0]
+            
+            # Prepare response data
+            response_data = {
+                'part_number': part.part_number,
+                'part_name': part.name,
+                'location': location.name,
+                'aisle': sample_batch.aisle or '',
+                'row': sample_batch.row or '',
+                'bin': sample_batch.bin or '',
+                'qty_on_hand': str(total_qty_on_hand),
+                'qty_reserved': str(total_qty_reserved),
+                'last_unit_cost': str(newest_batch.last_unit_cost),
+                'batches_count': len(batches),
+                'newest_received_date': newest_batch.received_date.isoformat()
+            }
+            
+            return self.format_response(response_data, None, status.HTTP_200_OK)
             
         except Exception as e:
-            return self.handle_exceptions(e)
+            return self.handle_exception(e)
     
     def get_batches(self, request):
         """Get inventory batches with optional filtering"""
@@ -275,7 +365,7 @@ class InventoryOperationsBaseView(BaseAPIView):
             return self.format_response(serializer.data, None, status.HTTP_200_OK)
             
         except Exception as e:
-            return self.handle_exceptions(e)
+            return self.handle_exception(e)
     
     def get_work_order_parts(self, request, work_order_id):
         """Get work order parts summary"""
@@ -296,7 +386,7 @@ class InventoryOperationsBaseView(BaseAPIView):
             )
             
         except Exception as e:
-            return self.handle_exceptions(e)
+            return self.handle_exception(e)
     
     def get_movements(self, request):
         """Get part movements with optional filtering"""
@@ -330,7 +420,7 @@ class InventoryOperationsBaseView(BaseAPIView):
             return self.format_response(serializer.data, None, status.HTTP_200_OK)
             
         except Exception as e:
-            return self.handle_exceptions(e)
+            return self.handle_exception(e)
     
     def get_locations_on_hand(self, request):
         """Get all locations with aggregated inventory batch records for a specific part"""
@@ -388,6 +478,6 @@ class InventoryOperationsBaseView(BaseAPIView):
             return self.format_response(response_data, None, status.HTTP_200_OK)
             
         except Exception as e:
-            return self.handle_exceptions(e)
+            return self.handle_exception(e)
 
 
