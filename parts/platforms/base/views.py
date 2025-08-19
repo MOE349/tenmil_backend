@@ -331,7 +331,16 @@ class InventoryOperationsBaseView(BaseAPIView):
             response_data = {
                 'part_number': part.part_number,
                 'part_name': part.name,
-                'location': location.name,
+                'site': {
+                    'id': str(location.site.id) if location.site else None,
+                    'code': location.site.code if location.site else '',
+                    'name': location.site.name if location.site else ''
+                } if location.site else None,
+                'location': {
+                    'id': str(location.id),
+                    'name': location.name,
+                    'code': getattr(location, 'code', '') or ''
+                },
                 'aisle': sample_batch.aisle or '',
                 'row': sample_batch.row or '',
                 'bin': sample_batch.bin or '',
@@ -452,7 +461,10 @@ class InventoryOperationsBaseView(BaseAPIView):
             ).select_related('location', 'location__site').values(
                 'location__id',
                 'location__name',
+                'location__code',
+                'location__site__id',
                 'location__site__code',
+                'location__site__name',
                 'aisle',
                 'row',
                 'bin'
@@ -467,8 +479,16 @@ class InventoryOperationsBaseView(BaseAPIView):
                 # Only include items with positive quantities
                 if item['total_qty_on_hand'] > 0:
                     response_data.append({
-                        'site': item['location__site__code'] or '',
-                        'location': item['location__name'],
+                        'site': {
+                            'id': str(item['location__site__id']) if item['location__site__id'] else None,
+                            'code': item['location__site__code'] or '',
+                            'name': item['location__site__name'] or ''
+                        } if item['location__site__id'] else None,
+                        'location': {
+                            'id': str(item['location__id']),
+                            'name': item['location__name'],
+                            'code': item['location__code'] or ''
+                        },
                         'aisle': item['aisle'] or '',
                         'row': item['row'] or '',
                         'bin': item['bin'] or '',
