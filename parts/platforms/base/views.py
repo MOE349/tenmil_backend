@@ -90,15 +90,29 @@ class WorkOrderPartBaseView(BaseAPIView):
                         status.HTTP_404_NOT_FOUND
                     )
                 
-                # Get location from work order's asset
-                if not work_order.asset or not hasattr(work_order.asset, 'location'):
+                # Get location from work order's asset using GenericForeignKey resolution
+                from configurations.base_features.db.db_helpers import get_object_by_content_type_and_id
+                
+                try:
+                    asset = get_object_by_content_type_and_id(
+                        work_order.content_type.id, 
+                        str(work_order.object_id)
+                    )
+                except Exception as e:
+                    return self.format_response(
+                        None, 
+                        ["Work order asset not found"], 
+                        status.HTTP_404_NOT_FOUND
+                    )
+                
+                if not hasattr(asset, 'location') or not asset.location:
                     return self.format_response(
                         None, 
                         ["Work order asset does not have a valid location"], 
                         status.HTTP_400_BAD_REQUEST
                     )
                 
-                location = work_order.asset.location
+                location = asset.location
                 
                 # Get part and validate
                 part_id = data.get('part')
