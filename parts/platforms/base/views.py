@@ -282,6 +282,156 @@ class WorkOrderPartBaseView(BaseAPIView):
             
         except Exception as e:
             return self.handle_exception(e)
+    
+    def return_parts_to_inventory(self, request):
+        """Return parts from work order back to inventory using LIFO"""
+        from decimal import Decimal
+        from django.db import transaction
+        from work_orders.models import WorkOrder
+        from rest_framework import status
+        
+        try:
+            with transaction.atomic():
+                # Get request data
+                work_order_id = request.data.get('work_order_id')
+                part_id = request.data.get('part_id') 
+                qty_to_return = request.data.get('qty_to_return')
+                
+                # Validate inputs
+                if not work_order_id:
+                    return self.format_response(
+                        None, 
+                        ["work_order_id is required"], 
+                        status.HTTP_400_BAD_REQUEST
+                    )
+                
+                if not part_id:
+                    return self.format_response(
+                        None, 
+                        ["part_id is required"], 
+                        status.HTTP_400_BAD_REQUEST
+                    )
+                
+                if not qty_to_return or Decimal(str(qty_to_return)) <= 0:
+                    return self.format_response(
+                        None, 
+                        ["qty_to_return must be a positive value"], 
+                        status.HTTP_400_BAD_REQUEST
+                    )
+                
+                qty_to_return = Decimal(str(qty_to_return))
+                
+                # Validate work order and part exist
+                try:
+                    work_order = WorkOrder.objects.get(id=work_order_id)
+                    part = Part.objects.get(id=part_id)
+                except (WorkOrder.DoesNotExist, Part.DoesNotExist):
+                    return self.format_response(
+                        None, 
+                        ["Work order or part not found"], 
+                        status.HTTP_404_NOT_FOUND
+                    )
+                
+                # Get all WorkOrderPart records for this work_order and part
+                # Order by created_at DESC for LIFO (return most recent issues first)
+                work_order_parts = WorkOrderPart.objects.filter(
+                    work_order=work_order,
+                    part=part,
+                    qty_used__gt=0  # Only positive quantities (issued parts)
+                ).order_by('-created_at')
+                
+                if not work_order_parts.exists():
+                    return self.format_response(
+                        None, 
+                        ["No issued parts found for this work order and part combination"], 
+                        status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Check if we have enough issued quantity to return
+                total_issued = sum(wop.qty_used for wop in work_order_parts)
+                if total_issued < qty_to_return:
+                    return self.format_response(
+                        None, 
+                        [f"Cannot return more than issued. Requested: {qty_to_return}, Available: {total_issued}"], 
+                        status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Process returns using LIFO
+                remaining_to_return = qty_to_return
+                returned_records = []
+                
+                for wop in work_order_parts:
+                    if remaining_to_return <= 0:
+                        break
+                    
+                    # Determine how much to return from this record
+                    qty_from_this_record = min(remaining_to_return, wop.qty_used)
+                    
+                    # Update inventory batch (add back to qty_on_hand)
+                    inventory_batch = wop.inventory_batch
+                    inventory_batch.qty_on_hand += qty_from_this_record
+                    inventory_batch.save(update_fields=['qty_on_hand'])
+                    
+                    # Create return movement record for audit trail
+                    PartMovement.objects.create(
+                        part=part,
+                        inventory_batch=inventory_batch,
+                        from_location=None,  # Parts are being returned, not transferred from
+                        to_location=inventory_batch.location,
+                        movement_type=PartMovement.MovementType.RETURN,
+                        qty_delta=qty_from_this_record,  # Positive for returns
+                        work_order=work_order,
+                        created_by=request.user
+                    )
+                    
+                    # Update or delete the WorkOrderPart record
+                    if qty_from_this_record == wop.qty_used:
+                        # Full return - delete the record
+                        returned_records.append({
+                            'work_order_part_id': str(wop.id),
+                            'inventory_batch_id': str(inventory_batch.id),
+                            'qty_returned': str(qty_from_this_record),
+                            'action': 'deleted'
+                        })
+                        wop.delete()
+                    else:
+                        # Partial return - update the record
+                        wop.qty_used -= qty_from_this_record
+                        wop.total_parts_cost = wop.qty_used * wop.unit_cost_snapshot
+                        wop.save(update_fields=['qty_used', 'total_parts_cost'])
+                        
+                        returned_records.append({
+                            'work_order_part_id': str(wop.id),
+                            'inventory_batch_id': str(inventory_batch.id),
+                            'qty_returned': str(qty_from_this_record),
+                            'remaining_qty_used': str(wop.qty_used),
+                            'action': 'updated'
+                        })
+                    
+                    remaining_to_return -= qty_from_this_record
+                
+                # Return success response
+                return self.format_response(
+                    data={
+                        'operation': 'return_parts',
+                        'work_order': {
+                            'id': str(work_order.id),
+                            'code': work_order.code
+                        },
+                        'part': {
+                            'id': str(part.id),
+                            'part_number': part.part_number,
+                            'name': part.name
+                        },
+                        'total_qty_returned': str(qty_to_return),
+                        'records_processed': len(returned_records),
+                        'returned_records': returned_records
+                    },
+                    status_code=200
+                )
+        
+        except Exception as e:
+            return self.handle_exception(e)
 
 
 class PartMovementBaseView(BaseAPIView):

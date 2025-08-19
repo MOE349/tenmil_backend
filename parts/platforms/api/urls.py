@@ -2,7 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from parts.platforms.api.views import (
     PartApiView, InventoryBatchApiView, WorkOrderPartApiView, 
-    PartMovementApiView, InventoryOperationsApiView
+    WorkOrderPartReturnApiView, PartMovementApiView, InventoryOperationsApiView
 )
 
 # Create a router for the operations viewset
@@ -19,6 +19,7 @@ urlpatterns = [
     
     path('work-order-parts', WorkOrderPartApiView.as_view(), name='work-order-parts-list'),
     path('work-order-parts/<uuid:pk>', WorkOrderPartApiView.as_view(), name='work-order-parts-detail'),
+    path('work-order-parts/return', WorkOrderPartReturnApiView.as_view(), name='work-order-parts-return'),
     
     path('movements', PartMovementApiView.as_view(), name='movements-list'),
     path('movements/<uuid:pk>', PartMovementApiView.as_view(), name='movements-detail'),
