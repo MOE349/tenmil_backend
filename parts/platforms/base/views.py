@@ -333,6 +333,7 @@ class InventoryOperationsBaseView(BaseAPIView):
                 'part_name': part.name,
                 'site': {
                     'id': str(location.site.id) if location.site else None,
+                    'code': location.site.code if location.site else '',
                     'name': location.site.name if location.site else ''
                 } if location.site else None,
                 'location': {
