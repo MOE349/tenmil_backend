@@ -333,7 +333,7 @@ class InventoryOperationsBaseView(BaseAPIView):
             return self.handle_exceptions(e)
     
     def get_locations_on_hand(self, request):
-        """Get all locations with individual inventory batch records for a specific part"""
+        """Get all locations with aggregated inventory batch records for a specific part"""
         try:
             # Validate query parameters - support both formats
             part_id = request.query_params.get('part_id') or request.query_params.get('part')
@@ -352,28 +352,37 @@ class InventoryOperationsBaseView(BaseAPIView):
             except Part.DoesNotExist:
                 return self.format_response(None, [f"Part with ID {validated_part_id} does not exist"], status.HTTP_404_NOT_FOUND)
             
-            # Get all company locations
+            # Get all inventory batches for this part with location details
+            from django.db.models import Sum
             from company.models import Location
             
-            # Get all locations
-            all_locations = Location.objects.select_related('site').all()
+            # Get aggregated data grouped by location, aisle, row, and bin
+            inventory_data = InventoryBatch.objects.filter(
+                part=part
+            ).select_related('location', 'location__site').values(
+                'location__id',
+                'location__name',
+                'location__site__code',
+                'aisle',
+                'row',
+                'bin'
+            ).annotate(
+                total_qty_on_hand=Sum('qty_on_hand')
+            ).order_by('location__name', 'aisle', 'row', 'bin')
             
             # Format the response data
             response_data = []
             
-            # For each location, get inventory batches for this part
-            for location in all_locations:
-                inventory_batches = InventoryBatch.objects.filter(
-                    part=part,
-                    location=location
-                ).order_by('received_date')
-                
-                # For each inventory batch record, create a response line
-                for batch in inventory_batches:
+            for item in inventory_data:
+                # Only include items with positive quantities
+                if item['total_qty_on_hand'] > 0:
                     response_data.append({
-                        'site': location.site.code if location.site else '',
-                        'location': location.name,
-                        'qty_on_hand': str(batch.qty_on_hand)
+                        'site': item['location__site__code'] or '',
+                        'location': item['location__name'],
+                        'aisle': item['aisle'] or '',
+                        'row': item['row'] or '',
+                        'bin': item['bin'] or '',
+                        'qty_on_hand': str(item['total_qty_on_hand'])
                     })
             
             return self.format_response(response_data, None, status.HTTP_200_OK)

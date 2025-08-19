@@ -82,6 +82,27 @@ class InventoryBatch(BaseModel):
         _("Received Date"),
         help_text="Date when this batch was received (used for FIFO)"
     )
+    aisle = models.CharField(
+        _("Aisle"), 
+        max_length=50, 
+        null=True, 
+        blank=True,
+        help_text="Storage aisle location"
+    )
+    row = models.CharField(
+        _("Row"), 
+        max_length=50, 
+        null=True, 
+        blank=True,
+        help_text="Storage row location"
+    )
+    bin = models.CharField(
+        _("Bin"), 
+        max_length=50, 
+        null=True, 
+        blank=True,
+        help_text="Storage bin location"
+    )
 
     class Meta:
         indexes = [
