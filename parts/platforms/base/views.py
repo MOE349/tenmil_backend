@@ -292,24 +292,33 @@ class InventoryOperationsBaseView(BaseAPIView):
                 location=location
             )
             
-            # Add optional filters
+            # Add filters for aisle, row, bin - if not provided, filter for null values
             if aisle is not None:
                 if aisle.strip() == '':
                     queryset = queryset.filter(aisle__isnull=True)
                 else:
                     queryset = queryset.filter(aisle=aisle)
+            else:
+                # If aisle not provided, only get records with null aisle
+                queryset = queryset.filter(aisle__isnull=True)
             
             if row is not None:
                 if row.strip() == '':
                     queryset = queryset.filter(row__isnull=True)
                 else:
                     queryset = queryset.filter(row=row)
+            else:
+                # If row not provided, only get records with null row
+                queryset = queryset.filter(row__isnull=True)
             
             if bin_param is not None:
                 if bin_param.strip() == '':
                     queryset = queryset.filter(bin__isnull=True)
                 else:
                     queryset = queryset.filter(bin=bin_param)
+            else:
+                # If bin not provided, only get records with null bin
+                queryset = queryset.filter(bin__isnull=True)
             
             # Get all matching batches and calculate totals
             batches = queryset.all()
@@ -362,10 +371,44 @@ class InventoryOperationsBaseView(BaseAPIView):
             part_id = request.query_params.get('part_id') or request.query_params.get('part')
             location_id = request.query_params.get('location_id') or request.query_params.get('location')
             
+            # Get optional storage location filters
+            aisle = request.query_params.get('aisle')
+            row = request.query_params.get('row')
+            bin_param = request.query_params.get('bin')
+            
+            # Get base batches from service
             batches = inventory_service.get_batches(
                 part_id=part_id,
                 location_id=location_id
             )
+            
+            # Apply additional filtering for aisle, row, bin - if not provided, filter for null values
+            if aisle is not None:
+                if aisle.strip() == '':
+                    batches = batches.filter(aisle__isnull=True)
+                else:
+                    batches = batches.filter(aisle=aisle)
+            else:
+                # If aisle not provided, only get records with null aisle
+                batches = batches.filter(aisle__isnull=True)
+            
+            if row is not None:
+                if row.strip() == '':
+                    batches = batches.filter(row__isnull=True)
+                else:
+                    batches = batches.filter(row=row)
+            else:
+                # If row not provided, only get records with null row
+                batches = batches.filter(row__isnull=True)
+            
+            if bin_param is not None:
+                if bin_param.strip() == '':
+                    batches = batches.filter(bin__isnull=True)
+                else:
+                    batches = batches.filter(bin=bin_param)
+            else:
+                # If bin not provided, only get records with null bin
+                batches = batches.filter(bin__isnull=True)
             
             # Serialize the batches
             serializer = InventoryBatchBaseSerializer(batches, many=True, context={'request': request})
@@ -438,6 +481,11 @@ class InventoryOperationsBaseView(BaseAPIView):
             if not part_id:
                 return self.format_response(None, ["part_id or part parameter is required"], status.HTTP_400_BAD_REQUEST)
             
+            # Get optional storage location filters
+            aisle = request.query_params.get('aisle')
+            row = request.query_params.get('row')
+            bin_param = request.query_params.get('bin')
+            
             serializer = LocationOnHandQuerySerializer(data={'part_id': part_id})
             if not serializer.is_valid():
                 return self.format_response(None, serializer.errors, status.HTTP_400_BAD_REQUEST)
@@ -454,10 +502,39 @@ class InventoryOperationsBaseView(BaseAPIView):
             from django.db.models import Sum
             from company.models import Location
             
+            # Build base queryset
+            queryset = InventoryBatch.objects.filter(part=part)
+            
+            # Add filters for aisle, row, bin - if not provided, filter for null values
+            if aisle is not None:
+                if aisle.strip() == '':
+                    queryset = queryset.filter(aisle__isnull=True)
+                else:
+                    queryset = queryset.filter(aisle=aisle)
+            else:
+                # If aisle not provided, only get records with null aisle
+                queryset = queryset.filter(aisle__isnull=True)
+            
+            if row is not None:
+                if row.strip() == '':
+                    queryset = queryset.filter(row__isnull=True)
+                else:
+                    queryset = queryset.filter(row=row)
+            else:
+                # If row not provided, only get records with null row
+                queryset = queryset.filter(row__isnull=True)
+            
+            if bin_param is not None:
+                if bin_param.strip() == '':
+                    queryset = queryset.filter(bin__isnull=True)
+                else:
+                    queryset = queryset.filter(bin=bin_param)
+            else:
+                # If bin not provided, only get records with null bin
+                queryset = queryset.filter(bin__isnull=True)
+            
             # Get aggregated data grouped by location, aisle, row, and bin
-            inventory_data = InventoryBatch.objects.filter(
-                part=part
-            ).select_related('location', 'location__site').values(
+            inventory_data = queryset.select_related('location', 'location__site').values(
                 'location__id',
                 'location__name',
                 'location__site__id',
