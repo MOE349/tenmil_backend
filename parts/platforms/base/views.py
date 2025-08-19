@@ -18,6 +18,45 @@ class InventoryBatchBaseView(BaseAPIView):
     """Base view for InventoryBatch CRUD operations"""
     serializer_class = InventoryBatchBaseSerializer
     model_class = InventoryBatch
+    
+    def get_request_params(self, request):
+        """Override to add null filtering for missing aisle, row, bin parameters"""
+        params = super().get_request_params(request)
+        
+        # Get storage location parameters
+        aisle = request.query_params.get('aisle')
+        row = request.query_params.get('row')
+        bin_param = request.query_params.get('bin')
+        
+        # Apply null filtering rule for missing parameters
+        if aisle is not None:
+            if aisle.strip() == '':
+                params['aisle__isnull'] = True
+            else:
+                params['aisle'] = aisle
+        else:
+            # If aisle not provided, only get records with null aisle
+            params['aisle__isnull'] = True
+        
+        if row is not None:
+            if row.strip() == '':
+                params['row__isnull'] = True
+            else:
+                params['row'] = row
+        else:
+            # If row not provided, only get records with null row
+            params['row__isnull'] = True
+        
+        if bin_param is not None:
+            if bin_param.strip() == '':
+                params['bin__isnull'] = True
+            else:
+                params['bin'] = bin_param
+        else:
+            # If bin not provided, only get records with null bin
+            params['bin__isnull'] = True
+        
+        return params
 
 
 class WorkOrderPartBaseView(BaseAPIView):
