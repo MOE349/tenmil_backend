@@ -63,6 +63,159 @@ class WorkOrderPartBaseView(BaseAPIView):
     """Base view for WorkOrderPart CRUD operations"""
     serializer_class = WorkOrderPartBaseSerializer
     model_class = WorkOrderPart
+    
+    def create(self, data, params, return_instance=False, *args, **kwargs):
+        """Create WorkOrderPart with FIFO inventory allocation"""
+        from decimal import Decimal
+        from django.db import transaction
+        from work_orders.models import WorkOrder
+        
+        try:
+            with transaction.atomic():
+                # Get work order and determine location
+                work_order_id = data.get('work_order')
+                if not work_order_id:
+                    return self.format_response(
+                        None, 
+                        ["work_order field is required"], 
+                        status.HTTP_400_BAD_REQUEST
+                    )
+                
+                try:
+                    work_order = WorkOrder.objects.get(id=work_order_id)
+                except WorkOrder.DoesNotExist:
+                    return self.format_response(
+                        None, 
+                        ["Work order not found"], 
+                        status.HTTP_404_NOT_FOUND
+                    )
+                
+                # Get location from work order's asset
+                if not work_order.asset or not hasattr(work_order.asset, 'location'):
+                    return self.format_response(
+                        None, 
+                        ["Work order asset does not have a valid location"], 
+                        status.HTTP_400_BAD_REQUEST
+                    )
+                
+                location = work_order.asset.location
+                
+                # Get part and validate
+                part_id = data.get('part')
+                if not part_id:
+                    return self.format_response(
+                        None, 
+                        ["part field is required"], 
+                        status.HTTP_400_BAD_REQUEST
+                    )
+                
+                try:
+                    part = Part.objects.get(id=part_id)
+                except Part.DoesNotExist:
+                    return self.format_response(
+                        None, 
+                        ["Part not found"], 
+                        status.HTTP_404_NOT_FOUND
+                    )
+                
+                # Get qty_used from data
+                qty_used = data.get('qty_used')
+                if not qty_used or Decimal(str(qty_used)) <= 0:
+                    return self.format_response(
+                        None, 
+                        ["qty_used must be a positive value"], 
+                        status.HTTP_400_BAD_REQUEST
+                    )
+                
+                qty_used = Decimal(str(qty_used))
+                
+                # Get inventory batches for this part and location, ordered by received_date (FIFO)
+                available_batches = InventoryBatch.objects.filter(
+                    part=part,
+                    location=location,
+                    qty_on_hand__gt=0
+                ).order_by('received_date')
+                
+                if not available_batches.exists():
+                    return self.format_response(
+                        None, 
+                        [f"No inventory available for part {part.part_number} at location {location.name}"], 
+                        status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Check if we have enough total inventory
+                total_available = sum(batch.qty_on_hand for batch in available_batches)
+                if total_available < qty_used:
+                    return self.format_response(
+                        None, 
+                        [f"Insufficient inventory. Requested: {qty_used}, Available: {total_available}"], 
+                        status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Allocate inventory using FIFO
+                work_order_parts = []
+                remaining_qty = qty_used
+                
+                for batch in available_batches:
+                    if remaining_qty <= 0:
+                        break
+                    
+                    # Determine how much to take from this batch
+                    qty_from_batch = min(remaining_qty, batch.qty_on_hand)
+                    
+                    # Create WorkOrderPart record for this batch
+                    work_order_part = WorkOrderPart.objects.create(
+                        work_order=work_order,
+                        part=part,
+                        inventory_batch=batch,
+                        qty_used=qty_from_batch,
+                        unit_cost_snapshot=batch.last_unit_cost,
+                        total_parts_cost=qty_from_batch * batch.last_unit_cost
+                    )
+                    work_order_parts.append(work_order_part)
+                    
+                    # Update inventory batch qty_on_hand
+                    batch.qty_on_hand -= qty_from_batch
+                    batch.save(update_fields=['qty_on_hand'])
+                    
+                    # Create movement record for audit trail
+                    PartMovement.objects.create(
+                        part=part,
+                        inventory_batch=batch,
+                        from_location=location,
+                        to_location=None,  # Parts are consumed, not transferred
+                        movement_type=PartMovement.MovementType.ISSUE,
+                        qty_delta=-qty_from_batch,
+                        work_order=work_order,
+                        created_by=params.get('user')
+                    )
+                    
+                    remaining_qty -= qty_from_batch
+                
+                # Return response with all created work order parts
+                serialized_data = []
+                for wop in work_order_parts:
+                    serializer = self.serializer_class(wop)
+                    serialized_data.append(serializer.data)
+                
+                if return_instance:
+                    return work_order_parts, serialized_data
+                
+                return self.format_response(
+                    data={
+                        'work_order_parts': serialized_data,
+                        'total_qty_used': str(qty_used),
+                        'batches_used': len(work_order_parts),
+                        'location': {
+                            'id': str(location.id),
+                            'name': location.name
+                        }
+                    }, 
+                    status_code=201
+                )
+        
+        except Exception as e:
+            return self.handle_exception(e)
 
 
 class PartMovementBaseView(BaseAPIView):
