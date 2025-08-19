@@ -205,7 +205,8 @@ class PartMovementBaseSerializer(BaseSerializer):
         if instance.created_by:
             response['created_by'] = {
                 "id": str(instance.created_by.id),
-                "username": instance.created_by.username,
+                "email": instance.created_by.email,
+                "name": instance.created_by.name,
                 "end_point": "/tenant_users/tenant_user"
             }
         
