@@ -20,6 +20,82 @@ class InventoryBatchBaseView(BaseAPIView):
     serializer_class = InventoryBatchBaseSerializer
     model_class = InventoryBatch
     
+    def create(self, data, params, return_instance=False, *args, **kwargs):
+        """Create InventoryBatch using service layer to ensure movement log creation"""
+        try:
+            from decimal import Decimal
+            from django.utils import timezone
+            
+            # Validate required fields
+            required_fields = ['part', 'location', 'qty_received', 'last_unit_cost']
+            missing_fields = [field for field in required_fields if field not in data]
+            if missing_fields:
+                raise LocalBaseException(
+                    exception=f"Missing required fields: {', '.join(missing_fields)}",
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Extract data for service call
+            part_id = data.get('part')
+            location_id = data.get('location')
+            qty = Decimal(str(data.get('qty_received')))
+            unit_cost = Decimal(str(data.get('last_unit_cost')))
+            received_date = data.get('received_date')
+            
+            # Parse received_date if provided as string
+            if received_date and isinstance(received_date, str):
+                from django.utils.dateparse import parse_datetime
+                received_date = parse_datetime(received_date)
+                if not received_date:
+                    raise LocalBaseException(
+                        exception="Invalid received_date format",
+                        status_code=status.HTTP_400_BAD_REQUEST
+                    )
+            
+            # Get user if available from params (set by handle_post_params)
+            created_by = params.get('user')
+            
+            # Use service layer to create inventory batch with movement log
+            result = inventory_service.receive_parts(
+                part_id=str(part_id),
+                location_id=str(location_id),
+                qty=qty,
+                unit_cost=unit_cost,
+                received_date=received_date,
+                receipt_id=data.get('receipt_id'),
+                created_by=created_by
+            )
+            
+            if not result.success:
+                raise LocalBaseException(
+                    exception=result.message,
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Get the created batch
+            batch_id = result.allocations[0].batch_id if result.allocations else None
+            if not batch_id:
+                raise LocalBaseException(
+                    exception="Failed to create inventory batch",
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+            
+            # Get the created instance and serialize it
+            instance = InventoryBatch.objects.get(id=batch_id)
+            serializer = self.serializer_class(instance)
+            
+            if return_instance:
+                return instance, serializer.data
+            return self.format_response(data=serializer.data, status_code=201)
+            
+        except (ValidationError, InvalidOperationError) as e:
+            raise LocalBaseException(
+                exception=str(e),
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            return self.handle_exception(e)
+    
     def get_request_params(self, request):
         """Override to add null filtering for missing aisle, row, bin parameters"""
         params = super().get_request_params(request)
