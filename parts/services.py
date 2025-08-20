@@ -667,20 +667,61 @@ class InventoryService:
         work_order_id: Optional[str] = None,
         from_date: Optional[datetime] = None,
         to_date: Optional[datetime] = None,
-        limit: int = 100
+        limit: int = 100,
+        aisle: Optional[str] = None,
+        row: Optional[str] = None,
+        bin: Optional[str] = None
     ) -> List[PartMovement]:
-        """Get part movements with optional filtering"""
+        """Get part movements with optional filtering including inventory_batch positioning"""
         queryset = PartMovement.objects.select_related(
-            'part', 'from_location', 'to_location', 'work_order', 'inventory_batch'
+            'part', 'from_location', 'to_location', 'work_order', 'inventory_batch', 'inventory_batch__location'
         )
         
         if part_id:
             queryset = queryset.filter(part__id=part_id)
+            
         if location_id:
+            # Filter by location - check both movement locations AND inventory_batch location
             queryset = queryset.filter(
                 models.Q(from_location__id=location_id) | 
-                models.Q(to_location__id=location_id)
+                models.Q(to_location__id=location_id) |
+                models.Q(inventory_batch__location__id=location_id)
             )
+            
+        # Filter by inventory_batch positioning fields
+        if aisle is not None:
+            if aisle == '' or aisle == '0':
+                # Empty string or '0' should match default value '0'
+                queryset = queryset.filter(
+                    models.Q(inventory_batch__aisle='0') | 
+                    models.Q(inventory_batch__aisle__isnull=True) |
+                    models.Q(inventory_batch__aisle='')
+                )
+            else:
+                queryset = queryset.filter(inventory_batch__aisle=aisle)
+                
+        if row is not None:
+            if row == '' or row == '0':
+                # Empty string or '0' should match default value '0'
+                queryset = queryset.filter(
+                    models.Q(inventory_batch__row='0') | 
+                    models.Q(inventory_batch__row__isnull=True) |
+                    models.Q(inventory_batch__row='')
+                )
+            else:
+                queryset = queryset.filter(inventory_batch__row=row)
+                
+        if bin is not None:
+            if bin == '' or bin == '0':
+                # Empty string or '0' should match default value '0'
+                queryset = queryset.filter(
+                    models.Q(inventory_batch__bin='0') | 
+                    models.Q(inventory_batch__bin__isnull=True) |
+                    models.Q(inventory_batch__bin='')
+                )
+            else:
+                queryset = queryset.filter(inventory_batch__bin=bin)
+        
         if work_order_id:
             queryset = queryset.filter(work_order__id=work_order_id)
         if from_date:

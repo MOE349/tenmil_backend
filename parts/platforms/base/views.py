@@ -507,6 +507,113 @@ class PartMovementBaseView(BaseAPIView):
     serializer_class = PartMovementBaseSerializer
     model_class = PartMovement
     
+    def get_request_params(self, request):
+        """Override to handle inventory_batch positioning filters"""
+        params = super().get_request_params(request)
+        
+        # Handle location filtering through multiple fields
+        location_param = request.query_params.get('location')
+        if location_param:
+            # Remove the default location filter and add our custom logic
+            params.pop('location', None)
+            # Add the complex location filter using Q objects
+            from django.db.models import Q
+            params['_custom_location_filter'] = Q(
+                from_location__id=location_param
+            ) | Q(
+                to_location__id=location_param
+            ) | Q(
+                inventory_batch__location__id=location_param
+            )
+        
+        # Handle positioning parameters through inventory_batch
+        aisle = request.query_params.get('aisle')
+        row = request.query_params.get('row')
+        bin_param = request.query_params.get('bin')
+        
+        if aisle is not None:
+            if aisle == '' or aisle == '0':
+                # Handle default/empty values
+                from django.db.models import Q
+                params['_custom_aisle_filter'] = Q(
+                    inventory_batch__aisle='0'
+                ) | Q(
+                    inventory_batch__aisle__isnull=True
+                ) | Q(
+                    inventory_batch__aisle=''
+                )
+            else:
+                params['inventory_batch__aisle'] = aisle
+        
+        if row is not None:
+            if row == '' or row == '0':
+                # Handle default/empty values
+                from django.db.models import Q
+                params['_custom_row_filter'] = Q(
+                    inventory_batch__row='0'
+                ) | Q(
+                    inventory_batch__row__isnull=True
+                ) | Q(
+                    inventory_batch__row=''
+                )
+            else:
+                params['inventory_batch__row'] = row
+        
+        if bin_param is not None:
+            if bin_param == '' or bin_param == '0':
+                # Handle default/empty values
+                from django.db.models import Q
+                params['_custom_bin_filter'] = Q(
+                    inventory_batch__bin='0'
+                ) | Q(
+                    inventory_batch__bin__isnull=True
+                ) | Q(
+                    inventory_batch__bin=''
+                )
+            else:
+                params['inventory_batch__bin'] = bin_param
+        
+        return params
+    
+    def list(self, params, *args, **kwargs):
+        """Custom list method to handle complex filtering"""
+        try:
+            # Extract custom filters
+            custom_filters = {}
+            location_filter = params.pop('_custom_location_filter', None)
+            aisle_filter = params.pop('_custom_aisle_filter', None)
+            row_filter = params.pop('_custom_row_filter', None)
+            bin_filter = params.pop('_custom_bin_filter', None)
+            
+            # Get base queryset
+            queryset = self.model_class.objects.select_related(
+                'part', 'from_location', 'to_location', 'work_order', 'inventory_batch', 'inventory_batch__location'
+            )
+            
+            # Apply regular filters
+            if params:
+                queryset = queryset.filter(**params)
+            
+            # Apply custom Q object filters
+            if location_filter:
+                queryset = queryset.filter(location_filter)
+            if aisle_filter:
+                queryset = queryset.filter(aisle_filter)
+            if row_filter:
+                queryset = queryset.filter(row_filter)
+            if bin_filter:
+                queryset = queryset.filter(bin_filter)
+            
+            # Apply ordering
+            queryset = queryset.order_by('-created_at')
+            
+            # Serialize data
+            serializer = self.serializer_class(queryset, many=True)
+            return self.format_response(data=serializer.data, status_code=200)
+            
+        except Exception as e:
+            return self.handle_exception(e)
+    
     # Part movements are immutable - disable write operations
     def create(self, data, params, *args, **kwargs):
         try:
@@ -949,7 +1056,7 @@ class InventoryOperationsBaseView(BaseAPIView):
             return self.handle_exception(e)
     
     def get_movements(self, request):
-        """Get part movements with optional filtering"""
+        """Get part movements with optional filtering including inventory_batch positioning"""
         try:
             # Parse query parameters - support both formats
             part_id = request.query_params.get('part_id') or request.query_params.get('part')
@@ -958,6 +1065,11 @@ class InventoryOperationsBaseView(BaseAPIView):
             from_date = request.query_params.get('from_date')
             to_date = request.query_params.get('to_date')
             limit = int(request.query_params.get('limit', 100))
+            
+            # Extract positioning parameters for inventory_batch filtering
+            aisle = request.query_params.get('aisle')
+            row = request.query_params.get('row')
+            bin_param = request.query_params.get('bin')
             
             # Parse dates if provided
             if from_date:
@@ -971,7 +1083,10 @@ class InventoryOperationsBaseView(BaseAPIView):
                 work_order_id=work_order_id,
                 from_date=from_date,
                 to_date=to_date,
-                limit=limit
+                limit=limit,
+                aisle=aisle,
+                row=row,
+                bin=bin_param
             )
             
             # Serialize the movements
