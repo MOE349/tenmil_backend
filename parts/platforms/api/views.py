@@ -86,7 +86,7 @@ class InventoryOperationsApiView(InventoryOperationsBaseView, viewsets.ViewSet):
     
     @action(detail=False, methods=['get'], url_path='get-part-location')
     def get_part_locations(self, request):
-        """Get part locations with simplified numbered response format"""
+        """Get part locations with simplified name-based response format"""
         return super().get_part_locations(request)
 
 

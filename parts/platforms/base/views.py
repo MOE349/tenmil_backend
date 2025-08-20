@@ -1020,16 +1020,16 @@ class InventoryOperationsBaseView(BaseAPIView):
             return self.handle_exception(e)
     
     def get_part_locations(self, request):
-        """Get part locations with simplified numbered response format"""
+        """Get part locations with simplified name-based response format"""
         try:
             # Get validated data using common method (only accepts 'part' param)
             inventory_data = self._get_validated_part_locations_data(request, allow_both_params=False)
             
-            # Format the response data with numbered entries
+            # Format the response data with name entries
             locations = []
             total_qty = 0
             
-            for index, item in enumerate(inventory_data, 1):
+            for item in inventory_data:
                 qty_on_hand = float(item['total_qty_on_hand'])
                 total_qty += qty_on_hand
                 
@@ -1049,9 +1049,9 @@ class InventoryOperationsBaseView(BaseAPIView):
                 # Create the formatted string: "{site.code} - {location.name} - A{aisle}/R{row}/B{bin} - qty:{qty_on_hand}"
                 formatted_string = f"{site_code} - {location_name} - {aisle_formatted}/{row_formatted}/{bin_formatted} - qty: {qty_on_hand}"
                 
-                # Only include the numbered key with formatted string
+                # Only include the name key with formatted string
                 location_data = {
-                    str(index): formatted_string
+                    "name": formatted_string
                 }
                 
                 locations.append(location_data)
