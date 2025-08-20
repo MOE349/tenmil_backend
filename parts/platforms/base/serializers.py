@@ -245,10 +245,20 @@ class ReturnPartsSerializer(serializers.Serializer):
 
 
 class TransferPartsSerializer(serializers.Serializer):
-    """Serializer for transferring parts between locations"""
+    """
+    Serializer for transferring parts between locations
+    
+    Supports flexible location input formats:
+    - UUID: Standard location UUID
+    - Location String: 'SITE_CODE - LOCATION_NAME - AA1/RR2/BB3 - qty: 75.5'
+    
+    Auto-detects format and converts location strings to UUIDs internally.
+    """
     part_id = serializers.UUIDField(required=True)
-    from_location_id = serializers.UUIDField(required=False)
-    to_location_id = serializers.UUIDField(required=False)
+    from_location_id = serializers.CharField(required=False, 
+                                           help_text="UUID or location string format: 'SITE_CODE - LOCATION_NAME - AA1/RR2/BB3 - qty: 75.5'")
+    to_location_id = serializers.CharField(required=False,
+                                         help_text="UUID or location string format: 'SITE_CODE - LOCATION_NAME - AA1/RR2/BB3 - qty: 75.5'")
     from_location_string = serializers.CharField(max_length=500, required=False, 
                                                 help_text="Format: 'SITE_CODE - LOCATION_NAME - AA1/RR2/BB3 - qty: 75.5'")
     to_location_string = serializers.CharField(max_length=500, required=False,
@@ -259,39 +269,77 @@ class TransferPartsSerializer(serializers.Serializer):
     bin = serializers.CharField(max_length=50, required=False, allow_blank=True)
     idempotency_key = serializers.CharField(max_length=100, required=False)
     
-    def validate(self, data):
+    def _is_uuid(self, value: str) -> bool:
+        """Check if a string is a valid UUID format"""
+        import uuid
+        try:
+            uuid.UUID(value)
+            return True
+        except (ValueError, AttributeError):
+            return False
+    
+    def _process_location_field(self, data: dict, id_field: str, string_field: str, field_name: str):
+        """Process location ID or string field and convert to UUID"""
         from parts.services import location_decoder
         
-        # Ensure either UUIDs or location strings are provided for both from and to locations
-        has_from_id = 'from_location_id' in data and data['from_location_id']
-        has_from_string = 'from_location_string' in data and data['from_location_string']
-        has_to_id = 'to_location_id' in data and data['to_location_id']
-        has_to_string = 'to_location_string' in data and data['to_location_string']
+        has_id = id_field in data and data[id_field]
+        has_string = string_field in data and data[string_field]
         
-        if not (has_from_id or has_from_string):
-            raise serializers.ValidationError("Either from_location_id or from_location_string is required")
+        if not (has_id or has_string):
+            raise serializers.ValidationError(f"Either {id_field} or {string_field} is required")
         
-        if not (has_to_id or has_to_string):
-            raise serializers.ValidationError("Either to_location_id or to_location_string is required")
+        if has_id and has_string:
+            raise serializers.ValidationError(f"Provide either {id_field} or {string_field}, not both")
         
-        if has_from_id and has_from_string:
-            raise serializers.ValidationError("Provide either from_location_id or from_location_string, not both")
+        # If we have an ID field, check if it's a UUID or location string
+        if has_id:
+            if self._is_uuid(data[id_field]):
+                # It's a UUID, validate it exists
+                import uuid
+                try:
+                    uuid_val = uuid.UUID(data[id_field])
+                    # Convert back to string for consistency
+                    data[id_field] = str(uuid_val)
+                    return
+                except ValueError:
+                    raise serializers.ValidationError(f"Invalid UUID format for {id_field}")
+            else:
+                # It's a location string, treat it like from_location_string/to_location_string
+                location_string = data[id_field]
+                try:
+                    decoded = location_decoder.decode_location_string(location_string)
+                    location = location_decoder.get_location_by_site_and_name(
+                        decoded['site_code'], decoded['location_name']
+                    )
+                    if not location:
+                        raise serializers.ValidationError(
+                            f"{field_name} location not found: {decoded['site_code']} - {decoded['location_name']}"
+                        )
+                    data[id_field] = str(location.id)
+                    
+                    # Use decoded aisle/row/bin if not explicitly provided
+                    if not data.get('aisle') and decoded['aisle']:
+                        data['aisle'] = decoded['aisle']
+                    if not data.get('row') and decoded['row']:
+                        data['row'] = decoded['row']
+                    if not data.get('bin') and decoded['bin']:
+                        data['bin'] = decoded['bin']
+                        
+                except ValueError as e:
+                    raise serializers.ValidationError(f"Invalid {field_name} location format: {str(e)}")
         
-        if has_to_id and has_to_string:
-            raise serializers.ValidationError("Provide either to_location_id or to_location_string, not both")
-        
-        # If using location strings, decode and resolve to UUIDs
-        if has_from_string:
+        # If we have a string field, decode it
+        elif has_string:
             try:
-                decoded = location_decoder.decode_location_string(data['from_location_string'])
-                from_location = location_decoder.get_location_by_site_and_name(
+                decoded = location_decoder.decode_location_string(data[string_field])
+                location = location_decoder.get_location_by_site_and_name(
                     decoded['site_code'], decoded['location_name']
                 )
-                if not from_location:
+                if not location:
                     raise serializers.ValidationError(
-                        f"From location not found: {decoded['site_code']} - {decoded['location_name']}"
+                        f"{field_name} location not found: {decoded['site_code']} - {decoded['location_name']}"
                     )
-                data['from_location_id'] = from_location.id
+                data[id_field] = str(location.id)
                 
                 # Use decoded aisle/row/bin if not explicitly provided
                 if not data.get('aisle') and decoded['aisle']:
@@ -302,31 +350,16 @@ class TransferPartsSerializer(serializers.Serializer):
                     data['bin'] = decoded['bin']
                     
             except ValueError as e:
-                raise serializers.ValidationError(f"Invalid from_location_string: {str(e)}")
+                raise serializers.ValidationError(f"Invalid {string_field}: {str(e)}")
+
+    def validate(self, data):
+        # Process from location
+        self._process_location_field(data, 'from_location_id', 'from_location_string', 'From')
         
-        if has_to_string:
-            try:
-                decoded = location_decoder.decode_location_string(data['to_location_string'])
-                to_location = location_decoder.get_location_by_site_and_name(
-                    decoded['site_code'], decoded['location_name']
-                )
-                if not to_location:
-                    raise serializers.ValidationError(
-                        f"To location not found: {decoded['site_code']} - {decoded['location_name']}"
-                    )
-                data['to_location_id'] = to_location.id
-                
-                # Use decoded aisle/row/bin for destination if not explicitly provided
-                if not data.get('aisle') and decoded['aisle']:
-                    data['aisle'] = decoded['aisle']
-                if not data.get('row') and decoded['row']:
-                    data['row'] = decoded['row']
-                if not data.get('bin') and decoded['bin']:
-                    data['bin'] = decoded['bin']
-                    
-            except ValueError as e:
-                raise serializers.ValidationError(f"Invalid to_location_string: {str(e)}")
+        # Process to location  
+        self._process_location_field(data, 'to_location_id', 'to_location_string', 'To')
         
+        # Ensure locations are different
         if data['from_location_id'] == data['to_location_id']:
             raise serializers.ValidationError("Source and destination locations must be different")
         
