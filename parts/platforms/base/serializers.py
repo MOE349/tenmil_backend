@@ -254,6 +254,10 @@ class TransferPartsSerializer(serializers.Serializer):
     
     Auto-detects format and converts location strings to UUIDs internally.
     
+    Position Handling:
+    - When using location strings, destination position is extracted and used for the transfer
+    - Parts are moved to the exact aisle/row/bin specified in the destination location string
+    
     Validation Rules:
     - Transfers within the same location are allowed if positions (aisle/row/bin) are different
     - Only identical location AND position combinations are rejected
@@ -333,7 +337,13 @@ class TransferPartsSerializer(serializers.Serializer):
                         'bin': decoded['bin']
                     }
                     
-                    # Use decoded aisle/row/bin if not explicitly provided
+                    # Store destination position separately for TO location
+                    if field_name.lower() == 'to':
+                        data['dest_aisle'] = decoded['aisle']
+                        data['dest_row'] = decoded['row'] 
+                        data['dest_bin'] = decoded['bin']
+                        
+                    # Use decoded aisle/row/bin if not explicitly provided (for compatibility)
                     if not data.get('aisle') and decoded['aisle']:
                         data['aisle'] = decoded['aisle']
                     if not data.get('row') and decoded['row']:
@@ -364,7 +374,13 @@ class TransferPartsSerializer(serializers.Serializer):
                     'bin': decoded['bin']
                 }
                 
-                # Use decoded aisle/row/bin if not explicitly provided
+                # Store destination position separately for TO location
+                if field_name.lower() == 'to':
+                    data['dest_aisle'] = decoded['aisle']
+                    data['dest_row'] = decoded['row'] 
+                    data['dest_bin'] = decoded['bin']
+                    
+                # Use decoded aisle/row/bin if not explicitly provided (for compatibility)
                 if not data.get('aisle') and decoded['aisle']:
                     data['aisle'] = decoded['aisle']
                 if not data.get('row') and decoded['row']:
@@ -412,9 +428,19 @@ class TransferPartsSerializer(serializers.Serializer):
                         "Source and destination locations are the same. Please specify different aisle/row/bin or use different locations."
                     )
         
+        # Use destination position if available, otherwise fall back to generic position
+        if 'dest_aisle' in data or 'dest_row' in data or 'dest_bin' in data:
+            # Prefer destination-specific position for the transfer
+            data['aisle'] = data.get('dest_aisle', data.get('aisle', ''))
+            data['row'] = data.get('dest_row', data.get('row', ''))
+            data['bin'] = data.get('dest_bin', data.get('bin', ''))
+        
         # Clean up temporary position data
         data.pop('_from_position', None)
         data.pop('_to_position', None)
+        data.pop('dest_aisle', None)
+        data.pop('dest_row', None)
+        data.pop('dest_bin', None)
         
         return data
 

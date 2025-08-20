@@ -391,8 +391,7 @@ class InventoryService:
         """
         if qty <= 0:
             raise ValidationError("Quantity must be positive")
-        if from_location_id == to_location_id:
-            raise ValidationError("Source and destination locations must be different")
+        # Note: Location validation is handled in serializer with position awareness
             
         with transaction.atomic():
             # Get entities
