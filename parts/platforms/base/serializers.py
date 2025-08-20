@@ -337,11 +337,15 @@ class TransferPartsSerializer(serializers.Serializer):
                         'bin': decoded['bin']
                     }
                     
-                    # Store destination position separately for TO location
+                    # Store position separately for each location type
                     if field_name.lower() == 'to':
                         data['dest_aisle'] = decoded['aisle']
                         data['dest_row'] = decoded['row'] 
                         data['dest_bin'] = decoded['bin']
+                    elif field_name.lower() == 'from':
+                        data['source_aisle'] = decoded['aisle']
+                        data['source_row'] = decoded['row']
+                        data['source_bin'] = decoded['bin']
                         
                     # Use decoded aisle/row/bin if not explicitly provided (for compatibility)
                     if not data.get('aisle') and decoded['aisle']:
@@ -374,11 +378,15 @@ class TransferPartsSerializer(serializers.Serializer):
                     'bin': decoded['bin']
                 }
                 
-                # Store destination position separately for TO location
+                # Store position separately for each location type
                 if field_name.lower() == 'to':
                     data['dest_aisle'] = decoded['aisle']
                     data['dest_row'] = decoded['row'] 
                     data['dest_bin'] = decoded['bin']
+                elif field_name.lower() == 'from':
+                    data['source_aisle'] = decoded['aisle']
+                    data['source_row'] = decoded['row']
+                    data['source_bin'] = decoded['bin']
                     
                 # Use decoded aisle/row/bin if not explicitly provided (for compatibility)
                 if not data.get('aisle') and decoded['aisle']:
@@ -436,12 +444,21 @@ class TransferPartsSerializer(serializers.Serializer):
             data['row'] = data.get('dest_row') or data.get('row') or None
             data['bin'] = data.get('dest_bin') or data.get('bin') or None
         
+        # Set source position data for position-based FIFO
+        if 'source_aisle' in data or 'source_row' in data or 'source_bin' in data:
+            data['from_aisle'] = data.get('source_aisle')
+            data['from_row'] = data.get('source_row')
+            data['from_bin'] = data.get('source_bin')
+        
         # Clean up temporary position data
         data.pop('_from_position', None)
         data.pop('_to_position', None)
         data.pop('dest_aisle', None)
         data.pop('dest_row', None)
         data.pop('dest_bin', None)
+        data.pop('source_aisle', None)
+        data.pop('source_row', None)
+        data.pop('source_bin', None)
         
         return data
 

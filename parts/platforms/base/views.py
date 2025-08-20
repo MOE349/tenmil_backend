@@ -651,6 +651,9 @@ class InventoryOperationsBaseView(BaseAPIView):
                 aisle=data.get('aisle'),
                 row=data.get('row'),
                 bin=data.get('bin'),
+                from_aisle=data.get('from_aisle'),
+                from_row=data.get('from_row'),
+                from_bin=data.get('from_bin'),
                 idempotency_key=data.get('idempotency_key')
             )
             

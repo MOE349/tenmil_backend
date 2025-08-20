@@ -370,6 +370,9 @@ class InventoryService:
         aisle: Optional[str] = None,
         row: Optional[str] = None,
         bin: Optional[str] = None,
+        from_aisle: Optional[str] = None,
+        from_row: Optional[str] = None,
+        from_bin: Optional[str] = None,
         idempotency_key: Optional[str] = None
     ) -> OperationResult:
         """
@@ -377,13 +380,20 @@ class InventoryService:
         
         Creates transfer_out and transfer_in movements
         Maintains cost layers at destination
+        FIFO applied at position level for precise inventory management
         
         Args:
             part_id: UUID of part to transfer
-            from_location_id: Source location UUID
+            from_location_id: Source location UUID  
             to_location_id: Destination location UUID
             qty: Quantity to transfer
             created_by: User performing operation
+            aisle: Destination aisle (None for no specific aisle)
+            row: Destination row (None for no specific row)
+            bin: Destination bin (None for no specific bin)
+            from_aisle: Source aisle filter for FIFO (None for any aisle)
+            from_row: Source row filter for FIFO (None for any row)
+            from_bin: Source bin filter for FIFO (None for any bin)
             idempotency_key: Optional key for idempotency
             
         Returns:
@@ -402,8 +412,10 @@ class InventoryService:
             except (Part.DoesNotExist, Location.DoesNotExist) as e:
                 raise InvalidOperationError(f"Invalid part or location: {e}")
             
-            # Check availability at source
-            total_available = self._get_available_quantity(part, from_location)
+            # Check availability at source (considering source position filter if specified)
+            total_available = self._get_available_quantity_at_position(
+                part, from_location, from_aisle, from_row, from_bin
+            )
             if total_available < qty:
                 raise InsufficientStockError(part.part_number, qty, total_available)
             
@@ -426,9 +438,10 @@ class InventoryService:
                         message=f"Transferred {qty} of {part.part_number} (idempotent)"
                     )
             
-            # Perform transfer
+            # Perform transfer with position-aware FIFO
             allocations, movements = self._perform_transfer(
-                part, from_location, to_location, qty, created_by, idempotency_key, aisle, row, bin
+                part, from_location, to_location, qty, created_by, idempotency_key, 
+                aisle, row, bin, from_aisle, from_row, from_bin
             )
             
             return OperationResult(
@@ -530,6 +543,44 @@ class InventoryService:
             location=location,
             qty_on_hand__gt=0
         ).aggregate(
+            total=models.Sum('qty_on_hand')
+        )['total'] or Decimal('0')
+    
+    def _get_available_quantity_at_position(
+        self, 
+        part: Part, 
+        location: Location, 
+        aisle: Optional[str] = None,
+        row: Optional[str] = None,
+        bin: Optional[str] = None
+    ) -> Decimal:
+        """Get total available quantity for part at specific position within location"""
+        queryset = InventoryBatch.objects.filter(
+            part=part,
+            location=location,
+            qty_on_hand__gt=0
+        )
+        
+        # Apply position filters - None means any value, not just null
+        if aisle is not None:
+            if aisle == '':
+                queryset = queryset.filter(aisle__isnull=True)
+            else:
+                queryset = queryset.filter(aisle=aisle)
+        
+        if row is not None:
+            if row == '':
+                queryset = queryset.filter(row__isnull=True)  
+            else:
+                queryset = queryset.filter(row=row)
+        
+        if bin is not None:
+            if bin == '':
+                queryset = queryset.filter(bin__isnull=True)
+            else:
+                queryset = queryset.filter(bin=bin)
+        
+        return queryset.aggregate(
             total=models.Sum('qty_on_hand')
         )['total'] or Decimal('0')
     
@@ -688,15 +739,39 @@ class InventoryService:
         idempotency_key: Optional[str],
         aisle: Optional[str] = None,
         row: Optional[str] = None,
-        bin: Optional[str] = None
+        bin: Optional[str] = None,
+        from_aisle: Optional[str] = None,
+        from_row: Optional[str] = None,
+        from_bin: Optional[str] = None
     ) -> Tuple[List[AllocationResult], List[str]]:
-        """Perform transfer between locations with cost preservation"""
-        # Get source batches (FIFO)
-        source_batches = InventoryBatch.objects.filter(
+        """Perform transfer between locations with cost preservation and position-based FIFO"""
+        # Get source batches with position filtering for precise FIFO
+        queryset = InventoryBatch.objects.filter(
             part=part,
             location=from_location,
             qty_on_hand__gt=0
-        ).select_for_update(skip_locked=True).order_by('received_date')
+        )
+        
+        # Apply source position filters - None means any value, not just null
+        if from_aisle is not None:
+            if from_aisle == '':
+                queryset = queryset.filter(aisle__isnull=True)
+            else:
+                queryset = queryset.filter(aisle=from_aisle)
+        
+        if from_row is not None:
+            if from_row == '':
+                queryset = queryset.filter(row__isnull=True)
+            else:
+                queryset = queryset.filter(row=from_row)
+        
+        if from_bin is not None:
+            if from_bin == '':
+                queryset = queryset.filter(bin__isnull=True)
+            else:
+                queryset = queryset.filter(bin=from_bin)
+        
+        source_batches = queryset.select_for_update(skip_locked=True).order_by('received_date')
         
         allocations = []
         movements = []
@@ -724,14 +799,19 @@ class InventoryService:
             )
             
             # Create or update destination batch with same cost/date
+            # Ensure None values are used for null positions (not empty strings)
+            dest_aisle = aisle if aisle not in ('', None) else None
+            dest_row = row if row not in ('', None) else None 
+            dest_bin = bin if bin not in ('', None) else None
+            
             dest_batch, created = InventoryBatch.objects.get_or_create(
                 part=part,
                 location=to_location,
                 received_date=source_batch.received_date,
                 last_unit_cost=source_batch.last_unit_cost,
-                aisle=aisle,
-                row=row,
-                bin=bin,
+                aisle=dest_aisle,
+                row=dest_row,
+                bin=dest_bin,
                 defaults={
                     'qty_on_hand': take,
                     'qty_reserved': Decimal('0'),
