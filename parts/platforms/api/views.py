@@ -47,46 +47,46 @@ class InventoryOperationsApiView(InventoryOperationsBaseView, viewsets.ViewSet):
     @action(detail=False, methods=['post'], url_path='receive')
     def receive(self, request):
         """Receive parts into inventory"""
-        return self.receive_parts(request)
+        return super().receive_parts(request)
     
     @action(detail=False, methods=['post'], url_path='issue')
     def issue(self, request):
         """Issue parts to work order"""
-        return self.issue_parts(request)
+        return super().issue_parts(request)
     
     @action(detail=False, methods=['post'], url_path='return')
     def return_parts_action(self, request):
         """Return parts from work order"""
-        return self.return_parts(request)
+        return super().return_parts(request)
     
     @action(detail=False, methods=['post'], url_path='transfer')
     def transfer(self, request):
         """Transfer parts between locations"""
-        return self.transfer_parts(request)
+        return super().transfer_parts(request)
     
     @action(detail=False, methods=['get'], url_path='on-hand')
     def on_hand(self, request):
         """Get on-hand quantities"""
-        return self.get_on_hand(request)
+        return super().get_on_hand(request)
     
     @action(detail=False, methods=['get'], url_path='batches')
     def batches(self, request):
         """Get inventory batches"""
-        return self.get_batches(request)
+        return super().get_batches(request)
     
     @action(detail=False, methods=['get'], url_path='movements')
     def movements(self, request):
         """Get part movements"""
-        return self.get_movements(request)
+        return super().get_movements(request)
     
     @action(detail=False, methods=['get'], url_path='locations-on-hand')
     def locations_on_hand(self, request):
         """Get all locations with on-hand quantities for a specific part"""
-        return self.get_locations_on_hand(request)
+        return super().get_locations_on_hand(request)
     
     @action(detail=False, methods=['get'], url_path='get-part-location')
     def get_part_locations(self, request):
         """Get part locations with simplified numbered response format"""
-        return self.get_part_locations(request)
+        return super().get_part_locations(request)
 
 
