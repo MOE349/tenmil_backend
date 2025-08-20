@@ -509,14 +509,18 @@ class PartMovementBaseView(BaseAPIView):
     
     def get_request_params(self, request):
         """Override to handle inventory_batch positioning filters"""
-        params = super().get_request_params(request)
+        # Start with empty params to avoid processing positioning fields as model fields
+        params = {}
+        
+        # Only get non-positioning parameters from the parent
+        allowed_params = ['part', 'part_id', 'work_order', 'work_order_id', 'movement_type', 'from_date', 'to_date', 'limit']
+        for param, value in request.query_params.items():
+            if param in allowed_params and value:
+                params[param] = value
         
         # Handle location filtering through multiple fields
         location_param = request.query_params.get('location')
         if location_param:
-            # Remove the default location filter and add our custom logic
-            params.pop('location', None)
-            # Add the complex location filter using Q objects
             from django.db.models import Q
             params['_custom_location_filter'] = Q(
                 from_location__id=location_param
@@ -543,7 +547,8 @@ class PartMovementBaseView(BaseAPIView):
                     inventory_batch__aisle=''
                 )
             else:
-                params['inventory_batch__aisle'] = aisle
+                from django.db.models import Q
+                params['_custom_aisle_filter'] = Q(inventory_batch__aisle=aisle)
         
         if row is not None:
             if row == '' or row == '0':
@@ -557,7 +562,8 @@ class PartMovementBaseView(BaseAPIView):
                     inventory_batch__row=''
                 )
             else:
-                params['inventory_batch__row'] = row
+                from django.db.models import Q
+                params['_custom_row_filter'] = Q(inventory_batch__row=row)
         
         if bin_param is not None:
             if bin_param == '' or bin_param == '0':
@@ -571,7 +577,8 @@ class PartMovementBaseView(BaseAPIView):
                     inventory_batch__bin=''
                 )
             else:
-                params['inventory_batch__bin'] = bin_param
+                from django.db.models import Q
+                params['_custom_bin_filter'] = Q(inventory_batch__bin=bin_param)
         
         return params
     
@@ -579,7 +586,6 @@ class PartMovementBaseView(BaseAPIView):
         """Custom list method to handle complex filtering"""
         try:
             # Extract custom filters
-            custom_filters = {}
             location_filter = params.pop('_custom_location_filter', None)
             aisle_filter = params.pop('_custom_aisle_filter', None)
             row_filter = params.pop('_custom_row_filter', None)
@@ -590,9 +596,41 @@ class PartMovementBaseView(BaseAPIView):
                 'part', 'from_location', 'to_location', 'work_order', 'inventory_batch', 'inventory_batch__location'
             )
             
-            # Apply regular filters
-            if params:
-                queryset = queryset.filter(**params)
+            # Map and apply regular filters with proper field names
+            django_filters = {}
+            if 'part' in params:
+                django_filters['part__id'] = params['part']
+            elif 'part_id' in params:
+                django_filters['part__id'] = params['part_id']
+            
+            if 'work_order' in params:
+                django_filters['work_order__id'] = params['work_order']
+            elif 'work_order_id' in params:
+                django_filters['work_order__id'] = params['work_order_id']
+            
+            if 'movement_type' in params:
+                django_filters['movement_type'] = params['movement_type']
+            
+            # Handle date filtering
+            if 'from_date' in params:
+                from datetime import datetime
+                if isinstance(params['from_date'], str):
+                    from_date = datetime.fromisoformat(params['from_date'].replace('Z', '+00:00'))
+                else:
+                    from_date = params['from_date']
+                django_filters['created_at__gte'] = from_date
+                
+            if 'to_date' in params:
+                from datetime import datetime
+                if isinstance(params['to_date'], str):
+                    to_date = datetime.fromisoformat(params['to_date'].replace('Z', '+00:00'))
+                else:
+                    to_date = params['to_date']
+                django_filters['created_at__lte'] = to_date
+            
+            # Apply Django field filters
+            if django_filters:
+                queryset = queryset.filter(**django_filters)
             
             # Apply custom Q object filters
             if location_filter:
@@ -606,6 +644,11 @@ class PartMovementBaseView(BaseAPIView):
             
             # Apply ordering
             queryset = queryset.order_by('-created_at')
+            
+            # Handle limit
+            limit = int(params.get('limit', 100))
+            if limit > 0:
+                queryset = queryset[:limit]
             
             # Serialize data
             serializer = self.serializer_class(queryset, many=True)
