@@ -253,6 +253,10 @@ class TransferPartsSerializer(serializers.Serializer):
     - Location String: 'SITE_CODE - LOCATION_NAME - AA1/RR2/BB3 - qty: 75.5'
     
     Auto-detects format and converts location strings to UUIDs internally.
+    
+    Validation Rules:
+    - Transfers within the same location are allowed if positions (aisle/row/bin) are different
+    - Only identical location AND position combinations are rejected
     """
     part_id = serializers.UUIDField(required=True)
     from_location_id = serializers.CharField(required=False, 
@@ -291,6 +295,9 @@ class TransferPartsSerializer(serializers.Serializer):
         if has_id and has_string:
             raise serializers.ValidationError(f"Provide either {id_field} or {string_field}, not both")
         
+        # Create key to store position info for this location
+        position_key = f"_{field_name.lower()}_position"
+        
         # If we have an ID field, check if it's a UUID or location string
         if has_id:
             if self._is_uuid(data[id_field]):
@@ -300,6 +307,8 @@ class TransferPartsSerializer(serializers.Serializer):
                     uuid_val = uuid.UUID(data[id_field])
                     # Convert back to string for consistency
                     data[id_field] = str(uuid_val)
+                    # No position info available from UUID
+                    data[position_key] = None
                     return
                 except ValueError:
                     raise serializers.ValidationError(f"Invalid UUID format for {id_field}")
@@ -316,6 +325,13 @@ class TransferPartsSerializer(serializers.Serializer):
                             f"{field_name} location not found: {decoded['site_code']} - {decoded['location_name']}"
                         )
                     data[id_field] = str(location.id)
+                    
+                    # Store position info for later comparison
+                    data[position_key] = {
+                        'aisle': decoded['aisle'],
+                        'row': decoded['row'],
+                        'bin': decoded['bin']
+                    }
                     
                     # Use decoded aisle/row/bin if not explicitly provided
                     if not data.get('aisle') and decoded['aisle']:
@@ -341,6 +357,13 @@ class TransferPartsSerializer(serializers.Serializer):
                     )
                 data[id_field] = str(location.id)
                 
+                # Store position info for later comparison
+                data[position_key] = {
+                    'aisle': decoded['aisle'],
+                    'row': decoded['row'],
+                    'bin': decoded['bin']
+                }
+                
                 # Use decoded aisle/row/bin if not explicitly provided
                 if not data.get('aisle') and decoded['aisle']:
                     data['aisle'] = decoded['aisle']
@@ -359,9 +382,39 @@ class TransferPartsSerializer(serializers.Serializer):
         # Process to location  
         self._process_location_field(data, 'to_location_id', 'to_location_string', 'To')
         
-        # Ensure locations are different
+        # Check if source and destination are exactly the same (location + position)
         if data['from_location_id'] == data['to_location_id']:
-            raise serializers.ValidationError("Source and destination locations must be different")
+            # Same location - check if position is also the same
+            from_position = data.get('_from_position')
+            to_position = data.get('_to_position')
+            
+            # If we have position info from location strings, compare them
+            if from_position and to_position:
+                same_position = (
+                    from_position['aisle'] == to_position['aisle'] and
+                    from_position['row'] == to_position['row'] and  
+                    from_position['bin'] == to_position['bin']
+                )
+                
+                if same_position:
+                    raise serializers.ValidationError(
+                        "Source and destination must be different. Same location and position are not allowed."
+                    )
+            else:
+                # Fallback: compare explicit aisle/row/bin fields or reject same location
+                explicit_aisle = data.get('aisle', '') or ''
+                explicit_row = data.get('row', '') or ''
+                explicit_bin = data.get('bin', '') or ''
+                
+                # If no explicit position provided and same location, reject
+                if not any([explicit_aisle, explicit_row, explicit_bin]):
+                    raise serializers.ValidationError(
+                        "Source and destination locations are the same. Please specify different aisle/row/bin or use different locations."
+                    )
+        
+        # Clean up temporary position data
+        data.pop('_from_position', None)
+        data.pop('_to_position', None)
         
         return data
 
