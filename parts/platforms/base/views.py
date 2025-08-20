@@ -648,6 +648,9 @@ class InventoryOperationsBaseView(BaseAPIView):
                 to_location_id=str(data['to_location_id']),
                 qty=data['qty'],
                 created_by=request.user,
+                aisle=data.get('aisle'),
+                row=data.get('row'),
+                bin=data.get('bin'),
                 idempotency_key=data.get('idempotency_key')
             )
             
@@ -987,23 +990,21 @@ class InventoryOperationsBaseView(BaseAPIView):
             response_data = []
             
             for item in inventory_data:
-                # Only include items with positive quantities
-                if item['total_qty_on_hand'] > 0:
-                    response_data.append({
-                        'site': {
-                            'id': str(item['location__site__id']) if item['location__site__id'] else None,
-                            'code': item['location__site__code'] or '',
-                            'name': item['location__site__name'] or ''
-                        } if item['location__site__id'] else None,
-                        'location': {
-                            'id': str(item['location__id']),
-                            'name': item['location__name']
-                        },
-                        'aisle': item['aisle'] or '',
-                        'row': item['row'] or '',
-                        'bin': item['bin'] or '',
-                        'qty_on_hand': str(item['total_qty_on_hand'])
-                    })
+                response_data.append({
+                    'site': {
+                        'id': str(item['location__site__id']) if item['location__site__id'] else None,
+                        'code': item['location__site__code'] or '',
+                        'name': item['location__site__name'] or ''
+                    } if item['location__site__id'] else None,
+                    'location': {
+                        'id': str(item['location__id']),
+                        'name': item['location__name']
+                    },
+                    'aisle': item['aisle'] or '',
+                    'row': item['row'] or '',
+                    'bin': item['bin'] or '',
+                    'qty_on_hand': str(item['total_qty_on_hand'])
+                })
             
             return self.format_response(response_data, None, status.HTTP_200_OK)
             

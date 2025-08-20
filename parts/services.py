@@ -367,6 +367,9 @@ class InventoryService:
         to_location_id: str,
         qty: Decimal,
         created_by: Optional[TenantUser] = None,
+        aisle: Optional[str] = None,
+        row: Optional[str] = None,
+        bin: Optional[str] = None,
         idempotency_key: Optional[str] = None
     ) -> OperationResult:
         """
@@ -426,7 +429,7 @@ class InventoryService:
             
             # Perform transfer
             allocations, movements = self._perform_transfer(
-                part, from_location, to_location, qty, created_by, idempotency_key
+                part, from_location, to_location, qty, created_by, idempotency_key, aisle, row, bin
             )
             
             return OperationResult(
@@ -680,7 +683,10 @@ class InventoryService:
         to_location: Location,
         qty: Decimal,
         created_by: Optional[TenantUser],
-        idempotency_key: Optional[str]
+        idempotency_key: Optional[str],
+        aisle: Optional[str] = None,
+        row: Optional[str] = None,
+        bin: Optional[str] = None
     ) -> Tuple[List[AllocationResult], List[str]]:
         """Perform transfer between locations with cost preservation"""
         # Get source batches (FIFO)
@@ -721,6 +727,9 @@ class InventoryService:
                 location=to_location,
                 received_date=source_batch.received_date,
                 last_unit_cost=source_batch.last_unit_cost,
+                aisle=aisle,
+                row=row,
+                bin=bin,
                 defaults={
                     'qty_on_hand': take,
                     'qty_reserved': Decimal('0'),

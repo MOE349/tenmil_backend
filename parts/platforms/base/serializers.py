@@ -250,6 +250,9 @@ class TransferPartsSerializer(serializers.Serializer):
     from_location_id = serializers.UUIDField(required=True)
     to_location_id = serializers.UUIDField(required=True)
     qty = serializers.DecimalField(max_digits=10, decimal_places=3, min_value=Decimal('0.001'))
+    aisle = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    row = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    bin = serializers.CharField(max_length=50, required=False, allow_blank=True)
     idempotency_key = serializers.CharField(max_length=100, required=False)
     
     def validate(self, data):
