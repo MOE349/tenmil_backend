@@ -37,6 +37,7 @@ urlpatterns = [
     path('movements-query', InventoryOperationsApiView.as_view({'get': 'movements'}), name='movements-query'),
     path('locations-on-hand', InventoryOperationsApiView.as_view({'get': 'locations_on_hand'}), name='locations-on-hand'),
     path('locations-on-hand/<uuid:pk>', InventoryOperationsApiView.as_view({'get': 'locations_on_hand'}), name='locations-on-hand'),
+    path('get-part-location', InventoryOperationsApiView.as_view({'get': 'get_part_locations'}), name='get-part-location'),
     # Work order specific endpoints
     path('work-orders/<uuid:work_order_id>/parts', 
          InventoryOperationsApiView.as_view({'get': 'get_work_order_parts'}), 

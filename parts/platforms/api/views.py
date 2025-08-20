@@ -84,7 +84,7 @@ class InventoryOperationsApiView(InventoryOperationsBaseView, viewsets.ViewSet):
         """Get all locations with on-hand quantities for a specific part"""
         return self.get_locations_on_hand(request)
     
-    @action(detail=False, methods=['get'], url_path='get-part/location')
+    @action(detail=False, methods=['get'], url_path='get-part-location')
     def get_part_locations(self, request):
         """Get part locations with simplified numbered response format"""
         return self.get_part_locations(request)
