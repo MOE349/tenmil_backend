@@ -76,6 +76,90 @@ class InventoryService:
     def __init__(self):
         self.User = get_user_model()
     
+    def receive_parts_from_data(
+        self,
+        data: Dict[str, Any],
+        created_by: Optional[TenantUser] = None
+    ) -> OperationResult:
+        """
+        Receive parts using data dictionary (typically from API)
+        
+        This method handles data validation, type conversion, and field mapping
+        from API data format to service layer parameters.
+        
+        Args:
+            data: Dictionary containing part reception data
+            created_by: User performing the operation
+            
+        Returns:
+            OperationResult with batch and movement details
+            
+        Raises:
+            ValidationError: Invalid or missing required fields
+        """
+        from decimal import Decimal, InvalidOperation
+        from django.utils.dateparse import parse_datetime
+        
+        # Validate required fields
+        required_fields = ['part', 'location', 'qty_received', 'last_unit_cost']
+        missing_fields = [field for field in required_fields if field not in data or data[field] is None]
+        if missing_fields:
+            raise ValidationError(f"Missing required fields: {', '.join(missing_fields)}")
+        
+        # Extract and convert data with proper error handling
+        try:
+            part_id = str(data['part'])
+            location_id = str(data['location'])
+            qty = Decimal(str(data['qty_received']))
+            unit_cost = Decimal(str(data['last_unit_cost']))
+        except (ValueError, InvalidOperation, TypeError) as e:
+            raise ValidationError(f"Invalid numeric field: {e}")
+        
+        # Handle received_date parsing
+        received_date = data.get('received_date')
+        if received_date:
+            if isinstance(received_date, str):
+                received_date = parse_datetime(received_date)
+                if not received_date:
+                    raise ValidationError("Invalid received_date format. Use ISO format (YYYY-MM-DDTHH:MM:SSZ)")
+        
+        # Extract positioning fields
+        aisle = data.get('aisle')
+        row = data.get('row')
+        bin_val = data.get('bin')
+        
+        # Extract optional quantity fields
+        qty_on_hand = None
+        if 'qty_on_hand' in data and data['qty_on_hand'] is not None:
+            try:
+                qty_on_hand = Decimal(str(data['qty_on_hand']))
+            except (ValueError, InvalidOperation, TypeError):
+                raise ValidationError("Invalid qty_on_hand value")
+        
+        qty_reserved = None
+        if 'qty_reserved' in data and data['qty_reserved'] is not None:
+            try:
+                qty_reserved = Decimal(str(data['qty_reserved']))
+            except (ValueError, InvalidOperation, TypeError):
+                raise ValidationError("Invalid qty_reserved value")
+        
+        # Call the main receive_parts method
+        return self.receive_parts(
+            part_id=part_id,
+            location_id=location_id,
+            qty=qty,
+            unit_cost=unit_cost,
+            received_date=received_date,
+            receipt_id=data.get('receipt_id'),
+            created_by=created_by,
+            idempotency_key=data.get('idempotency_key'),
+            aisle=aisle,
+            row=row,
+            bin=bin_val,
+            qty_on_hand=qty_on_hand,
+            qty_reserved=qty_reserved
+        )
+    
     def receive_parts(
         self, 
         part_id: str,
@@ -85,22 +169,33 @@ class InventoryService:
         received_date: Optional[datetime] = None,
         receipt_id: Optional[str] = None,
         created_by: Optional[TenantUser] = None,
-        idempotency_key: Optional[str] = None
+        idempotency_key: Optional[str] = None,
+        aisle: Optional[str] = None,
+        row: Optional[str] = None,
+        bin: Optional[str] = None,
+        qty_on_hand: Optional[Decimal] = None,
+        qty_reserved: Optional[Decimal] = None
     ) -> OperationResult:
         """
         Receive parts into inventory
         
         Creates new inventory batch and records adjustment movement
+        Handles all InventoryBatch fields including positioning and quantity logic
         
         Args:
             part_id: UUID of part to receive
             location_id: UUID of location to receive at
-            qty: Quantity to receive (must be positive)
+            qty: Quantity received (qty_received - must be >= 0, zero creates placeholder batch)
             unit_cost: Unit cost for this batch
             received_date: Date of receipt (defaults to now)
             receipt_id: External receipt reference
             created_by: User performing operation
             idempotency_key: Optional key for idempotency
+            aisle: Storage aisle location (optional)
+            row: Storage row location (optional)
+            bin: Storage bin location (optional)
+            qty_on_hand: Available quantity (defaults to qty if not provided)
+            qty_reserved: Reserved quantity (defaults to 0 if not provided)
             
         Returns:
             OperationResult with batch and movement details
@@ -109,12 +204,30 @@ class InventoryService:
             ValidationError: Invalid input parameters
             InvalidOperationError: Business rule violation
         """
-        if qty <= 0:
-            raise ValidationError("Quantity must be positive")
+        if qty < 0:
+            raise ValidationError("Quantity cannot be negative")
         if unit_cost < 0:
             raise ValidationError("Unit cost cannot be negative")
             
         received_date = received_date or timezone.now()
+        
+        # Apply serializer logic: set qty_on_hand = qty (qty_received) if not provided
+        if qty_on_hand is None:
+            qty_on_hand = qty
+        elif qty_on_hand == 0:  # If explicitly set to 0, use qty instead
+            qty_on_hand = qty
+            
+        # Set qty_reserved to 0 if not provided
+        if qty_reserved is None:
+            qty_reserved = Decimal('0')
+            
+        # Validate quantity relationships
+        if qty_on_hand < 0:
+            raise ValidationError("Quantity on hand cannot be negative")
+        if qty_reserved < 0:
+            raise ValidationError("Quantity reserved cannot be negative")
+        if qty_on_hand > qty:
+            raise ValidationError("Quantity on hand cannot exceed quantity received")
         
         with transaction.atomic():
             # Get part and location
@@ -126,64 +239,107 @@ class InventoryService:
             
             # Check idempotency
             if idempotency_key:
-                existing_movement = PartMovement.objects.filter(
-                    part=part,
-                    movement_type=PartMovement.MovementType.ADJUSTMENT,
-                    receipt_id=idempotency_key
-                ).first()
-                if existing_movement:
-                    # Return existing result
-                    batch = existing_movement.inventory_batch
-                    return OperationResult(
-                        success=True,
-                        allocations=[AllocationResult(
-                            batch_id=str(batch.id),
-                            qty_allocated=qty,
-                            unit_cost=unit_cost,
-                            total_cost=qty * unit_cost
-                        )],
-                        movements=[str(existing_movement.id)],
-                        work_order_parts=[],
-                        message=f"Added {qty} of {part.part_number} (idempotent)"
-                    )
+                # For zero quantities, look for existing batches with same key characteristics
+                # since no movement is created to track by receipt_id
+                if qty == 0:
+                    existing_batch = InventoryBatch.objects.filter(
+                        part=part,
+                        location=location,
+                        qty_received=0,
+                        last_unit_cost=unit_cost,
+                        received_date=received_date
+                    ).first()
+                    if existing_batch:
+                        return OperationResult(
+                            success=True,
+                            allocations=[AllocationResult(
+                                batch_id=str(existing_batch.id),
+                                qty_allocated=existing_batch.qty_on_hand,
+                                unit_cost=existing_batch.last_unit_cost,
+                                total_cost=existing_batch.qty_on_hand * existing_batch.last_unit_cost
+                            )],
+                            movements=[],
+                            work_order_parts=[],
+                            message=f"Created placeholder batch for {part.part_number} (idempotent)"
+                        )
+                else:
+                    # For non-zero quantities, look for existing movements as before
+                    existing_movement = PartMovement.objects.filter(
+                        part=part,
+                        movement_type=PartMovement.MovementType.ADJUSTMENT,
+                        receipt_id=idempotency_key
+                    ).first()
+                    if existing_movement:
+                        # Return existing result
+                        batch = existing_movement.inventory_batch
+                        return OperationResult(
+                            success=True,
+                            allocations=[AllocationResult(
+                                batch_id=str(batch.id),
+                                qty_allocated=batch.qty_on_hand,  # Use actual batch quantity
+                                unit_cost=batch.last_unit_cost,
+                                total_cost=batch.qty_on_hand * batch.last_unit_cost
+                            )],
+                            movements=[str(existing_movement.id)],
+                            work_order_parts=[],
+                            message=f"Added {batch.qty_received} of {part.part_number} (idempotent)"
+                        )
             
-            # Create inventory batch
+            # Create inventory batch with positioning support
+            # Handle positioning fields - convert empty strings to default values
+            batch_aisle = aisle if aisle and aisle.strip() else "0"
+            batch_row = row if row and row.strip() else "0"
+            batch_bin = bin if bin and bin.strip() else "0"
+            
             batch = InventoryBatch.objects.create(
                 part=part,
                 location=location,
-                qty_on_hand=qty,
-                qty_reserved=Decimal('0'),
-                qty_received=qty,
+                qty_on_hand=qty_on_hand,
+                qty_reserved=qty_reserved,
+                qty_received=qty,  # This is the original qty parameter
                 last_unit_cost=unit_cost,
-                received_date=received_date
+                received_date=received_date,
+                aisle=batch_aisle,
+                row=batch_row,
+                bin=batch_bin
             )
             
-            # Create movement record
-            movement = PartMovement.objects.create(
-                part=part,
-                inventory_batch=batch,
-                to_location=location,
-                movement_type=PartMovement.MovementType.ADJUSTMENT,
-                qty_delta=qty,
-                receipt_id=receipt_id or idempotency_key,
-                created_by=created_by
-            )
+            # Create movement record only if qty_on_hand > 0 (skip for placeholder batches)
+            movements = []
+            if qty_on_hand > 0:
+                movement = PartMovement.objects.create(
+                    part=part,
+                    inventory_batch=batch,
+                    to_location=location,
+                    movement_type=PartMovement.MovementType.ADJUSTMENT,
+                    qty_delta=qty_on_hand,  # Movement reflects actual available quantity added
+                    receipt_id=receipt_id or idempotency_key,
+                    created_by=created_by
+                )
+                movements = [str(movement.id)]
             
-            # Update part last price
-            part.last_price = unit_cost
-            part.save(update_fields=['last_price'])
+            # Update part last price only if qty > 0 (don't update price for placeholder batches)
+            if qty > 0:
+                part.last_price = unit_cost
+                part.save(update_fields=['last_price'])
+            
+            # Determine message based on whether this is a placeholder batch
+            if qty == 0:
+                message = f"Created placeholder batch for {part.part_number} at {location.name}"
+            else:
+                message = f"Received {qty} of {part.part_number} at {location.name} ({qty_on_hand} available)"
             
             return OperationResult(
                 success=True,
                 allocations=[AllocationResult(
                     batch_id=str(batch.id),
-                    qty_allocated=qty,
+                    qty_allocated=qty_on_hand,  # Use actual available quantity
                     unit_cost=unit_cost,
-                    total_cost=qty * unit_cost
+                    total_cost=qty_on_hand * unit_cost
                 )],
-                movements=[str(movement.id)],
+                movements=movements,
                 work_order_parts=[],
-                message=f"Added {qty} of {part.part_number} at {location.name}"
+                message=message
             )
     
     def issue_to_work_order(

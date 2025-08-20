@@ -115,8 +115,8 @@ class InventoryBatch(BaseModel):
             raise ValidationError(_("Quantity on hand cannot be negative"))
         if self.qty_reserved < 0:
             raise ValidationError(_("Quantity reserved cannot be negative"))
-        if self.qty_received <= 0:
-            raise ValidationError(_("Quantity received must be positive"))
+        if self.qty_received < 0:
+            raise ValidationError(_("Quantity received cannot be negative"))
         if self.last_unit_cost < 0:
             raise ValidationError(_("Unit cost cannot be negative"))
         # Ensure qty_received is never modified after creation (immutable historical record)

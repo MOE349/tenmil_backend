@@ -70,21 +70,9 @@ class InventoryBatchBaseSerializer(BaseSerializer):
         fields = "__all__"
         read_only_fields = ("id", "created_at", "updated_at")
     
-    def create(self, validated_data):
-        """
-        Create new InventoryBatch with qty_on_hand automatically set to qty_received
-        This ensures new inventory starts with full available quantity
-        """
-        # If qty_received is provided but qty_on_hand is not, set qty_on_hand = qty_received
-        if 'qty_received' in validated_data and 'qty_on_hand' not in validated_data:
-            validated_data['qty_on_hand'] = validated_data['qty_received']
-        
-        # If both are provided but qty_on_hand is not set, still default to qty_received
-        if 'qty_received' in validated_data:
-            if validated_data.get('qty_on_hand') is None or validated_data.get('qty_on_hand') == 0:
-                validated_data['qty_on_hand'] = validated_data['qty_received']
-        
-        return super().create(validated_data)
+    # NOTE: create() method removed - all creation logic moved to service layer
+    # InventoryBatch creation should go through inventory_service.receive_parts_from_data()
+    # to ensure movement logs and business logic are properly handled
     
     def update(self, instance, validated_data):
         """

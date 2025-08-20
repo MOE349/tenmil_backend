@@ -21,48 +21,14 @@ class InventoryBatchBaseView(BaseAPIView):
     model_class = InventoryBatch
     
     def create(self, data, params, return_instance=False, *args, **kwargs):
-        """Create InventoryBatch using service layer to ensure movement log creation"""
+        """Create InventoryBatch using enhanced service layer"""
         try:
-            from decimal import Decimal
-            from django.utils import timezone
-            
-            # Validate required fields
-            required_fields = ['part', 'location', 'qty_received', 'last_unit_cost']
-            missing_fields = [field for field in required_fields if field not in data]
-            if missing_fields:
-                raise LocalBaseException(
-                    exception=f"Missing required fields: {', '.join(missing_fields)}",
-                    status_code=status.HTTP_400_BAD_REQUEST
-                )
-            
-            # Extract data for service call
-            part_id = data.get('part')
-            location_id = data.get('location')
-            qty = Decimal(str(data.get('qty_received')))
-            unit_cost = Decimal(str(data.get('last_unit_cost')))
-            received_date = data.get('received_date')
-            
-            # Parse received_date if provided as string
-            if received_date and isinstance(received_date, str):
-                from django.utils.dateparse import parse_datetime
-                received_date = parse_datetime(received_date)
-                if not received_date:
-                    raise LocalBaseException(
-                        exception="Invalid received_date format",
-                        status_code=status.HTTP_400_BAD_REQUEST
-                    )
-            
-            # Get user if available from params (set by handle_post_params)
+            # Get user from params (set by handle_post_params)
             created_by = params.get('user')
             
-            # Use service layer to create inventory batch with movement log
-            result = inventory_service.receive_parts(
-                part_id=str(part_id),
-                location_id=str(location_id),
-                qty=qty,
-                unit_cost=unit_cost,
-                received_date=received_date,
-                receipt_id=data.get('receipt_id'),
+            # Use enhanced service layer that handles all validation and logic
+            result = inventory_service.receive_parts_from_data(
+                data=data,
                 created_by=created_by
             )
             
