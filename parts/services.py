@@ -765,6 +765,46 @@ class InventoryService:
             remaining -= take
         
         return allocations, movements
+    
+    def get_part_locations_on_hand(self, part_id: str) -> List[Dict]:
+        """
+        Get all locations with aggregated inventory batch records for a specific part.
+        Returns raw data that can be formatted differently by different endpoints.
+        
+        Args:
+            part_id: The ID of the part to get location data for
+            
+        Returns:
+            List of dictionaries containing location and quantity data
+            
+        Raises:
+            InventoryError: If part is not found or invalid
+        """
+        from django.db.models import Sum
+        
+        try:
+            # Verify part exists
+            part = Part.objects.get(id=part_id)
+        except Part.DoesNotExist:
+            raise InventoryError(f"Part with ID {part_id} does not exist")
+        
+        # Get aggregated data grouped by location, aisle, row, and bin
+        inventory_data = InventoryBatch.objects.filter(
+            part=part
+        ).select_related('location', 'location__site').values(
+            'location__id',
+            'location__name',
+            'location__site__id',
+            'location__site__code',
+            'location__site__name',
+            'aisle',
+            'row',
+            'bin'
+        ).annotate(
+            total_qty_on_hand=Sum('qty_on_hand')
+        ).order_by('location__name', 'aisle', 'row', 'bin')
+        
+        return list(inventory_data)
 
 
 # Global service instance

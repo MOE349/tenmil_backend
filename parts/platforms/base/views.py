@@ -937,54 +937,62 @@ class InventoryOperationsBaseView(BaseAPIView):
         except Exception as e:
             return self.handle_exception(e)
     
+    def _get_validated_part_locations_data(self, request, allow_both_params=True):
+        """
+        Common method to validate parameters and get part location data.
+        
+        Args:
+            request: The HTTP request object
+            allow_both_params: If True, accepts both 'part_id' and 'part' params.
+                              If False, only accepts 'part' param.
+        
+        Returns:
+            List of inventory data dictionaries
+        
+        Raises:
+            LocalBaseException: For validation or data retrieval errors
+        """
+        # Validate query parameters
+        if allow_both_params:
+            part_id = request.query_params.get('part_id') or request.query_params.get('part')
+            error_msg = "part_id or part parameter is required"
+        else:
+            part_id = request.query_params.get('part')
+            error_msg = "part parameter is required"
+            
+        if not part_id:
+            raise LocalBaseException(
+                exception=error_msg,
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = LocationOnHandQuerySerializer(data={'part_id': part_id})
+        if not serializer.is_valid():
+            raise LocalBaseException(
+                exception=str(serializer.errors),
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        validated_part_id = serializer.validated_data['part_id']
+        
+        # Use service to get the data
+        from parts.services import inventory_service, InventoryError
+        
+        try:
+            inventory_data = inventory_service.get_part_locations_on_hand(validated_part_id)
+        except InventoryError as e:
+            raise LocalBaseException(
+                exception=str(e),
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+        
+        return inventory_data
+    
     def get_locations_on_hand(self, request):
         """Get all locations with aggregated inventory batch records for a specific part"""
         try:
-            # Validate query parameters - support both formats
-            part_id = request.query_params.get('part_id') or request.query_params.get('part')
-            if not part_id:
-                raise LocalBaseException(
-                    exception="part_id or part parameter is required",
-                    status_code=status.HTTP_400_BAD_REQUEST
-                )
-            
-            serializer = LocationOnHandQuerySerializer(data={'part_id': part_id})
-            if not serializer.is_valid():
-                raise LocalBaseException(
-                    exception=str(serializer.errors),
-                    status_code=status.HTTP_400_BAD_REQUEST
-                )
-            
-            validated_part_id = serializer.validated_data['part_id']
-            
-            # Verify part exists
-            try:
-                part = Part.objects.get(id=validated_part_id)
-            except Part.DoesNotExist:
-                raise LocalBaseException(
-                    exception=f"Part with ID {validated_part_id} does not exist",
-                    status_code=status.HTTP_404_NOT_FOUND
-                )
-            
-            # Get all inventory batches for this part with location details
-            from django.db.models import Sum
-            from company.models import Location
-            
-            # Get aggregated data grouped by location, aisle, row, and bin
-            inventory_data = InventoryBatch.objects.filter(
-                part=part
-            ).select_related('location', 'location__site').values(
-                'location__id',
-                'location__name',
-                'location__site__id',
-                'location__site__code',
-                'location__site__name',
-                'aisle',
-                'row',
-                'bin'
-            ).annotate(
-                total_qty_on_hand=Sum('qty_on_hand')
-            ).order_by('location__name', 'aisle', 'row', 'bin')
+            # Get validated data using common method (supports both part_id and part params)
+            inventory_data = self._get_validated_part_locations_data(request, allow_both_params=True)
             
             # Format the response data
             response_data = []
@@ -1007,6 +1015,59 @@ class InventoryOperationsBaseView(BaseAPIView):
                 })
             
             return self.format_response(response_data, None, status.HTTP_200_OK)
+            
+        except Exception as e:
+            return self.handle_exception(e)
+    
+    def get_part_locations(self, request):
+        """Get part locations with simplified numbered response format"""
+        try:
+            # Get validated data using common method (only accepts 'part' param)
+            inventory_data = self._get_validated_part_locations_data(request, allow_both_params=False)
+            
+            # Format the response data with numbered entries
+            locations = []
+            total_qty = 0
+            
+            for index, item in enumerate(inventory_data, 1):
+                qty_on_hand = float(item['total_qty_on_hand'])
+                total_qty += qty_on_hand
+                
+                # Format aisle/row/bin with A/R/B prefixes
+                aisle = item['aisle'] or ''
+                row = item['row'] or ''
+                bin_val = item['bin'] or ''
+                
+                aisle_formatted = f"A{aisle}" if aisle else "A"
+                row_formatted = f"R{row}" if row else "R"
+                bin_formatted = f"B{bin_val}" if bin_val else "B"
+                
+                # Get site info
+                site_code = item['location__site__code'] or ''
+                location_name = item['location__name']
+                
+                # Create the formatted string: "{site.code} - {location.name} - A{aisle}/R{row}/B{bin} - qty:{qty_on_hand}"
+                formatted_string = f"{site_code} - {location_name} - {aisle_formatted}/{row_formatted}/{bin_formatted} - qty: {qty_on_hand}"
+                
+                # Only include the numbered key with formatted string
+                location_data = {
+                    str(index): formatted_string
+                }
+                
+                locations.append(location_data)
+            
+            # Create response with the exact structure requested
+            from rest_framework.response import Response
+            
+            response_data = {
+                'data': locations,
+                'total_locations': len(locations),
+                'total_qty': total_qty,
+                'errors': None,
+                'status_code': 200
+            }
+            
+            return Response(response_data, status=status.HTTP_200_OK)
             
         except Exception as e:
             return self.handle_exception(e)
