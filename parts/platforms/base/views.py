@@ -1008,9 +1008,9 @@ class InventoryOperationsBaseView(BaseAPIView):
                         'id': str(item['location__id']),
                         'name': item['location__name']
                     },
-                    'aisle': item['aisle'] or '',
-                    'row': item['row'] or '',
-                    'bin': item['bin'] or '',
+                    'aisle': item['normalized_aisle'] or '',
+                    'row': item['normalized_row'] or '',
+                    'bin': item['normalized_bin'] or '',
                     'qty_on_hand': str(item['total_qty_on_hand'])
                 })
             
@@ -1034,9 +1034,9 @@ class InventoryOperationsBaseView(BaseAPIView):
                 total_qty += qty_on_hand
                 
                 # Format aisle/row/bin with A/R/B prefixes
-                aisle = item['aisle'] or ''
-                row = item['row'] or ''
-                bin_val = item['bin'] or ''
+                aisle = item['normalized_aisle'] or ''
+                row = item['normalized_row'] or ''
+                bin_val = item['normalized_bin'] or ''
                 
                 aisle_formatted = f"A{aisle}" if aisle else "A"
                 row_formatted = f"R{row}" if row else "R"

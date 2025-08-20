@@ -431,9 +431,10 @@ class TransferPartsSerializer(serializers.Serializer):
         # Use destination position if available, otherwise fall back to generic position
         if 'dest_aisle' in data or 'dest_row' in data or 'dest_bin' in data:
             # Prefer destination-specific position for the transfer
-            data['aisle'] = data.get('dest_aisle', data.get('aisle', ''))
-            data['row'] = data.get('dest_row', data.get('row', ''))
-            data['bin'] = data.get('dest_bin', data.get('bin', ''))
+            # Use None instead of empty string for null positions
+            data['aisle'] = data.get('dest_aisle') or data.get('aisle') or None
+            data['row'] = data.get('dest_row') or data.get('row') or None
+            data['bin'] = data.get('dest_bin') or data.get('bin') or None
         
         # Clean up temporary position data
         data.pop('_from_position', None)

@@ -794,20 +794,40 @@ class InventoryService:
             raise InventoryError(f"Part with ID {part_id} does not exist")
         
         # Get aggregated data grouped by location, aisle, row, and bin
+        # Normalize blank and null positions to be treated as the same value
+        from django.db.models import Case, When, Value
+        
         inventory_data = InventoryBatch.objects.filter(
             part=part
-        ).select_related('location', 'location__site').values(
+        ).select_related('location', 'location__site').annotate(
+            # Normalize positions: convert empty strings to None for consistent grouping
+            normalized_aisle=Case(
+                When(aisle='', then=Value(None)),
+                When(aisle__isnull=True, then=Value(None)),
+                default='aisle'
+            ),
+            normalized_row=Case(
+                When(row='', then=Value(None)),
+                When(row__isnull=True, then=Value(None)),
+                default='row'
+            ),
+            normalized_bin=Case(
+                When(bin='', then=Value(None)),
+                When(bin__isnull=True, then=Value(None)),
+                default='bin'
+            )
+        ).values(
             'location__id',
             'location__name',
             'location__site__id',
             'location__site__code',
             'location__site__name',
-            'aisle',
-            'row',
-            'bin'
+            'normalized_aisle',
+            'normalized_row',
+            'normalized_bin'
         ).annotate(
             total_qty_on_hand=Sum('qty_on_hand')
-        ).order_by('location__name', 'aisle', 'row', 'bin')
+        ).order_by('location__name', 'normalized_aisle', 'normalized_row', 'normalized_bin')
         
         return list(inventory_data)
     
@@ -917,9 +937,14 @@ class LocationStringDecoder:
                 raise ValueError("Invalid position format: expected 3 parts separated by '/'")
             
             # Extract aisle, row, bin (remove A/R/B prefixes)
-            aisle = position_parts[0][1:] if position_parts[0].startswith('A') else position_parts[0]
-            row = position_parts[1][1:] if position_parts[1].startswith('R') else position_parts[1]
-            bin_val = position_parts[2][1:] if position_parts[2].startswith('B') else position_parts[2]
+            # Use None instead of empty string for null positions
+            aisle_raw = position_parts[0][1:] if position_parts[0].startswith('A') else position_parts[0]
+            row_raw = position_parts[1][1:] if position_parts[1].startswith('R') else position_parts[1]
+            bin_raw = position_parts[2][1:] if position_parts[2].startswith('B') else position_parts[2]
+            
+            aisle = aisle_raw if aisle_raw else None
+            row = row_raw if row_raw else None
+            bin_val = bin_raw if bin_raw else None
             
             # Parse quantity (qty: 75.5)
             if not qty_part.startswith('qty: '):
