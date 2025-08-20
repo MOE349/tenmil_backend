@@ -90,7 +90,7 @@ class InventoryService:
         """
         Receive parts into inventory
         
-        Creates new inventory batch and records receive movement
+        Creates new inventory batch and records adjustment movement
         
         Args:
             part_id: UUID of part to receive
@@ -128,7 +128,7 @@ class InventoryService:
             if idempotency_key:
                 existing_movement = PartMovement.objects.filter(
                     part=part,
-                    movement_type=PartMovement.MovementType.RECEIVE,
+                    movement_type=PartMovement.MovementType.ADJUSTMENT,
                     receipt_id=idempotency_key
                 ).first()
                 if existing_movement:
@@ -144,7 +144,7 @@ class InventoryService:
                         )],
                         movements=[str(existing_movement.id)],
                         work_order_parts=[],
-                        message=f"Received {qty} of {part.part_number} (idempotent)"
+                        message=f"Added {qty} of {part.part_number} (idempotent)"
                     )
             
             # Create inventory batch
@@ -163,7 +163,7 @@ class InventoryService:
                 part=part,
                 inventory_batch=batch,
                 to_location=location,
-                movement_type=PartMovement.MovementType.RECEIVE,
+                movement_type=PartMovement.MovementType.ADJUSTMENT,
                 qty_delta=qty,
                 receipt_id=receipt_id or idempotency_key,
                 created_by=created_by
@@ -183,7 +183,7 @@ class InventoryService:
                 )],
                 movements=[str(movement.id)],
                 work_order_parts=[],
-                message=f"Received {qty} of {part.part_number} at {location.name}"
+                message=f"Added {qty} of {part.part_number} at {location.name}"
             )
     
     def issue_to_work_order(
@@ -599,6 +599,9 @@ class InventoryService:
             movements.append(str(movement.id))
             wo_parts.append(str(wo_part.id))
             
+            # Cleanup: Delete empty placeholder batches
+            self._cleanup_empty_placeholder_batch(batch)
+            
             remaining -= take
         
         if remaining > 0:
@@ -762,6 +765,9 @@ class InventoryService:
             ))
             movements.extend([str(out_movement.id), str(in_movement.id)])
             
+            # Cleanup: Delete empty placeholder batches
+            self._cleanup_empty_placeholder_batch(source_batch)
+            
             remaining -= take
         
         return allocations, movements
@@ -805,7 +811,156 @@ class InventoryService:
         ).order_by('location__name', 'aisle', 'row', 'bin')
         
         return list(inventory_data)
+    
+    def _cleanup_empty_placeholder_batch(self, batch: InventoryBatch) -> bool:
+        """
+        Clean up empty placeholder batches that were never actually received.
+        
+        Args:
+            batch: The batch to potentially clean up
+            
+        Returns:
+            bool: True if batch was deleted, False otherwise
+        """
+        # Check if batch is empty and was never received (placeholder)
+        if batch.qty_on_hand == 0 and batch.qty_received == 0:
+            # Check if this is the only batch for this location/position combination
+            same_position_batches = InventoryBatch.objects.filter(
+                part=batch.part,
+                location=batch.location,
+                aisle=batch.aisle,
+                row=batch.row,
+                bin=batch.bin
+            ).count()
+            
+            if same_position_batches == 1:  # Only this batch exists at this position
+                batch.delete()
+                return True
+        
+        return False
+    
+    def cleanup_empty_placeholder_batches(
+        self, 
+        part: Part, 
+        location: Optional[Location] = None
+    ) -> int:
+        """
+        Clean up all empty placeholder batches for a part (optionally at specific location).
+        
+        This method can be called after inventory operations to clean up any placeholder
+        batches that may have been left empty.
+        
+        Args:
+            part: The Part to clean up batches for
+            location: Optional specific location to clean up (if None, cleans all locations)
+            
+        Returns:
+            int: Number of batches deleted
+        """
+        # Get empty placeholder batches
+        queryset = InventoryBatch.objects.filter(
+            part=part,
+            qty_on_hand=0,
+            qty_received=0
+        )
+        
+        if location:
+            queryset = queryset.filter(location=location)
+        
+        deleted_count = 0
+        
+        # Check each empty placeholder batch
+        for batch in queryset:
+            if self._cleanup_empty_placeholder_batch(batch):
+                deleted_count += 1
+        
+        return deleted_count
+
+
+class LocationStringDecoder:
+    """Utility class to decode formatted location strings"""
+    
+    @staticmethod
+    def decode_location_string(location_string: str) -> Dict[str, str]:
+        """
+        Decode a formatted location string into its components.
+        
+        Input format: "SITE_CODE - LOCATION_NAME - AA1/RR2/BB3 - qty: 75.5"
+        
+        Returns:
+            Dict containing decoded components:
+            {
+                'site_code': str,
+                'location_name': str, 
+                'aisle': str,
+                'row': str,
+                'bin': str,
+                'qty': str
+            }
+        
+        Raises:
+            ValueError: If string format is invalid
+        """
+        try:
+            # Split by ' - ' to get main parts
+            parts = location_string.split(' - ')
+            if len(parts) != 4:
+                raise ValueError("Invalid format: expected 4 parts separated by ' - '")
+            
+            site_code = parts[0].strip()
+            location_name = parts[1].strip()
+            position_part = parts[2].strip()
+            qty_part = parts[3].strip()
+            
+            # Parse position part (AA1/RR2/BB3)
+            position_parts = position_part.split('/')
+            if len(position_parts) != 3:
+                raise ValueError("Invalid position format: expected 3 parts separated by '/'")
+            
+            # Extract aisle, row, bin (remove A/R/B prefixes)
+            aisle = position_parts[0][1:] if position_parts[0].startswith('A') else position_parts[0]
+            row = position_parts[1][1:] if position_parts[1].startswith('R') else position_parts[1]
+            bin_val = position_parts[2][1:] if position_parts[2].startswith('B') else position_parts[2]
+            
+            # Parse quantity (qty: 75.5)
+            if not qty_part.startswith('qty: '):
+                raise ValueError("Invalid quantity format: expected 'qty: <number>'")
+            qty = qty_part[5:].strip()  # Remove 'qty: ' prefix
+            
+            return {
+                'site_code': site_code,
+                'location_name': location_name,
+                'aisle': aisle,
+                'row': row,
+                'bin': bin_val,
+                'qty': qty
+            }
+            
+        except Exception as e:
+            raise ValueError(f"Failed to decode location string '{location_string}': {str(e)}")
+    
+    @staticmethod
+    def get_location_by_site_and_name(site_code: str, location_name: str):
+        """
+        Get Location instance by site code and location name.
+        
+        Returns:
+            Location instance or None if not found
+        """
+        from company.models import Location, Site
+        
+        try:
+            # First find the site by code
+            site = Site.objects.get(code=site_code)
+            # Then find the location by name within that site
+            location = Location.objects.get(site=site, name=location_name)
+            return location
+        except (Site.DoesNotExist, Location.DoesNotExist):
+            return None
 
 
 # Global service instance
 inventory_service = InventoryService()
+
+# Global decoder instance
+location_decoder = LocationStringDecoder()

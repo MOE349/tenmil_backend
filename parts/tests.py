@@ -144,7 +144,7 @@ class ReceivePartsTests(PartsTestCase):
         
         # Verify movement created
         movement = PartMovement.objects.get(part=self.part1)
-        self.assertEqual(movement.movement_type, PartMovement.MovementType.RECEIVE)
+        self.assertEqual(movement.movement_type, PartMovement.MovementType.ADJUSTMENT)
         self.assertEqual(movement.qty_delta, Decimal('10.5'))
         self.assertEqual(movement.receipt_id, "REC001")
         

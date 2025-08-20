@@ -1049,8 +1049,9 @@ class InventoryOperationsBaseView(BaseAPIView):
                 # Create the formatted string: "{site.code} - {location.name} - A{aisle}/R{row}/B{bin} - qty:{qty_on_hand}"
                 formatted_string = f"{site_code} - {location_name} - {aisle_formatted}/{row_formatted}/{bin_formatted} - qty: {qty_on_hand}"
                 
-                # Only include the name key with formatted string
+                # Include both id and name with formatted string
                 location_data = {
+                    "id": formatted_string,
                     "name": formatted_string
                 }
                 
