@@ -85,19 +85,19 @@ class InventoryBatch(BaseModel):
     aisle = models.CharField(
         _("Aisle"), 
         max_length=50, 
-        default=0,
+        default="0",
         help_text="Storage aisle location"
     )
     row = models.CharField(
         _("Row"), 
         max_length=50, 
-        default=0,
+        default="0",
         help_text="Storage row location"
     )
     bin = models.CharField(
         _("Bin"), 
         max_length=50, 
-        default=0,
+        default="0",
         help_text="Storage bin location"
     )
 
