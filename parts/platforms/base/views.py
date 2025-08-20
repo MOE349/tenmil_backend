@@ -3,6 +3,7 @@ from decimal import Decimal
 from datetime import datetime
 from django.core.exceptions import ValidationError
 from configurations.base_features.views.base_api_view import BaseAPIView
+from configurations.base_features.exceptions.base_exceptions import LocalBaseException
 from parts.models import Part, InventoryBatch, WorkOrderPart, PartMovement
 from parts.platforms.base.serializers import *
 from parts.services import inventory_service, InsufficientStockError, InvalidOperationError
@@ -66,28 +67,26 @@ class WorkOrderPartBaseView(BaseAPIView):
     
     def create(self, data, params, return_instance=False, *args, **kwargs):
         """Create WorkOrderPart with FIFO inventory allocation"""
-        from decimal import Decimal
-        from django.db import transaction
-        from work_orders.models import WorkOrder
-        
         try:
+            from decimal import Decimal
+            from django.db import transaction
+            from work_orders.models import WorkOrder
+            
             with transaction.atomic():
                 # Get work order and determine location
                 work_order_id = data.get('work_order')
                 if not work_order_id:
-                    return self.format_response(
-                        None, 
-                        ["work_order field is required"], 
-                        status.HTTP_400_BAD_REQUEST
+                    raise LocalBaseException(
+                        exception="work_order field is required",
+                        status_code=status.HTTP_400_BAD_REQUEST
                     )
                 
                 try:
                     work_order = WorkOrder.objects.get(id=work_order_id)
                 except WorkOrder.DoesNotExist:
-                    return self.format_response(
-                        None, 
-                        ["Work order not found"], 
-                        status.HTTP_404_NOT_FOUND
+                    raise LocalBaseException(
+                        exception="Work order not found",
+                        status_code=status.HTTP_404_NOT_FOUND
                     )
                 
                 # Get location from work order's asset using GenericForeignKey resolution
@@ -99,17 +98,15 @@ class WorkOrderPartBaseView(BaseAPIView):
                         str(work_order.object_id)
                     )
                 except Exception as e:
-                    return self.format_response(
-                        None, 
-                        ["Work order asset not found"], 
-                        status.HTTP_404_NOT_FOUND
+                    raise LocalBaseException(
+                        exception="Work order asset not found",
+                        status_code=status.HTTP_404_NOT_FOUND
                     )
                 
                 if not hasattr(asset, 'location') or not asset.location:
-                    return self.format_response(
-                        None, 
-                        ["Work order asset does not have a valid location"], 
-                        status.HTTP_400_BAD_REQUEST
+                    raise LocalBaseException(
+                        exception="Work order asset does not have a valid location",
+                        status_code=status.HTTP_400_BAD_REQUEST
                     )
                 
                 location = asset.location
@@ -117,28 +114,25 @@ class WorkOrderPartBaseView(BaseAPIView):
                 # Get part and validate
                 part_id = data.get('part')
                 if not part_id:
-                    return self.format_response(
-                        None, 
-                        ["part field is required"], 
-                        status.HTTP_400_BAD_REQUEST
+                    raise LocalBaseException(
+                        exception="part field is required",
+                        status_code=status.HTTP_400_BAD_REQUEST
                     )
                 
                 try:
                     part = Part.objects.get(id=part_id)
                 except Part.DoesNotExist:
-                    return self.format_response(
-                        None, 
-                        ["Part not found"], 
-                        status.HTTP_404_NOT_FOUND
+                    raise LocalBaseException(
+                        exception="Part not found",
+                        status_code=status.HTTP_404_NOT_FOUND
                     )
                 
                 # Get qty_used from data
                 qty_used = data.get('qty_used')
                 if not qty_used or Decimal(str(qty_used)) <= 0:
-                    return self.format_response(
-                        None, 
-                        ["qty_used must be a positive value"], 
-                        status.HTTP_400_BAD_REQUEST
+                    raise LocalBaseException(
+                        exception="qty_used must be a positive value",
+                        status_code=status.HTTP_400_BAD_REQUEST
                     )
                 
                 qty_used = Decimal(str(qty_used))
@@ -151,19 +145,17 @@ class WorkOrderPartBaseView(BaseAPIView):
                 ).order_by('received_date')
                 
                 if not available_batches.exists():
-                    return self.format_response(
-                        None, 
-                        [f"No inventory available for part {part.part_number} at location {location.name}"], 
-                        status.HTTP_400_BAD_REQUEST
+                    raise LocalBaseException(
+                        exception=f"No inventory available for part {part.part_number} at location {location.name}",
+                        status_code=status.HTTP_400_BAD_REQUEST
                     )
                 
                 # Check if we have enough total inventory
                 total_available = sum(batch.qty_on_hand for batch in available_batches)
                 if total_available < qty_used:
-                    return self.format_response(
-                        None, 
-                        [f"Insufficient inventory. Requested: {qty_used}, Available: {total_available}"], 
-                        status.HTTP_400_BAD_REQUEST
+                    raise LocalBaseException(
+                        exception=f"Insufficient inventory. Requested: {qty_used}, Available: {total_available}",
+                        status_code=status.HTTP_400_BAD_REQUEST
                     )
                 
                 # Allocate inventory using FIFO
@@ -285,12 +277,12 @@ class WorkOrderPartBaseView(BaseAPIView):
     
     def return_parts_to_inventory(self, request):
         """Return parts from work order back to inventory using LIFO"""
-        from decimal import Decimal
-        from django.db import transaction
-        from work_orders.models import WorkOrder
-        from rest_framework import status
-        
         try:
+            from decimal import Decimal
+            from django.db import transaction
+            from work_orders.models import WorkOrder
+            from rest_framework import status
+            
             with transaction.atomic():
                 # Get request data
                 work_order_id = request.data.get('work_order_id')
@@ -300,24 +292,21 @@ class WorkOrderPartBaseView(BaseAPIView):
                 
                 # Validate inputs
                 if not work_order_id:
-                    return self.format_response(
-                        None, 
-                        ["work_order_id is required"], 
-                        status.HTTP_400_BAD_REQUEST
+                    raise LocalBaseException(
+                        exception="work_order_id is required",
+                        status_code=status.HTTP_400_BAD_REQUEST
                     )
                 
                 if not part_id:
-                    return self.format_response(
-                        None, 
-                        ["part_id is required"], 
-                        status.HTTP_400_BAD_REQUEST
+                    raise LocalBaseException(
+                        exception="part_id is required",
+                        status_code=status.HTTP_400_BAD_REQUEST
                     )
                 
                 if not new_qty_used and not explicit_return_qty:
-                    return self.format_response(
-                        None, 
-                        ["Either qty_used (final amount) or qty_to_return (return amount) is required"], 
-                        status.HTTP_400_BAD_REQUEST
+                    raise LocalBaseException(
+                        exception="Either qty_used (final amount) or qty_to_return (return amount) is required",
+                        status_code=status.HTTP_400_BAD_REQUEST
                     )
                 
                 # Validate work order and part exist
@@ -325,10 +314,9 @@ class WorkOrderPartBaseView(BaseAPIView):
                     work_order = WorkOrder.objects.get(id=work_order_id)
                     part = Part.objects.get(id=part_id)
                 except (WorkOrder.DoesNotExist, Part.DoesNotExist):
-                    return self.format_response(
-                        None, 
-                        ["Work order or part not found"], 
-                        status.HTTP_404_NOT_FOUND
+                    raise LocalBaseException(
+                        exception="Work order or part not found",
+                        status_code=status.HTTP_404_NOT_FOUND
                     )
                 
                 # Get all WorkOrderPart records for this work_order and part
@@ -340,10 +328,9 @@ class WorkOrderPartBaseView(BaseAPIView):
                 ).order_by('-created_at')
                 
                 if not work_order_parts.exists():
-                    return self.format_response(
-                        None, 
-                        ["No issued parts found for this work order and part combination"], 
-                        status.HTTP_400_BAD_REQUEST
+                    raise LocalBaseException(
+                        exception="No issued parts found for this work order and part combination",
+                        status_code=status.HTTP_400_BAD_REQUEST
                     )
                 
                 # Calculate current total issued quantity
@@ -354,25 +341,22 @@ class WorkOrderPartBaseView(BaseAPIView):
                     # Direct return amount specified
                     qty_to_return = Decimal(str(explicit_return_qty))
                     if qty_to_return <= 0:
-                        return self.format_response(
-                            None, 
-                            ["qty_to_return must be a positive value"], 
-                            status.HTTP_400_BAD_REQUEST
+                        raise LocalBaseException(
+                            exception="qty_to_return must be a positive value",
+                            status_code=status.HTTP_400_BAD_REQUEST
                         )
                 else:
                     # Calculate return amount from desired final qty_used
                     new_qty_used = Decimal(str(new_qty_used))
                     if new_qty_used < 0:
-                        return self.format_response(
-                            None, 
-                            ["qty_used (final amount) cannot be negative"], 
-                            status.HTTP_400_BAD_REQUEST
+                        raise LocalBaseException(
+                            exception="qty_used (final amount) cannot be negative",
+                            status_code=status.HTTP_400_BAD_REQUEST
                         )
                     if new_qty_used > total_issued:
-                        return self.format_response(
-                            None, 
-                            [f"Cannot set qty_used higher than current amount. Current: {total_issued}, Requested: {new_qty_used}"], 
-                            status.HTTP_400_BAD_REQUEST
+                        raise LocalBaseException(
+                            exception=f"Cannot set qty_used higher than current amount. Current: {total_issued}, Requested: {new_qty_used}",
+                            status_code=status.HTTP_400_BAD_REQUEST
                         )
                     qty_to_return = total_issued - new_qty_used
                     
@@ -388,10 +372,9 @@ class WorkOrderPartBaseView(BaseAPIView):
                 
                 # Validate we have enough to return
                 if total_issued < qty_to_return:
-                    return self.format_response(
-                        None, 
-                        [f"Cannot return more than issued. Current: {total_issued}, Requested: {qty_to_return}"], 
-                        status.HTTP_400_BAD_REQUEST
+                    raise LocalBaseException(
+                        exception=f"Cannot return more than issued. Current: {total_issued}, Requested: {qty_to_return}",
+                        status_code=status.HTTP_400_BAD_REQUEST
                     )
                 
                 # Process returns using LIFO
@@ -483,26 +466,32 @@ class PartMovementBaseView(BaseAPIView):
     model_class = PartMovement
     
     # Part movements are immutable - disable write operations
-    def create(self, request, *args, **kwargs):
-        return self.format_response(
-            None, 
-            ["Part movements are immutable and created automatically"], 
-            status.HTTP_405_METHOD_NOT_ALLOWED
-        )
+    def create(self, data, params, *args, **kwargs):
+        try:
+            raise LocalBaseException(
+                exception="Part movements are immutable and created automatically",
+                status_code=status.HTTP_405_METHOD_NOT_ALLOWED
+            )
+        except Exception as e:
+            return self.handle_exception(e)
     
-    def update(self, request, pk=None, *args, **kwargs):
-        return self.format_response(
-            None, 
-            ["Part movements are immutable"], 
-            status.HTTP_405_METHOD_NOT_ALLOWED
-        )
+    def update(self, data, params, pk=None, *args, **kwargs):
+        try:
+            raise LocalBaseException(
+                exception="Part movements are immutable",
+                status_code=status.HTTP_405_METHOD_NOT_ALLOWED
+            )
+        except Exception as e:
+            return self.handle_exception(e)
     
-    def destroy(self, request, pk=None, *args, **kwargs):
-        return self.format_response(
-            None, 
-            ["Part movements are immutable"], 
-            status.HTTP_405_METHOD_NOT_ALLOWED
-        )
+    def destroy(self, params, pk=None, *args, **kwargs):
+        try:
+            raise LocalBaseException(
+                exception="Part movements are immutable",
+                status_code=status.HTTP_405_METHOD_NOT_ALLOWED
+            )
+        except Exception as e:
+            return self.handle_exception(e)
 
 
 class InventoryOperationsBaseView(BaseAPIView):
@@ -704,9 +693,15 @@ class InventoryOperationsBaseView(BaseAPIView):
             
             # Validate required parameters
             if not part_id:
-                return self.format_response(None, ["part_id or part parameter is required"], status.HTTP_400_BAD_REQUEST)
+                raise LocalBaseException(
+                    exception="part_id or part parameter is required",
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
             if not location_id:
-                return self.format_response(None, ["location_id or location parameter is required"], status.HTTP_400_BAD_REQUEST)
+                raise LocalBaseException(
+                    exception="location_id or location parameter is required",
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
             
             # Verify part exists - try by ID first, then by part_number if ID fails
             try:
@@ -718,9 +713,15 @@ class InventoryOperationsBaseView(BaseAPIView):
                     try:
                         part = Part.objects.get(part_number=part_id)
                     except Part.DoesNotExist:
-                        return self.format_response(None, [f"Part '{part_id}' not found by ID or part number"], status.HTTP_404_NOT_FOUND)
+                        raise LocalBaseException(
+                            exception=f"Part '{part_id}' not found by ID or part number",
+                            status_code=status.HTTP_404_NOT_FOUND
+                        )
                 else:
-                    return self.format_response(None, [f"Part with ID {part_id} does not exist"], status.HTTP_404_NOT_FOUND)
+                    raise LocalBaseException(
+                        exception=f"Part with ID {part_id} does not exist",
+                        status_code=status.HTTP_404_NOT_FOUND
+                    )
             
             # Verify location exists - try by ID first, then by name if ID fails
             from company.models import Location
@@ -733,9 +734,15 @@ class InventoryOperationsBaseView(BaseAPIView):
                     try:
                         location = Location.objects.select_related('site').get(name=location_id)
                     except Location.DoesNotExist:
-                        return self.format_response(None, [f"Location '{location_id}' not found by ID or name"], status.HTTP_404_NOT_FOUND)
+                        raise LocalBaseException(
+                            exception=f"Location '{location_id}' not found by ID or name",
+                            status_code=status.HTTP_404_NOT_FOUND
+                        )
                 else:
-                    return self.format_response(None, [f"Location with ID {location_id} does not exist"], status.HTTP_404_NOT_FOUND)
+                    raise LocalBaseException(
+                        exception=f"Location with ID {location_id} does not exist",
+                        status_code=status.HTTP_404_NOT_FOUND
+                    )
             
             # Build queryset with filters
             queryset = InventoryBatch.objects.filter(
@@ -775,7 +782,10 @@ class InventoryOperationsBaseView(BaseAPIView):
             batches = queryset.all()
             
             if not batches:
-                return self.format_response(None, ["No inventory batches found matching the criteria"], status.HTTP_404_NOT_FOUND)
+                raise LocalBaseException(
+                    exception="No inventory batches found matching the criteria",
+                    status_code=status.HTTP_404_NOT_FOUND
+                )
             
             # Calculate total quantities
             total_qty_on_hand = sum(batch.qty_on_hand for batch in batches)
@@ -930,11 +940,17 @@ class InventoryOperationsBaseView(BaseAPIView):
             # Validate query parameters - support both formats
             part_id = request.query_params.get('part_id') or request.query_params.get('part')
             if not part_id:
-                return self.format_response(None, ["part_id or part parameter is required"], status.HTTP_400_BAD_REQUEST)
+                raise LocalBaseException(
+                    exception="part_id or part parameter is required",
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
             
             serializer = LocationOnHandQuerySerializer(data={'part_id': part_id})
             if not serializer.is_valid():
-                return self.format_response(None, serializer.errors, status.HTTP_400_BAD_REQUEST)
+                raise LocalBaseException(
+                    exception=str(serializer.errors),
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
             
             validated_part_id = serializer.validated_data['part_id']
             
@@ -942,7 +958,10 @@ class InventoryOperationsBaseView(BaseAPIView):
             try:
                 part = Part.objects.get(id=validated_part_id)
             except Part.DoesNotExist:
-                return self.format_response(None, [f"Part with ID {validated_part_id} does not exist"], status.HTTP_404_NOT_FOUND)
+                raise LocalBaseException(
+                    exception=f"Part with ID {validated_part_id} does not exist",
+                    status_code=status.HTTP_404_NOT_FOUND
+                )
             
             # Get all inventory batches for this part with location details
             from django.db.models import Sum
