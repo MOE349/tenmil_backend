@@ -33,7 +33,7 @@ class WorkOrderPartReturnApiView(WorkOrderPartBaseView):
     
     def post(self, request, *args, **kwargs):
         """Return parts from work order to inventory"""
-        return self.return_parts_to_inventory(request)
+        return super().return_parts_to_inventory(request)
 
 
 class PartMovementApiView(PartMovementBaseView):
