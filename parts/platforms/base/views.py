@@ -170,13 +170,24 @@ class WorkOrderPartBaseView(BaseAPIView):
                 
                 # Get qty_used from data
                 qty_used = data.get('qty_used')
-                if not qty_used or int(qty_used) <= 0:
+                if not qty_used:
                     raise LocalBaseException(
-                        exception="qty_used must be a positive value",
+                        exception="qty_used field is required",
                         status_code=status.HTTP_400_BAD_REQUEST
                     )
                 
-                qty_used = int(qty_used)
+                try:
+                    qty_used = int(qty_used)
+                    if qty_used <= 0:
+                        raise LocalBaseException(
+                            exception="qty_used must be a positive integer",
+                            status_code=status.HTTP_400_BAD_REQUEST
+                        )
+                except (ValueError, TypeError):
+                    raise LocalBaseException(
+                        exception="qty_used must be a valid positive integer",
+                        status_code=status.HTTP_400_BAD_REQUEST
+                    )
                 
                 # Get inventory batches for this part and location, ordered by received_date (FIFO)
                 available_batches = InventoryBatch.objects.filter(
@@ -359,9 +370,16 @@ class WorkOrderPartBaseView(BaseAPIView):
                     return self.format_response(data=serializer.data, status_code=200)
                 
                 # Validate new_qty_used
-                if not isinstance(new_qty_used, int) or new_qty_used <= 0:
+                try:
+                    new_qty_used = int(new_qty_used)
+                    if new_qty_used <= 0:
+                        raise LocalBaseException(
+                            exception="qty_used must be a positive integer",
+                            status_code=status.HTTP_400_BAD_REQUEST
+                        )
+                except (ValueError, TypeError):
                     raise LocalBaseException(
-                        exception="qty_used must be a positive integer",
+                        exception="qty_used must be a valid positive integer",
                         status_code=status.HTTP_400_BAD_REQUEST
                     )
                 
@@ -699,18 +717,30 @@ class WorkOrderPartBaseView(BaseAPIView):
                 # Determine how much to return
                 if explicit_return_qty is not None:
                     # Direct return amount specified
-                    qty_to_return = int(explicit_return_qty)
-                    if qty_to_return <= 0:
+                    try:
+                        qty_to_return = int(explicit_return_qty)
+                        if qty_to_return <= 0:
+                            raise LocalBaseException(
+                                exception="qty_to_return must be a positive value",
+                                status_code=status.HTTP_400_BAD_REQUEST
+                            )
+                    except (ValueError, TypeError):
                         raise LocalBaseException(
-                            exception="qty_to_return must be a positive value",
+                            exception="qty_to_return must be a valid positive integer",
                             status_code=status.HTTP_400_BAD_REQUEST
                         )
                 else:
                     # Calculate return amount from desired final qty_used
-                    new_qty_used = int(new_qty_used)
-                    if new_qty_used < 0:
+                    try:
+                        new_qty_used = int(new_qty_used)
+                        if new_qty_used < 0:
+                            raise LocalBaseException(
+                                exception="qty_used (final amount) cannot be negative",
+                                status_code=status.HTTP_400_BAD_REQUEST
+                            )
+                    except (ValueError, TypeError):
                         raise LocalBaseException(
-                            exception="qty_used (final amount) cannot be negative",
+                            exception="qty_used must be a valid positive integer",
                             status_code=status.HTTP_400_BAD_REQUEST
                         )
                     if new_qty_used > total_issued:
