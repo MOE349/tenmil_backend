@@ -826,15 +826,29 @@ class InventoryService:
                 created_by=created_by
             )
             
-            # Create work order part record
-            wo_part = WorkOrderPart.objects.create(
+            # Check if we already have a WorkOrderPart record for this batch
+            existing_wo_part = WorkOrderPart.objects.filter(
                 work_order=work_order,
                 part=part,
-                inventory_batch=batch,
-                qty_used=take,
-                unit_cost_snapshot=batch.last_unit_cost
-                # total_parts_cost calculated in model save()
-            )
+                inventory_batch=batch
+            ).first()
+            
+            if existing_wo_part:
+                # Merge quantities with existing record
+                existing_wo_part.qty_used += take
+                existing_wo_part.total_parts_cost = existing_wo_part.qty_used * existing_wo_part.unit_cost_snapshot
+                existing_wo_part.save(update_fields=['qty_used', 'total_parts_cost'])
+                wo_part = existing_wo_part
+            else:
+                # Create new work order part record
+                wo_part = WorkOrderPart.objects.create(
+                    work_order=work_order,
+                    part=part,
+                    inventory_batch=batch,
+                    qty_used=take,
+                    unit_cost_snapshot=batch.last_unit_cost
+                    # total_parts_cost calculated in model save()
+                )
             
             # Track results
             allocations.append(AllocationResult(
@@ -901,15 +915,36 @@ class InventoryService:
                 created_by=created_by
             )
             
-            # Create work order part record (negative for return)
-            wo_part = WorkOrderPart.objects.create(
+            # Check if we already have a WorkOrderPart record for this batch
+            existing_wo_part = WorkOrderPart.objects.filter(
                 work_order=work_order,
                 part=part,
-                inventory_batch=batch,
-                qty_used=-take,  # Negative for return
-                unit_cost_snapshot=batch.last_unit_cost
-                # total_parts_cost calculated in model save()
-            )
+                inventory_batch=batch
+            ).first()
+            
+            if existing_wo_part:
+                # Merge quantities with existing record (subtract for return)
+                existing_wo_part.qty_used -= take
+                
+                if existing_wo_part.qty_used <= 0:
+                    # If quantity becomes zero or negative, delete the record
+                    existing_wo_part.delete()
+                    wo_part = None  # Indicate record was deleted
+                else:
+                    # Update the existing record
+                    existing_wo_part.total_parts_cost = existing_wo_part.qty_used * existing_wo_part.unit_cost_snapshot
+                    existing_wo_part.save(update_fields=['qty_used', 'total_parts_cost'])
+                    wo_part = existing_wo_part
+            else:
+                # Create new work order part record (negative for return)
+                wo_part = WorkOrderPart.objects.create(
+                    work_order=work_order,
+                    part=part,
+                    inventory_batch=batch,
+                    qty_used=-take,  # Negative for return
+                    unit_cost_snapshot=batch.last_unit_cost
+                    # total_parts_cost calculated in model save()
+                )
             
             # Track results
             allocations.append(AllocationResult(
@@ -919,7 +954,8 @@ class InventoryService:
                 total_cost=take * batch.last_unit_cost
             ))
             movements.append(str(movement.id))
-            wo_parts.append(str(wo_part.id))
+            if wo_part is not None:  # Only add if record wasn't deleted
+                wo_parts.append(str(wo_part.id))
             
             remaining -= take
             break  # Return all to first available batch

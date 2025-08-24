@@ -221,16 +221,33 @@ class WorkOrderPartBaseView(BaseAPIView):
                     # Determine how much to take from this batch
                     qty_from_batch = min(remaining_qty, batch.qty_on_hand)
                     
-                    # Create WorkOrderPart record for this batch
-                    work_order_part = WorkOrderPart.objects.create(
+                    # Check if we already have a WorkOrderPart record for this batch
+                    existing_work_order_part = WorkOrderPart.objects.filter(
                         work_order=work_order,
                         part=part,
-                        inventory_batch=batch,
-                        qty_used=qty_from_batch,
-                        unit_cost_snapshot=batch.last_unit_cost,
-                        total_parts_cost=qty_from_batch * batch.last_unit_cost
-                    )
-                    work_order_parts.append(work_order_part)
+                        inventory_batch=batch
+                    ).first()
+                    
+                    if existing_work_order_part:
+                        # Merge quantities with existing record
+                        existing_work_order_part.qty_used += qty_from_batch
+                        existing_work_order_part.total_parts_cost = existing_work_order_part.qty_used * existing_work_order_part.unit_cost_snapshot
+                        existing_work_order_part.save(update_fields=['qty_used', 'total_parts_cost'])
+                        work_order_part = existing_work_order_part
+                        # Only add to list if not already present (avoid duplicates)
+                        if work_order_part not in work_order_parts:
+                            work_order_parts.append(work_order_part)
+                    else:
+                        # Create new WorkOrderPart record for this batch
+                        work_order_part = WorkOrderPart.objects.create(
+                            work_order=work_order,
+                            part=part,
+                            inventory_batch=batch,
+                            qty_used=qty_from_batch,
+                            unit_cost_snapshot=batch.last_unit_cost,
+                            total_parts_cost=qty_from_batch * batch.last_unit_cost
+                        )
+                        work_order_parts.append(work_order_part)
                     
                     # Update inventory batch qty_on_hand
                     batch.qty_on_hand -= qty_from_batch
@@ -501,16 +518,30 @@ class WorkOrderPartBaseView(BaseAPIView):
                     work_order_part.total_parts_cost = work_order_part.qty_used * work_order_part.unit_cost_snapshot
                     work_order_part.save()
                 else:
-                    # Create new WorkOrderPart record
-                    new_record = WorkOrderPart.objects.create(
+                    # Check if we already have a WorkOrderPart record for this batch
+                    existing_record = WorkOrderPart.objects.filter(
                         work_order=work_order,
                         part=part,
-                        inventory_batch=allocation['batch'],
-                        qty_used=allocation['qty_allocated'],
-                        unit_cost_snapshot=allocation['batch'].last_unit_cost,
-                        total_parts_cost=allocation['qty_allocated'] * allocation['batch'].last_unit_cost
-                    )
-                    additional_records.append(new_record)
+                        inventory_batch=allocation['batch']
+                    ).first()
+                    
+                    if existing_record:
+                        # Merge quantities with existing record
+                        existing_record.qty_used += allocation['qty_allocated']
+                        existing_record.total_parts_cost = existing_record.qty_used * existing_record.unit_cost_snapshot
+                        existing_record.save(update_fields=['qty_used', 'total_parts_cost'])
+                        additional_records.append(existing_record)
+                    else:
+                        # Create new WorkOrderPart record
+                        new_record = WorkOrderPart.objects.create(
+                            work_order=work_order,
+                            part=part,
+                            inventory_batch=allocation['batch'],
+                            qty_used=allocation['qty_allocated'],
+                            unit_cost_snapshot=allocation['batch'].last_unit_cost,
+                            total_parts_cost=allocation['qty_allocated'] * allocation['batch'].last_unit_cost
+                        )
+                        additional_records.append(new_record)
             
             # Update other fields in original record if provided
             for field, value in data.items():
