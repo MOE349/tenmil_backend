@@ -128,7 +128,7 @@ class WorkOrderPartBaseSerializer(BaseSerializer):
         response['part'] = {
             "id": str(instance.part.id),
             "part_number": instance.part.part_number,
-            "name": instance.part.name,
+            "part_name": instance.part.name,
             "end_point": "/parts/part"
         }
         
@@ -138,6 +138,7 @@ class WorkOrderPartBaseSerializer(BaseSerializer):
             "location": instance.inventory_batch.location.name,
             "end_point": "/parts/inventory_batch"
         }
+        
         
         return response
 

@@ -264,57 +264,57 @@ class WorkOrderPartBaseView(BaseAPIView):
         except Exception as e:
             return self.handle_exception(e)
     
-    def list(self, params, *args, **kwargs):
-        """Get list of WorkOrderParts aggregated by part and work_order"""
-        from django.db.models import Sum
-        from parts.platforms.base.serializers import PartBaseSerializer
-        from work_orders.models import WorkOrder
+    # def list(self, params, *args, **kwargs):
+    #     """Get list of WorkOrderParts aggregated by part and work_order"""
+    #     from django.db.models import Sum
+    #     from parts.platforms.base.serializers import PartBaseSerializer
+    #     from work_orders.models import WorkOrder
         
-        try:
-            # Get base queryset
-            ordering_by = None
-            if "ordering" in params:
-                ordering_by = params.pop('ordering')
-            user_lang = params.pop('lang', 'en')
+    #     try:
+    #         # Get base queryset
+    #         ordering_by = None
+    #         if "ordering" in params:
+    #             ordering_by = params.pop('ordering')
+    #         user_lang = params.pop('lang', 'en')
             
-            # Get the filtered queryset but aggregate by part and work_order
-            base_queryset = self.get_queryset(params=params, ordering=ordering_by)
+    #         # Get the filtered queryset but aggregate by part and work_order
+    #         base_queryset = self.get_queryset(params=params, ordering=ordering_by)
             
-            # Aggregate by part and work_order, summing qty_used
-            aggregated_data = (base_queryset
-                .values('part', 'work_order')
-                .annotate(total_qty_used=Sum('qty_used'))
-                .order_by('work_order', 'part'))
+    #         # Aggregate by part and work_order, summing qty_used
+    #         aggregated_data = (base_queryset
+    #             .values('part', 'work_order')
+    #             .annotate(total_qty_used=Sum('qty_used'))
+    #             .order_by('work_order', 'part'))
             
-            # Build response data
-            response_data = []
-            for item in aggregated_data:
-                # Get the part object for serialization
-                try:
-                    part = Part.objects.get(id=item['part'])
-                    work_order = WorkOrder.objects.get(id=item['work_order'])
+    #         # Build response data
+    #         response_data = []
+    #         for item in aggregated_data:
+    #             # Get the part object for serialization
+    #             try:
+    #                 part = Part.objects.get(id=item['part'])
+    #                 work_order = WorkOrder.objects.get(id=item['work_order'])
                     
-                    # Serialize the part
-                    part_serializer = PartBaseSerializer(part)
+    #                 # Serialize the part
+    #                 part_serializer = PartBaseSerializer(part)
                     
-                    response_item = {
-                        'part': part_serializer.data,
-                        'work_order': {
-                            'id': str(work_order.id),
-                            'code': work_order.code,
-                            'end_point': '/work_orders/work_order'
-                        },
-                        'qty_used': str(item['total_qty_used'])
-                    }
-                    response_data.append(response_item)
+    #                 response_item = {
+    #                     'part': part_serializer.data,
+    #                     'work_order': {
+    #                         'id': str(work_order.id),
+    #                         'code': work_order.code,
+    #                         'end_point': '/work_orders/work_order'
+    #                     },
+    #                     'qty_used': str(item['total_qty_used'])
+    #                 }
+    #                 response_data.append(response_item)
                     
-                except (Part.DoesNotExist, WorkOrder.DoesNotExist):
-                    continue  # Skip invalid records
+    #             except (Part.DoesNotExist, WorkOrder.DoesNotExist):
+    #                 continue  # Skip invalid records
             
-            return self.format_response(data=response_data, status_code=200)
+    #         return self.format_response(data=response_data, status_code=200)
             
-        except Exception as e:
-            return self.handle_exception(e)
+    #     except Exception as e:
+    #         return self.handle_exception(e)
     
     def return_parts_to_inventory(self, request):
         """Return parts from work order back to inventory using LIFO"""
