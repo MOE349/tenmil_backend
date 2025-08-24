@@ -1,5 +1,4 @@
 from rest_framework import status
-from decimal import Decimal
 from datetime import datetime
 from django.core.exceptions import ValidationError
 from configurations.base_features.views.base_api_view import BaseAPIView
@@ -171,13 +170,13 @@ class WorkOrderPartBaseView(BaseAPIView):
                 
                 # Get qty_used from data
                 qty_used = data.get('qty_used')
-                if not qty_used or Decimal(str(qty_used)) <= 0:
+                if not qty_used or int(qty_used) <= 0:
                     raise LocalBaseException(
                         exception="qty_used must be a positive value",
                         status_code=status.HTTP_400_BAD_REQUEST
                     )
                 
-                qty_used = Decimal(str(qty_used))
+                qty_used = int(qty_used)
                 
                 # Get inventory batches for this part and location, ordered by received_date (FIFO)
                 available_batches = InventoryBatch.objects.filter(
@@ -381,7 +380,7 @@ class WorkOrderPartBaseView(BaseAPIView):
                 # Determine how much to return
                 if explicit_return_qty is not None:
                     # Direct return amount specified
-                    qty_to_return = Decimal(str(explicit_return_qty))
+                    qty_to_return = int(explicit_return_qty)
                     if qty_to_return <= 0:
                         raise LocalBaseException(
                             exception="qty_to_return must be a positive value",
@@ -389,7 +388,7 @@ class WorkOrderPartBaseView(BaseAPIView):
                         )
                 else:
                     # Calculate return amount from desired final qty_used
-                    new_qty_used = Decimal(str(new_qty_used))
+                    new_qty_used = int(new_qty_used)
                     if new_qty_used < 0:
                         raise LocalBaseException(
                             exception="qty_used (final amount) cannot be negative",

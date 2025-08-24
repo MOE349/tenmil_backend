@@ -52,24 +52,18 @@ class InventoryBatch(BaseModel):
         on_delete=models.CASCADE,
         related_name="inventory_batches"
     )
-    qty_on_hand = models.DecimalField(
+    qty_on_hand = models.IntegerField(
         _("Quantity On Hand"), 
-        max_digits=10, 
-        decimal_places=3,
         default=0,
         help_text="Available quantity for issue"
     )
-    qty_reserved = models.DecimalField(
+    qty_reserved = models.IntegerField(
         _("Quantity Reserved"), 
-        max_digits=10, 
-        decimal_places=3,
         default=0,
         help_text="Quantity reserved for future work orders"
     )
-    qty_received = models.DecimalField(
+    qty_received = models.IntegerField(
         _("Quantity Received"), 
-        max_digits=10, 
-        decimal_places=3,
         help_text="Original quantity received in this batch"
     )
     last_unit_cost = models.DecimalField(
@@ -145,10 +139,8 @@ class WorkOrderPart(BaseModel):
         on_delete=models.CASCADE,
         related_name="work_order_parts"
     )
-    qty_used = models.DecimalField(
+    qty_used = models.IntegerField(
         _("Quantity Used"), 
-        max_digits=10, 
-        decimal_places=3,
         help_text="Positive for issues, negative for returns"
     )
     unit_cost_snapshot = models.DecimalField(
@@ -234,10 +226,8 @@ class PartMovement(BaseModel):
         max_length=20, 
         choices=MovementType.choices
     )
-    qty_delta = models.DecimalField(
+    qty_delta = models.IntegerField(
         _("Quantity Delta"), 
-        max_digits=10, 
-        decimal_places=3,
         help_text="Signed quantity: positive increases stock, negative decreases"
     )
     work_order = models.ForeignKey(

@@ -51,7 +51,7 @@ class InvalidOperationError(InventoryError):
 class AllocationResult:
     """Result of FIFO allocation operation"""
     batch_id: str
-    qty_allocated: Decimal
+    qty_allocated: int
     unit_cost: Decimal
     total_cost: Decimal
 
@@ -110,7 +110,7 @@ class InventoryService:
         try:
             part_id = str(data['part'])
             location_id = str(data['location'])
-            qty = Decimal(str(data['qty_received']))
+            qty = int(data['qty_received'])
             unit_cost = Decimal(str(data['last_unit_cost']))
         except (ValueError, InvalidOperation, TypeError) as e:
             raise ValidationError(f"Invalid numeric field: {e}")
@@ -132,15 +132,15 @@ class InventoryService:
         qty_on_hand = None
         if 'qty_on_hand' in data and data['qty_on_hand'] is not None:
             try:
-                qty_on_hand = Decimal(str(data['qty_on_hand']))
-            except (ValueError, InvalidOperation, TypeError):
+                qty_on_hand = int(data['qty_on_hand'])
+            except (ValueError, TypeError):
                 raise ValidationError("Invalid qty_on_hand value")
         
         qty_reserved = None
         if 'qty_reserved' in data and data['qty_reserved'] is not None:
             try:
-                qty_reserved = Decimal(str(data['qty_reserved']))
-            except (ValueError, InvalidOperation, TypeError):
+                qty_reserved = int(data['qty_reserved'])
+            except (ValueError, TypeError):
                 raise ValidationError("Invalid qty_reserved value")
         
         # Call the main receive_parts method
@@ -164,7 +164,7 @@ class InventoryService:
         self, 
         part_id: str,
         location_id: str,
-        qty: Decimal,
+        qty: int,
         unit_cost: Decimal,
         received_date: Optional[datetime] = None,
         receipt_id: Optional[str] = None,
@@ -173,8 +173,8 @@ class InventoryService:
         aisle: Optional[str] = None,
         row: Optional[str] = None,
         bin: Optional[str] = None,
-        qty_on_hand: Optional[Decimal] = None,
-        qty_reserved: Optional[Decimal] = None
+        qty_on_hand: Optional[int] = None,
+        qty_reserved: Optional[int] = None
     ) -> OperationResult:
         """
         Receive parts into inventory
@@ -219,7 +219,7 @@ class InventoryService:
             
         # Set qty_reserved to 0 if not provided
         if qty_reserved is None:
-            qty_reserved = Decimal('0')
+            qty_reserved = 0
             
         # Validate quantity relationships
         if qty_on_hand < 0:
@@ -347,7 +347,7 @@ class InventoryService:
         work_order_id: str,
         part_id: str,
         location_id: str,
-        qty_requested: Decimal,
+        qty_requested: int,
         created_by: Optional[TenantUser] = None,
         idempotency_key: Optional[str] = None
     ) -> OperationResult:
@@ -438,7 +438,7 @@ class InventoryService:
         work_order_id: str,
         part_id: str,
         location_id: str,
-        qty_to_return: Decimal,
+        qty_to_return: int,
         created_by: Optional[TenantUser] = None,
         idempotency_key: Optional[str] = None
     ) -> OperationResult:
@@ -786,7 +786,7 @@ class InventoryService:
         part: Part,
         location: Location,
         work_order: WorkOrder,
-        qty_needed: Decimal,
+        qty_needed: int,
         created_by: Optional[TenantUser],
         idempotency_key: Optional[str]
     ) -> Tuple[List[AllocationResult], List[str], List[str]]:
@@ -861,7 +861,7 @@ class InventoryService:
         part: Part,
         location: Location,
         work_order: WorkOrder,
-        qty_to_return: Decimal,
+        qty_to_return: int,
         created_by: Optional[TenantUser],
         idempotency_key: Optional[str]
     ) -> Tuple[List[AllocationResult], List[str], List[str]]:
@@ -1011,7 +1011,7 @@ class InventoryService:
                 bin=dest_bin,
                 defaults={
                     'qty_on_hand': take,
-                    'qty_reserved': Decimal('0'),
+                    'qty_reserved': 0,
                     'qty_received': take
                 }
             )

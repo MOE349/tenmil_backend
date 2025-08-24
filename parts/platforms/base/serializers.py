@@ -49,14 +49,14 @@ class PartBaseSerializer(BaseSerializer):
         from django.db.models import Sum
         return instance.inventory_batches.aggregate(
             total=Sum('qty_on_hand')
-        )['total'] or Decimal('0')
+        )['total'] or 0
     
     def _get_total_reserved(self, instance):
         """Get total quantity reserved across all locations"""
         from django.db.models import Sum
         return instance.inventory_batches.aggregate(
             total=Sum('qty_reserved')
-        )['total'] or Decimal('0')
+        )['total'] or 0
 
 
 class InventoryBatchBaseSerializer(BaseSerializer):
@@ -207,7 +207,7 @@ class ReceivePartsSerializer(serializers.Serializer):
     """Serializer for receiving parts into inventory"""
     part_id = serializers.UUIDField(required=True)
     location_id = serializers.UUIDField(required=True)
-    qty = serializers.DecimalField(max_digits=10, decimal_places=3, min_value=Decimal('0.001'))
+    qty = serializers.IntegerField(min_value=1)
     unit_cost = serializers.DecimalField(max_digits=10, decimal_places=4, min_value=Decimal('0'))
     received_date = serializers.DateTimeField(required=False)
     receipt_id = serializers.CharField(max_length=100, required=False)
@@ -219,7 +219,7 @@ class IssuePartsSerializer(serializers.Serializer):
     work_order_id = serializers.UUIDField(required=True)
     part_id = serializers.UUIDField(required=True)
     location_id = serializers.UUIDField(required=True)
-    qty = serializers.DecimalField(max_digits=10, decimal_places=3, min_value=Decimal('0.001'))
+    qty = serializers.IntegerField(min_value=1)
     idempotency_key = serializers.CharField(max_length=100, required=False)
 
 
@@ -228,7 +228,7 @@ class ReturnPartsSerializer(serializers.Serializer):
     work_order_id = serializers.UUIDField(required=True)
     part_id = serializers.UUIDField(required=True)
     location_id = serializers.UUIDField(required=True)
-    qty = serializers.DecimalField(max_digits=10, decimal_places=3, min_value=Decimal('0.001'))
+    qty = serializers.IntegerField(min_value=1)
     idempotency_key = serializers.CharField(max_length=100, required=False)
 
 
@@ -259,7 +259,7 @@ class TransferPartsSerializer(serializers.Serializer):
                                                 help_text="Format: 'SITE_CODE - LOCATION_NAME - AA1/RR2/BB3 - qty: 75.5'")
     to_location_string = serializers.CharField(max_length=500, required=False,
                                               help_text="Format: 'SITE_CODE - LOCATION_NAME - AA1/RR2/BB3 - qty: 75.5'")
-    qty = serializers.DecimalField(max_digits=10, decimal_places=3, min_value=Decimal('0.001'))
+    qty = serializers.IntegerField(min_value=1)
     aisle = serializers.CharField(max_length=50, required=False, allow_blank=True)
     row = serializers.CharField(max_length=50, required=False, allow_blank=True)
     bin = serializers.CharField(max_length=50, required=False, allow_blank=True)
