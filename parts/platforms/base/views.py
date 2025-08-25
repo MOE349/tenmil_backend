@@ -303,38 +303,76 @@ class WorkOrderPartBaseView(BaseAPIView):
                 # Handle location decoding and qty_used processing
                 location = None
                 inventory_batch = None
-                if 'qty_used' in data and 'location' in data:
-                    # Decode location like in transfer parts
-                    location_value = data['location']
-                    try:
-                        # Check if it's a UUID or location string
-                        import uuid
-                        try:
-                            uuid.UUID(location_value)
-                            # It's a UUID, get location directly
-                            from company.models import Location
-                            location = Location.objects.select_related('site').get(id=location_value)
-                        except (ValueError, AttributeError):
-                            # It's a location string, decode it
-                            decoded = location_decoder.decode_location_string(location_value)
-                            location = location_decoder.get_location_by_site_and_name(
-                                decoded['site_code'], decoded['location_name']
+                
+                # Handle qty_used with or without location
+                if 'qty_used' in data:
+                    # If location is not provided, try to extract from existing WorkOrderPartRequest
+                    if 'location' not in data:
+                        existing_requests = work_order_part.part_requests.all()
+                        if not existing_requests.exists():
+                            raise LocalBaseException(
+                                exception="qty_used provided without location. No existing WorkOrderPartRequest records found to extract location from. Please provide location parameter.",
+                                status_code=status.HTTP_400_BAD_REQUEST
                             )
+                        
+                        # Check the unique constraint with sum of qty_used consideration
+                        current_total_qty = existing_requests.aggregate(
+                            total=models.Sum('qty_used')
+                        )['total'] or 0
+                        
+                        # If current sum is 0, we can use any location, otherwise use existing location
+                        if current_total_qty == 0:
+                            # Can use any location - but still need one from existing records for consistency
+                            most_recent_request = existing_requests.order_by('-created_at').first()
+                            location = most_recent_request.inventory_batch.location if most_recent_request.inventory_batch else None
                             if not location:
                                 raise LocalBaseException(
-                                    exception=f"Location not found: {decoded['site_code']} - {decoded['location_name']}",
-                                    status_code=status.HTTP_404_NOT_FOUND
+                                    exception="No valid location found in existing WorkOrderPartRequest records",
+                                    status_code=status.HTTP_400_BAD_REQUEST
                                 )
-                    except Exception as e:
-                        raise LocalBaseException(
-                            exception=f"Invalid location format: {str(e)}",
-                            status_code=status.HTTP_400_BAD_REQUEST
-                        )
+                        else:
+                            # Must use the same location/positioning due to unique constraint
+                            # Find the location from existing records
+                            location_request = existing_requests.filter(inventory_batch__isnull=False).first()
+                            if not location_request or not location_request.inventory_batch:
+                                raise LocalBaseException(
+                                    exception="No valid location found in existing WorkOrderPartRequest records with inventory batch",
+                                    status_code=status.HTTP_400_BAD_REQUEST
+                                )
+                            location = location_request.inventory_batch.location
+                    else:
+                        # Location provided, decode it as before
+                        location_value = data['location']
+                        try:
+                            # Check if it's a UUID or location string
+                            import uuid
+                            try:
+                                uuid.UUID(location_value)
+                                # It's a UUID, get location directly
+                                from company.models import Location
+                                location = Location.objects.select_related('site').get(id=location_value)
+                            except (ValueError, AttributeError):
+                                # It's a location string, decode it
+                                decoded = location_decoder.decode_location_string(location_value)
+                                location = location_decoder.get_location_by_site_and_name(
+                                    decoded['site_code'], decoded['location_name']
+                                )
+                                if not location:
+                                    raise LocalBaseException(
+                                        exception=f"Location not found: {decoded['site_code']} - {decoded['location_name']}",
+                                        status_code=status.HTTP_404_NOT_FOUND
+                                    )
+                        except Exception as e:
+                            raise LocalBaseException(
+                                exception=f"Invalid location format: {str(e)}",
+                                status_code=status.HTTP_400_BAD_REQUEST
+                            )
                     
-                    # Calculate current total qty_used from all WorkOrderPartRequest records
-                    current_total_qty = work_order_part.part_requests.aggregate(
-                        total=models.Sum('qty_used')
-                    )['total'] or 0
+                    # Calculate current total qty_used if not already calculated
+                    if 'current_total_qty' not in locals():
+                        current_total_qty = work_order_part.part_requests.aggregate(
+                            total=models.Sum('qty_used')
+                        )['total'] or 0
                     
                     # Get new qty_used from request
                     try:
@@ -468,6 +506,33 @@ class WorkOrderPartBaseView(BaseAPIView):
                     # Auto-set unit_cost_snapshot if not provided
                     if inventory_batch and 'unit_cost_snapshot' not in work_order_part_request_data:
                         work_order_part_request_data['unit_cost_snapshot'] = inventory_batch.last_unit_cost
+                    
+                    # Validate unique constraint: work_order_part + location + aisle + row + bin
+                    # This constraint is bypassed if sum of all qty_used for this work order part = 0
+                    if inventory_batch:
+                        existing_requests = work_order_part.part_requests.all()
+                        current_total_qty = existing_requests.aggregate(
+                            total=models.Sum('qty_used')
+                        )['total'] or 0
+                        
+                        # Only enforce unique constraint if total qty > 0
+                        if current_total_qty > 0:
+                            # Check if there's already a record with the same location/position combination
+                            conflicting_request = existing_requests.filter(
+                                inventory_batch__location=inventory_batch.location,
+                                inventory_batch__aisle=inventory_batch.aisle,
+                                inventory_batch__row=inventory_batch.row,
+                                inventory_batch__bin=inventory_batch.bin
+                            ).first()
+                            
+                            if conflicting_request:
+                                # If there's a conflict, check if it's the same inventory batch
+                                # (which would be allowed for additional requests to the same batch)
+                                if conflicting_request.inventory_batch.id != inventory_batch.id:
+                                    raise LocalBaseException(
+                                        exception=f"WorkOrderPartRequest already exists for this work order part at location {inventory_batch.location.name} (A{inventory_batch.aisle}/R{inventory_batch.row}/B{inventory_batch.bin}). Cannot create another request with different inventory batch at the same position unless total qty_used = 0.",
+                                        status_code=status.HTTP_400_BAD_REQUEST
+                                    )
                     
                     # Validate and create WorkOrderPartRequest
                     request_serializer = WorkOrderPartRequestBaseSerializer(data=work_order_part_request_data)
