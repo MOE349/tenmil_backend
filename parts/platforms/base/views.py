@@ -1482,6 +1482,19 @@ class InventoryOperationsBaseView(BaseAPIView):
                 # Override site_id with the one from work order
                 site_id = str(location.site.id)
                 
+                # Check if inventory batches exist for this part and site when work_order is provided
+                from parts.models import InventoryBatch
+                inventory_exists = InventoryBatch.objects.filter(
+                    part_id=part_id,
+                    location__site_id=site_id
+                ).exists()
+                
+                if not inventory_exists:
+                    raise LocalBaseException(
+                        exception=f"No inventory batches found for part {part_id} at site {location.site.code or site_id}",
+                        status_code=status.HTTP_404_NOT_FOUND
+                    )
+                
             except WorkOrder.DoesNotExist:
                 raise LocalBaseException(
                     exception=f"Work order with ID {work_order_id} does not exist",
