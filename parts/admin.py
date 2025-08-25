@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.translation import gettext_lazy as _
-from .models import Part, InventoryBatch, WorkOrderPart, PartMovement
+from .models import Part, InventoryBatch, WorkOrderPart, WorkOrderPartRequest, PartMovement
 
 
 @admin.register(Part)
@@ -22,11 +22,20 @@ class InventoryBatchAdmin(admin.ModelAdmin):
 
 @admin.register(WorkOrderPart)
 class WorkOrderPartAdmin(admin.ModelAdmin):
-    list_display = ['work_order', 'part', 'qty_used', 'unit_cost_snapshot', 'total_parts_cost', 'created_at']
+    list_display = ['work_order', 'part', 'created_at']
     list_filter = ['created_at']
     search_fields = ['work_order__code', 'part__part_number', 'part__name']
+    readonly_fields = ['created_at', 'updated_at']
+    list_select_related = ['work_order', 'part']
+
+
+@admin.register(WorkOrderPartRequest)
+class WorkOrderPartRequestAdmin(admin.ModelAdmin):
+    list_display = ['work_order_part', 'qty_needed', 'qty_used', 'unit_cost_snapshot', 'total_parts_cost', 'is_approved', 'created_at']
+    list_filter = ['is_approved', 'created_at']
+    search_fields = ['work_order_part__work_order__code', 'work_order_part__part__part_number', 'work_order_part__part__name']
     readonly_fields = ['total_parts_cost', 'created_at', 'updated_at']
-    list_select_related = ['work_order', 'part', 'inventory_batch']
+    list_select_related = ['work_order_part__work_order', 'work_order_part__part', 'inventory_batch']
 
 
 @admin.register(PartMovement)

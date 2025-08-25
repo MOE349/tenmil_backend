@@ -5,7 +5,7 @@ from datetime import datetime, date
 from django.utils import timezone
 
 from configurations.base_features.serializers.base_serializer import BaseSerializer
-from parts.models import Part, InventoryBatch, WorkOrderPart, PartMovement
+from parts.models import Part, InventoryBatch, WorkOrderPart, WorkOrderPartRequest, PartMovement
 from company.platforms.base.serializers import LocationBaseSerializer
 from tenant_users.platforms.base.serializers import TenantUserBaseSerializer
 
@@ -41,7 +41,7 @@ class PartBaseSerializer(BaseSerializer):
         # Add computed fields
         response['total_on_hand'] = self._get_total_on_hand(instance)
         response['total_reserved'] = self._get_total_reserved(instance)
-        
+        response ['code'] = f"{instance.part_number} - {instance.name}"
         return response
     
     def _get_total_on_hand(self, instance):
@@ -112,7 +112,7 @@ class WorkOrderPartBaseSerializer(BaseSerializer):
     class Meta:
         model = WorkOrderPart
         fields = "__all__"
-        read_only_fields = ("id", "created_at", "updated_at", "total_parts_cost")
+        read_only_fields = ("id", "created_at", "updated_at")
     
     def mod_to_representation(self, instance):
         response = super().mod_to_representation(instance)
@@ -131,14 +131,51 @@ class WorkOrderPartBaseSerializer(BaseSerializer):
             "part_name": instance.part.name,
             "end_point": "/parts/part"
         }
-        response["part_name"] =instance.part.name
+        response["part_name"] = instance.part.name
+        
+        # Include related part requests
+        response['part_requests'] = [
+            {
+                "id": str(req.id),
+                "qty_needed": req.qty_needed,
+                "qty_used": req.qty_used,
+                "is_approved": req.is_approved,
+                "unit_cost_snapshot": str(req.unit_cost_snapshot),
+                "total_parts_cost": str(req.total_parts_cost),
+                "inventory_batch_id": str(req.inventory_batch.id),
+                "end_point": "/parts/work_order_part_request"
+            } for req in instance.part_requests.all()
+        ]
+        
+        return response
+
+
+class WorkOrderPartRequestBaseSerializer(BaseSerializer):
+    """Base serializer for WorkOrderPartRequest model"""
+    
+    class Meta:
+        model = WorkOrderPartRequest
+        fields = "__all__"
+        read_only_fields = ("id", "created_at", "updated_at", "total_parts_cost")
+    
+    def mod_to_representation(self, instance):
+        response = super().mod_to_representation(instance)
+        response['id'] = str(instance.id)
+        
+        # Add related object details
+        response['work_order_part'] = {
+            "id": str(instance.work_order_part.id),
+            "work_order_code": instance.work_order_part.work_order.code,
+            "part_number": instance.work_order_part.part.part_number,
+            "end_point": "/parts/work_order_part"
+        }
+        
         response['inventory_batch'] = {
             "id": str(instance.inventory_batch.id),
             "received_date": instance.inventory_batch.received_date,
             "location": instance.inventory_batch.location.name,
             "end_point": "/parts/inventory_batch"
         }
-        
         
         return response
 
@@ -450,6 +487,25 @@ class TransferPartsSerializer(serializers.Serializer):
         data.pop('source_bin', None)
         
         return data
+
+
+class CreateWorkOrderPartRequestSerializer(serializers.Serializer):
+    """Serializer for creating work order part requests"""
+    work_order_part_id = serializers.UUIDField(required=True)
+    inventory_batch_id = serializers.UUIDField(required=True)
+    qty_needed = serializers.IntegerField(min_value=1, required=False)
+    qty_used = serializers.IntegerField(required=True)
+    unit_cost_snapshot = serializers.DecimalField(max_digits=10, decimal_places=4, min_value=Decimal('0'))
+    is_approved = serializers.BooleanField(default=False)
+
+
+class ApproveWorkOrderPartRequestSerializer(serializers.Serializer):
+    """Serializer for approving work order part requests"""
+    request_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        min_length=1,
+        help_text="List of WorkOrderPartRequest IDs to approve"
+    )
 
 
 class OnHandQuerySerializer(serializers.Serializer):

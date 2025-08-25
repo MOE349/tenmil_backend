@@ -3,7 +3,7 @@ from datetime import datetime
 from django.core.exceptions import ValidationError
 from configurations.base_features.views.base_api_view import BaseAPIView
 from configurations.base_features.exceptions.base_exceptions import LocalBaseException
-from parts.models import Part, InventoryBatch, WorkOrderPart, PartMovement
+from parts.models import Part, InventoryBatch, WorkOrderPart, WorkOrderPartRequest, PartMovement
 from parts.platforms.base.serializers import *
 from parts.services import inventory_service, InsufficientStockError, InvalidOperationError
 
@@ -879,6 +879,12 @@ class WorkOrderPartBaseView(BaseAPIView):
         
         except Exception as e:
             return self.handle_exception(e)
+
+
+class WorkOrderPartRequestBaseView(BaseAPIView):
+    """Base view for WorkOrderPartRequest CRUD operations"""
+    serializer_class = WorkOrderPartRequestBaseSerializer
+    model_class = WorkOrderPartRequest
 
 
 class PartMovementBaseView(BaseAPIView):

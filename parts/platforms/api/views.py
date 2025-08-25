@@ -4,12 +4,12 @@ from rest_framework import status
 from rest_framework import viewsets
 
 from parts.platforms.base.views import (
-    PartBaseView, InventoryBatchBaseView, WorkOrderPartBaseView, 
+    PartBaseView, InventoryBatchBaseView, WorkOrderPartBaseView, WorkOrderPartRequestBaseView,
     PartMovementBaseView, InventoryOperationsBaseView
 )
 from parts.platforms.api.serializers import (
     PartApiSerializer, InventoryBatchApiSerializer, WorkOrderPartApiSerializer,
-    PartMovementApiSerializer
+    WorkOrderPartRequestApiSerializer, PartMovementApiSerializer
 )
 
 
@@ -26,6 +26,11 @@ class InventoryBatchApiView(InventoryBatchBaseView):
 class WorkOrderPartApiView(WorkOrderPartBaseView):
     """API view for WorkOrderPart CRUD operations"""
     serializer_class = WorkOrderPartApiSerializer
+
+
+class WorkOrderPartRequestApiView(WorkOrderPartRequestBaseView):
+    """API view for WorkOrderPartRequest CRUD operations"""
+    serializer_class = WorkOrderPartRequestApiSerializer
 
 
 class WorkOrderPartReturnApiView(WorkOrderPartBaseView):

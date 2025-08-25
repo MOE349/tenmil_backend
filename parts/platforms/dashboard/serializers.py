@@ -5,15 +5,19 @@ class PartDashboardSerializer(PartBaseSerializer):
     pass
 
 
-class InventorybatchDashboardSerializer(InventorybatchBaseSerializer):
+class InventorybatchDashboardSerializer(InventoryBatchBaseSerializer):
     pass
 
 
-class WorkorderpartDashboardSerializer(WorkorderpartBaseSerializer):
+class WorkorderpartDashboardSerializer(WorkOrderPartBaseSerializer):
     pass
 
 
-class PartmovementDashboardSerializer(PartmovementBaseSerializer):
+class WorkorderpartrequestDashboardSerializer(WorkOrderPartRequestBaseSerializer):
+    pass
+
+
+class PartmovementDashboardSerializer(PartMovementBaseSerializer):
     pass
 
 

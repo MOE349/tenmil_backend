@@ -6,15 +6,19 @@ class PartDashboardView(PartBaseView):
     serializer_class = PartDashboardSerializer
 
 
-class InventorybatchDashboardView(InventorybatchBaseView):
+class InventorybatchDashboardView(InventoryBatchBaseView):
     serializer_class = InventorybatchDashboardSerializer
 
 
-class WorkorderpartDashboardView(WorkorderpartBaseView):
+class WorkorderpartDashboardView(WorkOrderPartBaseView):
     serializer_class = WorkorderpartDashboardSerializer
 
 
-class PartmovementDashboardView(PartmovementBaseView):
+class WorkorderpartrequestDashboardView(WorkOrderPartRequestBaseView):
+    serializer_class = WorkorderpartrequestDashboardSerializer
+
+
+class PartmovementDashboardView(PartMovementBaseView):
     serializer_class = PartmovementDashboardSerializer
 
 

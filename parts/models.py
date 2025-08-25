@@ -123,7 +123,7 @@ class InventoryBatch(BaseModel):
 
 
 class WorkOrderPart(BaseModel):
-    """Work order parts consumption tracking with cost snapshots"""
+    """Work order parts association - links work orders to parts"""
     work_order = models.ForeignKey(
         "work_orders.WorkOrder", 
         on_delete=models.CASCADE,
@@ -134,10 +134,38 @@ class WorkOrderPart(BaseModel):
         on_delete=models.CASCADE,
         related_name="work_order_parts"
     )
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['work_order']),
+            models.Index(fields=['part']),
+            models.Index(fields=['work_order', 'part']),
+        ]
+        unique_together = ['work_order', 'part']
+        verbose_name = _("Work Order Part")
+        verbose_name_plural = _("Work Order Parts")
+
+    def __str__(self):
+        return f"WO {self.work_order.code} - {self.part.part_number}"
+
+
+class WorkOrderPartRequest(BaseModel):
+    """Work order part requests and consumption tracking with cost snapshots"""
+    work_order_part = models.ForeignKey(
+        WorkOrderPart, 
+        on_delete=models.CASCADE,
+        related_name="part_requests"
+    )
     inventory_batch = models.ForeignKey(
         InventoryBatch, 
         on_delete=models.CASCADE,
-        related_name="work_order_parts"
+        related_name="work_order_part_requests"
+    )
+    qty_needed = models.IntegerField(
+        _("Quantity Needed"), 
+        null=True,
+        blank=True,
+        help_text="Optional: Quantity needed for planning purposes"
     )
     qty_used = models.IntegerField(
         _("Quantity Used"), 
@@ -155,22 +183,29 @@ class WorkOrderPart(BaseModel):
         decimal_places=2,
         help_text="qty_used × unit_cost_snapshot (persisted for audit)"
     )
+    is_approved = models.BooleanField(
+        _("Is Approved"), 
+        default=False,
+        help_text="Whether this part request has been approved"
+    )
 
     class Meta:
         indexes = [
-            models.Index(fields=['work_order']),
-            models.Index(fields=['part']),
+            models.Index(fields=['work_order_part']),
             models.Index(fields=['inventory_batch']),
-            models.Index(fields=['work_order', 'part']),
+            models.Index(fields=['is_approved']),
+            models.Index(fields=['work_order_part', 'is_approved']),
         ]
-        verbose_name = _("Work Order Part")
-        verbose_name_plural = _("Work Order Parts")
+        verbose_name = _("Work Order Part Request")
+        verbose_name_plural = _("Work Order Part Requests")
 
     def clean(self):
         if self.qty_used == 0:
             raise ValidationError(_("Quantity used cannot be zero"))
         if self.unit_cost_snapshot < 0:
             raise ValidationError(_("Unit cost snapshot cannot be negative"))
+        if self.qty_needed is not None and self.qty_needed <= 0:
+            raise ValidationError(_("Quantity needed must be positive if specified"))
 
     def save(self, *args, **kwargs):
         # Auto-calculate total_parts_cost
@@ -178,7 +213,7 @@ class WorkOrderPart(BaseModel):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"WO {self.work_order.code} - {self.part.part_number} - Qty: {self.qty_used}"
+        return f"WO {self.work_order_part.work_order.code} - {self.work_order_part.part.part_number} - Qty: {self.qty_used}"
 
 
 class PartMovement(BaseModel):

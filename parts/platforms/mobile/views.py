@@ -6,15 +6,19 @@ class PartMobileView(PartBaseView):
     serializer_class = PartMobileSerializer
 
 
-class InventorybatchMobileView(InventorybatchBaseView):
+class InventorybatchMobileView(InventoryBatchBaseView):
     serializer_class = InventorybatchMobileSerializer
 
 
-class WorkorderpartMobileView(WorkorderpartBaseView):
+class WorkorderpartMobileView(WorkOrderPartBaseView):
     serializer_class = WorkorderpartMobileSerializer
 
 
-class PartmovementMobileView(PartmovementBaseView):
+class WorkorderpartrequestMobileView(WorkOrderPartRequestBaseView):
+    serializer_class = WorkorderpartrequestMobileSerializer
+
+
+class PartmovementMobileView(PartMovementBaseView):
     serializer_class = PartmovementMobileSerializer
 
 

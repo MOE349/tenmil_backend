@@ -5,15 +5,19 @@ class PartMobileSerializer(PartBaseSerializer):
     pass
 
 
-class InventorybatchMobileSerializer(InventorybatchBaseSerializer):
+class InventorybatchMobileSerializer(InventoryBatchBaseSerializer):
     pass
 
 
-class WorkorderpartMobileSerializer(WorkorderpartBaseSerializer):
+class WorkorderpartMobileSerializer(WorkOrderPartBaseSerializer):
     pass
 
 
-class PartmovementMobileSerializer(PartmovementBaseSerializer):
+class WorkorderpartrequestMobileSerializer(WorkOrderPartRequestBaseSerializer):
+    pass
+
+
+class PartmovementMobileSerializer(PartMovementBaseSerializer):
     pass
 
 
