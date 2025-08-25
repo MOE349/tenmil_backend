@@ -1193,29 +1193,20 @@ class InventoryOperationsBaseView(BaseAPIView):
         if work_order_id:
             try:
                 from work_orders.models import WorkOrder
+                from configurations.base_features.db.db_helpers import get_object_by_content_type_and_id
+                
                 work_order = WorkOrder.objects.select_related('content_type').get(id=work_order_id)
                 
-                # Get the asset using content_type and object_id (safer than direct GenericForeignKey access)
-                content_type = work_order.content_type
-                object_id = work_order.object_id
-                
-                if not content_type or not object_id:
+                # Get the asset using the utility function
+                if not work_order.content_type or not work_order.object_id:
                     raise LocalBaseException(
                         exception="Work order does not have a valid asset reference",
                         status_code=status.HTTP_400_BAD_REQUEST
                     )
                 
-                # Get the asset model class and retrieve the asset
-                asset_model = content_type.model_class()
-                if not asset_model:
-                    raise LocalBaseException(
-                        exception="Invalid asset content type",
-                        status_code=status.HTTP_400_BAD_REQUEST
-                    )
-                
                 try:
-                    asset = asset_model.objects.get(id=object_id)
-                except asset_model.DoesNotExist:
+                    asset = get_object_by_content_type_and_id(work_order.content_type.id, work_order.object_id)
+                except Exception:
                     raise LocalBaseException(
                         exception="Work order asset not found",
                         status_code=status.HTTP_404_NOT_FOUND
