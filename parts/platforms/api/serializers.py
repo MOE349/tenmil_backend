@@ -26,6 +26,11 @@ class PartMovementApiSerializer(PartMovementBaseSerializer):
     pass
 
 
+class WorkOrderPartMovementApiSerializer(WorkOrderPartMovementSerializer):
+    """API serializer for WorkOrderPart movement logs with API-specific customizations"""
+    pass
+
+
 # Expose action serializers at API level
 class ReceivePartsApiSerializer(ReceivePartsSerializer):
     """API serializer for receiving parts"""

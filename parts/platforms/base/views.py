@@ -1614,20 +1614,22 @@ class InventoryOperationsBaseView(BaseAPIView):
                 
                 locations.append(location_data)
             
-            # Create response with the exact structure requested
-            from rest_framework.response import Response
-            
-            response_data = {
-                'data': locations,
-                'total_locations': len(locations),
-                'total_qty': total_qty,
-                'errors': None,
-                'status_code': 200
-            }
-            
             return self.format_response(locations, [], 200)
             
         except Exception as e:
             return self.handle_exception(e)
+
+
+class WorkOrderPartMovementBaseView(PartMovementBaseView):
+    """Base view for WorkOrderPart movement logs - filtered for work order related movements only"""
+    serializer_class = WorkOrderPartMovementSerializer
+    model_class = PartMovement
+    
+    def get_request_params(self, request):
+        """Override to add work order filter to params"""
+        params = super().get_request_params(request)
+        # Filter to only show movements that are related to work orders
+        params['work_order__isnull'] = False
+        return params
 
 

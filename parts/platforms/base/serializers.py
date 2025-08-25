@@ -520,6 +520,34 @@ class MovementQuerySerializer(serializers.Serializer):
 class LocationOnHandQuerySerializer(serializers.Serializer):
     """Serializer for location on-hand quantity queries"""
     part_id = serializers.UUIDField(required=True, help_text="Part ID to get location quantities for")
+
+
+class WorkOrderPartMovementSerializer(PartMovementBaseSerializer):
+    """Serializer for WorkOrderPart movement logs with custom calculations"""
     
+    class Meta:
+        model = PartMovement
+        fields = "__all__"
+        read_only_fields = ("id", "created_at", "updated_at")  # All fields are read-only
+    
+    def mod_to_representation(self, instance):
+        response = super().mod_to_representation(instance)
+        
+        # Modify qty_delta by multiplying by -1
+        response['qty_delta'] = instance.qty_delta * -1
+        
+        # Add part_price from inventory_batch.last_unit_cost
+        part_price = None
+        if instance.inventory_batch:
+            part_price = instance.inventory_batch.last_unit_cost
+        response['part_price'] = str(part_price) if part_price is not None else None
+        
+        # Add total_price calculation: inventory_batch.last_unit_cost * qty_delta * -1
+        total_price = None
+        if instance.inventory_batch and instance.inventory_batch.last_unit_cost is not None:
+            total_price = instance.inventory_batch.last_unit_cost * instance.qty_delta * -1
+        response['total_price'] = str(total_price) if total_price is not None else None
+        
+        return response
 
 
