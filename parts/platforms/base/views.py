@@ -303,6 +303,9 @@ class WorkOrderPartBaseView(BaseAPIView):
                 # Handle location decoding and qty_used processing
                 location = None
                 inventory_batch = None
+                qty_difference = 0
+                current_total_qty = 0
+                new_qty_used = 0
                 
                 # Handle qty_used with or without location
                 if 'qty_used' in data:
@@ -368,11 +371,10 @@ class WorkOrderPartBaseView(BaseAPIView):
                                 status_code=status.HTTP_400_BAD_REQUEST
                             )
                     
-                    # Calculate current total qty_used if not already calculated
-                    if 'current_total_qty' not in locals():
-                        current_total_qty = work_order_part.part_requests.aggregate(
-                            total=models.Sum('qty_used')
-                        )['total'] or 0
+                    # Calculate current total qty_used (recalculate for accuracy)
+                    current_total_qty = work_order_part.part_requests.aggregate(
+                        total=models.Sum('qty_used')
+                    )['total'] or 0
                     
                     # Get new qty_used from request
                     try:
@@ -388,89 +390,149 @@ class WorkOrderPartBaseView(BaseAPIView):
                             status_code=status.HTTP_400_BAD_REQUEST
                         )
                     
-                    # Determine if it's addition or return
-                    qty_difference = new_qty_used - current_total_qty
+                                    # Determine if it's addition or return
+                qty_difference = new_qty_used - current_total_qty
+                
+                # Store qty_difference for later use in response
+                
+                if qty_difference > 0:
+                    # Addition - need to allocate more inventory using FIFO
+                    available_batches = InventoryBatch.objects.filter(
+                        part=work_order_part.part,
+                        location=location,
+                        qty_on_hand__gt=0
+                    ).order_by('received_date')  # FIFO
                     
-                    # Store qty_difference for later use in response
+                    if not available_batches.exists():
+                        raise LocalBaseException(
+                            exception=f"No inventory available for part {work_order_part.part.part_number} at location {location.name}",
+                            status_code=status.HTTP_400_BAD_REQUEST
+                        )
                     
-                    if qty_difference > 0:
-                        # Addition - need to allocate more inventory using FIFO
-                        available_batches = InventoryBatch.objects.filter(
-                            part=work_order_part.part,
-                            location=location,
-                            qty_on_hand__gt=0
-                        ).order_by('received_date')  # FIFO
-                        
-                        if not available_batches.exists():
-                            raise LocalBaseException(
-                                exception=f"No inventory available for part {work_order_part.part.part_number} at location {location.name}",
-                                status_code=status.HTTP_400_BAD_REQUEST
-                            )
-                        
-                        # Check if we have enough total inventory
-                        total_available = sum(batch.qty_on_hand for batch in available_batches)
-                        if total_available < qty_difference:
-                            raise LocalBaseException(
-                                exception=f"Insufficient inventory. Requested: {qty_difference}, Available: {total_available}",
-                                status_code=status.HTTP_400_BAD_REQUEST
-                            )
-                        
-                        # Use first available batch (FIFO)
-                        inventory_batch = available_batches.first()
+                    # Check if we have enough total inventory
+                    total_available = sum(batch.qty_on_hand for batch in available_batches)
+                    if total_available < qty_difference:
+                        raise LocalBaseException(
+                            exception=f"Insufficient inventory. Requested: {qty_difference}, Available: {total_available}",
+                            status_code=status.HTTP_400_BAD_REQUEST
+                        )
+                    
+                    # Use FIFO allocation across batches
+                    remaining_qty = qty_difference
+                    for batch in available_batches:
+                        if remaining_qty <= 0:
+                            break
+                            
+                        qty_from_batch = min(remaining_qty, batch.qty_on_hand)
                         
                         # Update inventory - reduce qty_on_hand
-                        inventory_batch.qty_on_hand -= qty_difference
-                        inventory_batch.save(update_fields=['qty_on_hand'])
+                        batch.qty_on_hand -= qty_from_batch
+                        batch.save(update_fields=['qty_on_hand'])
                         
                         # Create movement record for audit trail
                         PartMovement.objects.create(
                             part=work_order_part.part,
-                            inventory_batch=inventory_batch,
+                            inventory_batch=batch,
                             from_location=location,
                             to_location=None,  # Parts are consumed
                             movement_type=PartMovement.MovementType.ISSUE,
-                            qty_delta=-qty_difference,
+                            qty_delta=-qty_from_batch,
                             work_order=work_order_part.work_order,
                             created_by=params.get('user')
                         )
                         
-                    elif qty_difference < 0:
-                        # Return - need to return parts back to inventory using LIFO
-                        qty_to_return = abs(qty_difference)
+                        # Create/update WorkOrderPartRequest for this batch
+                        existing_request = work_order_part.part_requests.filter(
+                            inventory_batch=batch
+                        ).first()
                         
-                        # Get the most recent WorkOrderPartRequest records (LIFO for returns)
-                        recent_requests = work_order_part.part_requests.filter(
-                            qty_used__gt=0
-                        ).order_by('-created_at')
-                        
-                        if not recent_requests.exists():
-                            raise LocalBaseException(
-                                exception="No parts to return for this work order part",
-                                status_code=status.HTTP_400_BAD_REQUEST
+                        if existing_request:
+                            # Update existing request
+                            existing_request.qty_used += qty_from_batch
+                            existing_request.total_parts_cost = existing_request.qty_used * existing_request.unit_cost_snapshot
+                            existing_request.save(update_fields=['qty_used', 'total_parts_cost'])
+                        else:
+                            # Create new request for this batch
+                            from parts.models import WorkOrderPartRequest
+                            WorkOrderPartRequest.objects.create(
+                                work_order_part=work_order_part,
+                                inventory_batch=batch,
+                                qty_used=qty_from_batch,
+                                unit_cost_snapshot=batch.last_unit_cost
                             )
                         
-                        # Use the inventory batch from the most recent request
-                        inventory_batch = recent_requests.first().inventory_batch
+                        remaining_qty -= qty_from_batch
+                    
+                    # Use first batch for consistency with existing logic
+                    inventory_batch = available_batches.first()
+                    
+                elif qty_difference < 0:
+                    # Return - need to return parts back to inventory using LIFO
+                    qty_to_return = abs(qty_difference)
+                    
+                    # Get WorkOrderPartRequest records ordered by most recent (LIFO for returns)
+                    request_records = work_order_part.part_requests.filter(
+                        qty_used__gt=0
+                    ).order_by('-created_at')
+                    
+                    if not request_records.exists():
+                        raise LocalBaseException(
+                            exception="No parts to return for this work order part",
+                            status_code=status.HTTP_400_BAD_REQUEST
+                        )
+                    
+                    # Return parts using LIFO (most recent first)
+                    remaining_return_qty = qty_to_return
+                    inventory_batch = None  # Will be set to last processed batch
+                    
+                    for request in request_records:
+                        if remaining_return_qty <= 0:
+                            break
+                            
+                        # Determine how much to return from this request
+                        return_from_request = min(remaining_return_qty, request.qty_used)
                         
                         # Update inventory - add back to qty_on_hand
-                        inventory_batch.qty_on_hand += qty_to_return
-                        inventory_batch.save(update_fields=['qty_on_hand'])
+                        request.inventory_batch.qty_on_hand += return_from_request
+                        request.inventory_batch.save(update_fields=['qty_on_hand'])
                         
-                        # Create movement record for audit trail  
+                        # Create movement record for audit trail
                         PartMovement.objects.create(
                             part=work_order_part.part,
-                            inventory_batch=inventory_batch,
+                            inventory_batch=request.inventory_batch,
                             from_location=None,  # Parts are being returned
-                            to_location=inventory_batch.location,
+                            to_location=request.inventory_batch.location,
                             movement_type=PartMovement.MovementType.RETURN,
-                            qty_delta=qty_to_return,
+                            qty_delta=return_from_request,
                             work_order=work_order_part.work_order,
                             created_by=params.get('user')
                         )
-                    else:
-                        # No change in qty_used, just use any existing inventory batch
-                        existing_request = work_order_part.part_requests.first()
-                        inventory_batch = existing_request.inventory_batch if existing_request else None
+                        
+                        # Update the WOPR record
+                        request.qty_used -= return_from_request
+                        request.total_parts_cost = request.qty_used * request.unit_cost_snapshot
+                        
+                        if request.qty_used <= 0:
+                            # Delete the request if qty_used becomes 0 or negative
+                            inventory_batch = request.inventory_batch  # Save reference before deletion
+                            request.delete()
+                        else:
+                            # Update the request with reduced qty_used
+                            request.save(update_fields=['qty_used', 'total_parts_cost'])
+                            inventory_batch = request.inventory_batch
+                        
+                        remaining_return_qty -= return_from_request
+                    
+                    if remaining_return_qty > 0:
+                        raise LocalBaseException(
+                            exception=f"Cannot return {remaining_return_qty} units - insufficient qty_used in requests",
+                            status_code=status.HTTP_400_BAD_REQUEST
+                        )
+                        
+                else:
+                    # No change in qty_used, just use any existing inventory batch
+                    existing_request = work_order_part.part_requests.first()
+                    inventory_batch = existing_request.inventory_batch if existing_request else None
                 
                 # Separate WorkOrderPart fields from WorkOrderPartRequest fields
                 work_order_part_data = {}
@@ -492,78 +554,46 @@ class WorkOrderPartBaseView(BaseAPIView):
                         )
                     work_order_part = serializer.save()
                 
-                # Create WorkOrderPartRequest if there are request fields in the payload
+                # Note: WorkOrderPartRequest records are now handled within the qty_used logic above
+                # No need to create additional records here since we update/create them properly in FIFO/LIFO logic
                 work_order_part_request = None
                 qty_difference = locals().get('qty_difference', 0)  # Get qty_difference if it was calculated
-                if work_order_part_request_data:
-                    # Add the work_order_part reference
-                    work_order_part_request_data['work_order_part'] = work_order_part.id
-                    
-                    # Auto-set inventory_batch if we determined it from location/qty_used logic
-                    if inventory_batch and 'inventory_batch' not in work_order_part_request_data:
-                        work_order_part_request_data['inventory_batch'] = inventory_batch.id
-                    
-                    # Auto-set unit_cost_snapshot if not provided
-                    if inventory_batch and 'unit_cost_snapshot' not in work_order_part_request_data:
-                        work_order_part_request_data['unit_cost_snapshot'] = inventory_batch.last_unit_cost
-                    
-                    # Validate unique constraint: work_order_part + location + aisle + row + bin
-                    # This constraint is bypassed if sum of all qty_used for this work order part = 0
-                    if inventory_batch:
-                        existing_requests = work_order_part.part_requests.all()
-                        current_total_qty = existing_requests.aggregate(
-                            total=models.Sum('qty_used')
-                        )['total'] or 0
-                        
-                        # Only enforce unique constraint if total qty > 0
-                        if current_total_qty > 0:
-                            # Check if there's already a record with the same location/position combination
-                            conflicting_request = existing_requests.filter(
-                                inventory_batch__location=inventory_batch.location,
-                                inventory_batch__aisle=inventory_batch.aisle,
-                                inventory_batch__row=inventory_batch.row,
-                                inventory_batch__bin=inventory_batch.bin
-                            ).first()
-                            
-                            if conflicting_request:
-                                # If there's a conflict, check if it's the same inventory batch
-                                # (which would be allowed for additional requests to the same batch)
-                                if conflicting_request.inventory_batch.id != inventory_batch.id:
-                                    raise LocalBaseException(
-                                        exception=f"WorkOrderPartRequest already exists for this work order part at location {inventory_batch.location.name} (A{inventory_batch.aisle}/R{inventory_batch.row}/B{inventory_batch.bin}). Cannot create another request with different inventory batch at the same position unless total qty_used = 0.",
-                                        status_code=status.HTTP_400_BAD_REQUEST
-                                    )
-                    
-                    # Validate and create WorkOrderPartRequest
-                    request_serializer = WorkOrderPartRequestBaseSerializer(data=work_order_part_request_data)
-                    if not request_serializer.is_valid():
-                        raise LocalBaseException(
-                            exception=request_serializer.errors,
-                            status_code=status.HTTP_400_BAD_REQUEST
-                        )
-                    work_order_part_request = request_serializer.save()
                 
                 # Prepare response data
                 response_data = {
                     'work_order_part': self.serializer_class(work_order_part).data
                 }
                 
-                if work_order_part_request:
-                    response_data['work_order_part_request'] = WorkOrderPartRequestBaseSerializer(work_order_part_request).data
-                    if location:
-                        response_data['inventory_operation'] = {
-                            'location': {
-                                'id': str(location.id),
-                                'name': location.name
-                            },
-                            'inventory_batch': {
-                                'id': str(inventory_batch.id),
-                                'received_date': inventory_batch.received_date.isoformat()
-                            } if inventory_batch else None,
-                            'operation_type': 'addition' if qty_difference > 0 else 'return' if qty_difference < 0 else 'no_change',
-                            'qty_difference': qty_difference
-                        }
-                    response_data['message'] = 'WorkOrderPart updated and WorkOrderPartRequest created successfully'
+                # Add inventory operation details if qty_used was processed
+                if 'qty_used' in data and location:
+                    response_data['inventory_operation'] = {
+                        'location': {
+                            'id': str(location.id),
+                            'name': location.name
+                        },
+                        'inventory_batch': {
+                            'id': str(inventory_batch.id),
+                            'received_date': inventory_batch.received_date.isoformat()
+                        } if inventory_batch else None,
+                        'operation_type': 'addition' if qty_difference > 0 else 'return' if qty_difference < 0 else 'no_change',
+                        'qty_difference': qty_difference,
+                        'new_total_qty_used': new_qty_used,
+                        'previous_total_qty_used': current_total_qty
+                    }
+                
+                # Get updated part requests for response
+                updated_requests = work_order_part.part_requests.all()
+                if updated_requests.exists():
+                    response_data['work_order_part_requests'] = WorkOrderPartRequestBaseSerializer(updated_requests, many=True).data
+                
+                # Set appropriate message based on operation
+                if 'qty_used' in data:
+                    if qty_difference > 0:
+                        response_data['message'] = f'WorkOrderPart updated successfully. Added {qty_difference} parts to inventory consumption.'
+                    elif qty_difference < 0:
+                        response_data['message'] = f'WorkOrderPart updated successfully. Returned {abs(qty_difference)} parts to inventory.'
+                    else:
+                        response_data['message'] = 'WorkOrderPart updated successfully. No quantity change.'
                 else:
                     response_data['message'] = 'WorkOrderPart updated successfully'
                 
