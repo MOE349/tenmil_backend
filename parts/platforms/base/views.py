@@ -307,6 +307,8 @@ class WorkOrderPartBaseView(BaseAPIView):
                 current_total_qty = 0
                 new_qty_used = 0
                 position_filter = {}
+                decoded_position = {}
+                use_provided_position = False
                 
                 # Handle qty_used with or without location
                 if 'qty_used' in data:
@@ -366,6 +368,13 @@ class WorkOrderPartBaseView(BaseAPIView):
                                         exception=f"Location not found: {decoded['site_code']} - {decoded['location_name']}",
                                         status_code=status.HTTP_404_NOT_FOUND
                                     )
+                                
+                                # Store decoded position information for later use
+                                decoded_position = {
+                                    'aisle': decoded.get('aisle'),
+                                    'row': decoded.get('row'),
+                                    'bin': decoded.get('bin')
+                                }
                         except Exception as e:
                             raise LocalBaseException(
                                 exception=f"Invalid location format: {str(e)}",
@@ -398,23 +407,29 @@ class WorkOrderPartBaseView(BaseAPIView):
                 
                 if qty_difference > 0:
                     # Addition - need to allocate more inventory using FIFO
-                    # First check if there are existing WOPR records to determine position constraints
                     position_filter = {}  # Reset for this operation
-                    existing_requests = work_order_part.part_requests.filter(qty_used__gt=0)
+                    all_requests = work_order_part.part_requests.all()
                     
-                    # Get position constraints from existing WOPR records
+                    # Calculate sum of qty_used from all existing records
+                    existing_qty_sum = all_requests.aggregate(
+                        total=models.Sum('qty_used')
+                    )['total'] or 0
+                    
+                    # Get position constraints based on business rules
                     constraint_aisle = None
                     constraint_row = None
                     constraint_bin = None
                     
-                    if existing_requests.exists():
-                        # Get position from existing WOPR records (should be consistent across all)
-                        first_request = existing_requests.first()
-                        if first_request.inventory_batch:
-                            # Extract position values for filtering
-                            constraint_aisle = first_request.inventory_batch.aisle
-                            constraint_row = first_request.inventory_batch.row
-                            constraint_bin = first_request.inventory_batch.bin
+                    if existing_qty_sum == 0:
+                        # No existing records OR sum of qty_used = 0: Use provided location and position
+                        use_provided_position = True
+                        
+                        # Check if position information was provided via location string decoding
+                        if decoded_position and any(decoded_position.values()):
+                            # Position info was provided, use it for position-specific FIFO
+                            constraint_aisle = decoded_position.get('aisle')
+                            constraint_row = decoded_position.get('row')
+                            constraint_bin = decoded_position.get('bin')
                             
                             # Store for response data
                             position_filter = {
@@ -422,6 +437,65 @@ class WorkOrderPartBaseView(BaseAPIView):
                                 'row': constraint_row,
                                 'bin': constraint_bin
                             }
+                        else:
+                            # No position info provided, use location-wide FIFO
+                            # constraint_aisle, constraint_row, constraint_bin remain None
+                            pass
+                        
+                    else:
+                        # Existing records with sum > 0: Must validate against existing position
+                        existing_requests = all_requests.filter(qty_used__gt=0)
+                        if existing_requests.exists():
+                            first_request = existing_requests.first()
+                            if first_request.inventory_batch:
+                                # Get existing position
+                                existing_aisle = first_request.inventory_batch.aisle
+                                existing_row = first_request.inventory_batch.row
+                                existing_bin = first_request.inventory_batch.bin
+                                existing_location = first_request.inventory_batch.location
+                                
+                                # Check if provided location matches existing location
+                                if location.id != existing_location.id:
+                                    existing_pos = f"A{existing_aisle or ''}/R{existing_row or ''}/B{existing_bin or ''}"
+                                    provided_pos = f"location {location.name}"
+                                    raise LocalBaseException(
+                                        exception=f"Cannot add parts from different location. Existing parts are from {existing_location.name} at {existing_pos}, but trying to add from {provided_pos}",
+                                        status_code=status.HTTP_400_BAD_REQUEST
+                                    )
+                                
+                                # Location matches, now check if provided position matches existing position
+                                # Check if position was provided and differs from existing
+                                if decoded_position and any(decoded_position.values()):
+                                    provided_aisle = decoded_position.get('aisle')
+                                    provided_row = decoded_position.get('row') 
+                                    provided_bin = decoded_position.get('bin')
+                                    
+                                    # Compare provided position with existing position
+                                    position_match = (
+                                        provided_aisle == existing_aisle and
+                                        provided_row == existing_row and
+                                        provided_bin == existing_bin
+                                    )
+                                    
+                                    if not position_match:
+                                        existing_pos = f"A{existing_aisle or ''}/R{existing_row or ''}/B{existing_bin or ''}"
+                                        provided_pos = f"A{provided_aisle or ''}/R{provided_row or ''}/B{provided_bin or ''}"
+                                        raise LocalBaseException(
+                                            exception=f"Cannot add parts from different position. Existing parts are at {existing_location.name} {existing_pos}, but trying to add from {location.name} {provided_pos}",
+                                            status_code=status.HTTP_400_BAD_REQUEST
+                                        )
+                                
+                                # Use existing position for constraints
+                                constraint_aisle = existing_aisle
+                                constraint_row = existing_row
+                                constraint_bin = existing_bin
+                                
+                                # Store for response data
+                                position_filter = {
+                                    'aisle': constraint_aisle,
+                                    'row': constraint_row,
+                                    'bin': constraint_bin
+                                }
                     
                     # Build base queryset
                     available_batches_query = InventoryBatch.objects.filter(
@@ -649,6 +723,7 @@ class WorkOrderPartBaseView(BaseAPIView):
                         bin_val = inventory_batch.bin or ''
                         inventory_operation['position'] = f"A{aisle}/R{row}/B{bin_val}"
                         inventory_operation['fifo_applied_to_position'] = bool(position_filter)
+                        inventory_operation['position_source'] = 'provided' if use_provided_position and position_filter else 'existing' if position_filter else 'location_wide'
                     
                     response_data['inventory_operation'] = inventory_operation
                 
@@ -665,7 +740,12 @@ class WorkOrderPartBaseView(BaseAPIView):
                             aisle = position_filter.get('aisle') or ''
                             row = position_filter.get('row') or ''
                             bin_val = position_filter.get('bin') or ''
-                            position_msg = f" using position-specific FIFO at A{aisle}/R{row}/B{bin_val}"
+                            if use_provided_position:
+                                position_msg = f" using provided position-specific FIFO at A{aisle}/R{row}/B{bin_val}"
+                            else:
+                                position_msg = f" using existing position-specific FIFO at A{aisle}/R{row}/B{bin_val}"
+                        else:
+                            position_msg = " using location-wide FIFO"
                         response_data['message'] = f'WorkOrderPart updated successfully. Added {qty_difference} parts to inventory consumption{position_msg}.'
                     elif qty_difference < 0:
                         response_data['message'] = f'WorkOrderPart updated successfully. Returned {abs(qty_difference)} parts to inventory using LIFO.'
