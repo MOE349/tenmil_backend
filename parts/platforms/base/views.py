@@ -402,33 +402,61 @@ class WorkOrderPartBaseView(BaseAPIView):
                     position_filter = {}  # Reset for this operation
                     existing_requests = work_order_part.part_requests.filter(qty_used__gt=0)
                     
+                    # Get position constraints from existing WOPR records
+                    constraint_aisle = None
+                    constraint_row = None
+                    constraint_bin = None
+                    
                     if existing_requests.exists():
                         # Get position from existing WOPR records (should be consistent across all)
                         first_request = existing_requests.first()
                         if first_request.inventory_batch:
-                            # Filter by exact position to maintain consistency
+                            # Extract position values for filtering
+                            constraint_aisle = first_request.inventory_batch.aisle
+                            constraint_row = first_request.inventory_batch.row
+                            constraint_bin = first_request.inventory_batch.bin
+                            
+                            # Store for response data
                             position_filter = {
-                                'aisle': first_request.inventory_batch.aisle,
-                                'row': first_request.inventory_batch.row,
-                                'bin': first_request.inventory_batch.bin
+                                'aisle': constraint_aisle,
+                                'row': constraint_row,
+                                'bin': constraint_bin
                             }
                     
-                    # Build filter for available batches with position constraints
-                    batch_filter = {
-                        'part': work_order_part.part,
-                        'location': location,
-                        'qty_on_hand__gt': 0
-                    }
-                    batch_filter.update(position_filter)
+                    # Build base queryset
+                    available_batches_query = InventoryBatch.objects.filter(
+                        part=work_order_part.part,
+                        location=location,
+                        qty_on_hand__gt=0
+                    )
                     
-                    available_batches = InventoryBatch.objects.filter(**batch_filter).order_by('received_date')  # FIFO
+                    # Apply position filters using same methodology as transfer logic
+                    if constraint_aisle is not None:
+                        if constraint_aisle == '':
+                            available_batches_query = available_batches_query.filter(aisle__isnull=True)
+                        else:
+                            available_batches_query = available_batches_query.filter(aisle=constraint_aisle)
+                    
+                    if constraint_row is not None:
+                        if constraint_row == '':
+                            available_batches_query = available_batches_query.filter(row__isnull=True)
+                        else:
+                            available_batches_query = available_batches_query.filter(row=constraint_row)
+                    
+                    if constraint_bin is not None:
+                        if constraint_bin == '':
+                            available_batches_query = available_batches_query.filter(bin__isnull=True)
+                        else:
+                            available_batches_query = available_batches_query.filter(bin=constraint_bin)
+                    
+                    available_batches = available_batches_query.order_by('received_date')  # FIFO
                     
                     # Create position description for error messages
                     position_desc = ""
-                    if position_filter:
-                        aisle = position_filter.get('aisle') or ''
-                        row = position_filter.get('row') or ''
-                        bin_val = position_filter.get('bin') or ''
+                    if constraint_aisle is not None or constraint_row is not None or constraint_bin is not None:
+                        aisle = constraint_aisle or ''
+                        row = constraint_row or ''
+                        bin_val = constraint_bin or ''
                         position_desc = f" at position A{aisle}/R{row}/B{bin_val}"
                     
                     if not available_batches.exists():
@@ -620,7 +648,7 @@ class WorkOrderPartBaseView(BaseAPIView):
                         row = inventory_batch.row or ''
                         bin_val = inventory_batch.bin or ''
                         inventory_operation['position'] = f"A{aisle}/R{row}/B{bin_val}"
-                        inventory_operation['fifo_applied_to_position'] = True if qty_difference > 0 and 'position_filter' in locals() and position_filter else False
+                        inventory_operation['fifo_applied_to_position'] = bool(position_filter)
                     
                     response_data['inventory_operation'] = inventory_operation
                 
