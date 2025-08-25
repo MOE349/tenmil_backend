@@ -1084,13 +1084,14 @@ class InventoryService:
         
         return allocations, movements
     
-    def get_part_locations_on_hand(self, part_id: str) -> List[Dict]:
+    def get_part_locations_on_hand(self, part_id: str, site_id: str = None) -> List[Dict]:
         """
         Get all locations with aggregated inventory batch records for a specific part.
         Returns raw data that can be formatted differently by different endpoints.
         
         Args:
             part_id: The ID of the part to get location data for
+            site_id: Optional site ID to filter locations by site
             
         Returns:
             List of dictionaries containing location and quantity data
@@ -1110,9 +1111,14 @@ class InventoryService:
         # Normalize blank and null positions to be treated as the same value
         from django.db.models import Case, When, Value
         
-        inventory_data = InventoryBatch.objects.filter(
-            part=part
-        ).select_related('location', 'location__site').annotate(
+        # Build base queryset
+        queryset = InventoryBatch.objects.filter(part=part)
+        
+        # Add site filter if provided
+        if site_id:
+            queryset = queryset.filter(location__site__id=site_id)
+        
+        inventory_data = queryset.select_related('location', 'location__site').annotate(
             # Normalize positions: convert empty strings to None for consistent grouping
             normalized_aisle=Case(
                 When(aisle='', then=Value(None)),

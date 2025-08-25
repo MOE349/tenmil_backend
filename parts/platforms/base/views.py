@@ -1185,6 +1185,89 @@ class InventoryOperationsBaseView(BaseAPIView):
                 status_code=status.HTTP_400_BAD_REQUEST
             )
         
+        # Get optional site or work_order parameter
+        site_id = request.query_params.get('site')
+        work_order_id = request.query_params.get('work_order')
+        
+        # If work_order is provided, extract site from work_order.asset.location.site
+        if work_order_id:
+            try:
+                from work_orders.models import WorkOrder
+                work_order = WorkOrder.objects.select_related('content_type').get(id=work_order_id)
+                
+                # Get the asset using content_type and object_id (safer than direct GenericForeignKey access)
+                content_type = work_order.content_type
+                object_id = work_order.object_id
+                
+                if not content_type or not object_id:
+                    raise LocalBaseException(
+                        exception="Work order does not have a valid asset reference",
+                        status_code=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Get the asset model class and retrieve the asset
+                asset_model = content_type.model_class()
+                if not asset_model:
+                    raise LocalBaseException(
+                        exception="Invalid asset content type",
+                        status_code=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                try:
+                    asset = asset_model.objects.get(id=object_id)
+                except asset_model.DoesNotExist:
+                    raise LocalBaseException(
+                        exception="Work order asset not found",
+                        status_code=status.HTTP_404_NOT_FOUND
+                    )
+                
+                # Get location from asset
+                if not hasattr(asset, 'location') or not asset.location:
+                    raise LocalBaseException(
+                        exception="Work order asset does not have a valid location",
+                        status_code=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Get site from location
+                location = asset.location
+                if not hasattr(location, 'site') or not location.site:
+                    raise LocalBaseException(
+                        exception="Asset location does not have a valid site",
+                        status_code=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Override site_id with the one from work order
+                site_id = str(location.site.id)
+                
+            except WorkOrder.DoesNotExist:
+                raise LocalBaseException(
+                    exception=f"Work order with ID {work_order_id} does not exist",
+                    status_code=status.HTTP_404_NOT_FOUND
+                )
+            except Exception as e:
+                if isinstance(e, LocalBaseException):
+                    raise e
+                raise LocalBaseException(
+                    exception=f"Error processing work order: {str(e)}",
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+        
+        # Validate site if provided directly or extracted from work order
+        if site_id:
+            try:
+                from company.models import Site
+                Site.objects.get(id=site_id)  # Validate site exists
+            except Site.DoesNotExist:
+                raise LocalBaseException(
+                    exception=f"Site with ID {site_id} does not exist",
+                    status_code=status.HTTP_404_NOT_FOUND
+                )
+            except Exception:
+                raise LocalBaseException(
+                    exception="Invalid site ID format",
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+        
         serializer = LocationOnHandQuerySerializer(data={'part_id': part_id})
         if not serializer.is_valid():
             raise LocalBaseException(
@@ -1198,7 +1281,7 @@ class InventoryOperationsBaseView(BaseAPIView):
         from parts.services import inventory_service, InventoryError
         
         try:
-            inventory_data = inventory_service.get_part_locations_on_hand(validated_part_id)
+            inventory_data = inventory_service.get_part_locations_on_hand(validated_part_id, site_id)
         except InventoryError as e:
             raise LocalBaseException(
                 exception=str(e),
@@ -1208,7 +1291,13 @@ class InventoryOperationsBaseView(BaseAPIView):
         return inventory_data
     
     def get_locations_on_hand(self, request):
-        """Get all locations with aggregated inventory batch records for a specific part"""
+        """Get all locations with aggregated inventory batch records for a specific part
+        
+        Query Parameters:
+            part_id or part (required): Part ID to get locations for
+            site (optional): Site ID to filter locations by site
+            work_order (optional): Work Order ID - extracts site from work_order.asset.location.site
+        """
         try:
             # Get validated data using common method (supports both part_id and part params)
             inventory_data = self._get_validated_part_locations_data(request, allow_both_params=True)
@@ -1239,7 +1328,13 @@ class InventoryOperationsBaseView(BaseAPIView):
             return self.handle_exception(e)
     
     def get_part_locations(self, request):
-        """Get part locations with simplified name-based response format"""
+        """Get part locations with simplified name-based response format
+        
+        Query Parameters:
+            part (required): Part ID to get locations for
+            site (optional): Site ID to filter locations by site
+            work_order (optional): Work Order ID - extracts site from work_order.asset.location.site
+        """
         try:
             # Get validated data using common method (only accepts 'part' param)
             inventory_data = self._get_validated_part_locations_data(request, allow_both_params=False)
@@ -1287,7 +1382,7 @@ class InventoryOperationsBaseView(BaseAPIView):
                 'status_code': 200
             }
             
-            return Response(response_data, status=status.HTTP_200_OK)
+            return self.format_response(locations, [], 200)
             
         except Exception as e:
             return self.handle_exception(e)
