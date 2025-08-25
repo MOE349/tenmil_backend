@@ -107,57 +107,50 @@ class WorkOrderPartBaseView(BaseAPIView):
     model_class = WorkOrderPart
     
     def create(self, data, params, return_instance=False, *args, **kwargs):
-        """Create WorkOrderPart with FIFO inventory allocation"""
+        """Create WorkOrderPart - simplified version for the split model"""
         try:
-            from decimal import Decimal
             from django.db import transaction
             from work_orders.models import WorkOrder
             
+            # WorkOrderPartRequest fields to check for in the payload
+            work_order_part_request_fields = {
+                'inventory_batch', 'qty_needed', 'qty_used', 
+                'unit_cost_snapshot', 'is_approved'
+            }
+            
             with transaction.atomic():
-                # Get work order and determine location
-                work_order_id = data.get('work_order')
+                # Separate WorkOrderPart fields from WorkOrderPartRequest fields
+                work_order_part_data = {}
+                work_order_part_request_data = {}
+                
+                for key, value in data.items():
+                    if key in work_order_part_request_fields:
+                        work_order_part_request_data[key] = value
+                    else:
+                        work_order_part_data[key] = value
+                
+                # Validate required fields for WorkOrderPart
+                work_order_id = work_order_part_data.get('work_order')
                 if not work_order_id:
                     raise LocalBaseException(
                         exception="work_order field is required",
                         status_code=status.HTTP_400_BAD_REQUEST
                     )
                 
+                part_id = work_order_part_data.get('part')
+                if not part_id:
+                    raise LocalBaseException(
+                        exception="part field is required",
+                        status_code=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Validate that work_order and part exist
                 try:
                     work_order = WorkOrder.objects.get(id=work_order_id)
                 except WorkOrder.DoesNotExist:
                     raise LocalBaseException(
                         exception="Work order not found",
                         status_code=status.HTTP_404_NOT_FOUND
-                    )
-                
-                # Get location from work order's asset using GenericForeignKey resolution
-                from configurations.base_features.db.db_helpers import get_object_by_content_type_and_id
-                
-                try:
-                    asset = get_object_by_content_type_and_id(
-                        work_order.content_type.id, 
-                        str(work_order.object_id)
-                    )
-                except Exception as e:
-                    raise LocalBaseException(
-                        exception="Work order asset not found",
-                        status_code=status.HTTP_404_NOT_FOUND
-                    )
-                
-                if not hasattr(asset, 'location') or not asset.location:
-                    raise LocalBaseException(
-                        exception="Work order asset does not have a valid location",
-                        status_code=status.HTTP_400_BAD_REQUEST
-                    )
-                
-                location = asset.location
-                
-                # Get part and validate
-                part_id = data.get('part')
-                if not part_id:
-                    raise LocalBaseException(
-                        exception="part field is required",
-                        status_code=status.HTTP_400_BAD_REQUEST
                     )
                 
                 try:
@@ -168,126 +161,58 @@ class WorkOrderPartBaseView(BaseAPIView):
                         status_code=status.HTTP_404_NOT_FOUND
                     )
                 
-                # Get qty_used from data
-                qty_used = data.get('qty_used')
-                if not qty_used:
-                    raise LocalBaseException(
-                        exception="qty_used field is required",
-                        status_code=status.HTTP_400_BAD_REQUEST
-                    )
+                # Check if this combination already exists (due to unique_together constraint)
+                existing_work_order_part = WorkOrderPart.objects.filter(
+                    work_order=work_order,
+                    part=part
+                ).first()
                 
-                try:
-                    qty_used = int(qty_used)
-                    if qty_used <= 0:
+                if existing_work_order_part:
+                    # If WorkOrderPart already exists, we can optionally create a WorkOrderPartRequest
+                    work_order_part = existing_work_order_part
+                    created_new = False
+                else:
+                    # Create new WorkOrderPart
+                    serializer = self.serializer_class(data=work_order_part_data)
+                    if not serializer.is_valid():
                         raise LocalBaseException(
-                            exception="qty_used must be a positive integer",
+                            exception=serializer.errors,
                             status_code=status.HTTP_400_BAD_REQUEST
                         )
-                except (ValueError, TypeError):
-                    raise LocalBaseException(
-                        exception="qty_used must be a valid positive integer",
-                        status_code=status.HTTP_400_BAD_REQUEST
-                    )
+                    work_order_part = serializer.save()
+                    created_new = True
                 
-                # Get inventory batches for this part and location, ordered by received_date (FIFO)
-                available_batches = InventoryBatch.objects.filter(
-                    part=part,
-                    location=location,
-                    qty_on_hand__gt=0
-                ).order_by('received_date')
-                
-                if not available_batches.exists():
-                    raise LocalBaseException(
-                        exception=f"No inventory available for part {part.part_number} at location {location.name}",
-                        status_code=status.HTTP_400_BAD_REQUEST
-                    )
-                
-                # Check if we have enough total inventory
-                total_available = sum(batch.qty_on_hand for batch in available_batches)
-                if total_available < qty_used:
-                    raise LocalBaseException(
-                        exception=f"Insufficient inventory. Requested: {qty_used}, Available: {total_available}",
-                        status_code=status.HTTP_400_BAD_REQUEST
-                    )
-                
-                # Allocate inventory using FIFO
-                work_order_parts = []
-                remaining_qty = qty_used
-                
-                for batch in available_batches:
-                    if remaining_qty <= 0:
-                        break
+                # Create WorkOrderPartRequest if there are request fields in the payload
+                work_order_part_request = None
+                if work_order_part_request_data:
+                    # Add the work_order_part reference
+                    work_order_part_request_data['work_order_part'] = work_order_part.id
                     
-                    # Determine how much to take from this batch
-                    qty_from_batch = min(remaining_qty, batch.qty_on_hand)
-                    
-                    # Check if we already have a WorkOrderPart record for this batch
-                    existing_work_order_part = WorkOrderPart.objects.filter(
-                        work_order=work_order,
-                        part=part,
-                        inventory_batch=batch
-                    ).first()
-                    
-                    if existing_work_order_part:
-                        # Merge quantities with existing record
-                        existing_work_order_part.qty_used += qty_from_batch
-                        existing_work_order_part.total_parts_cost = existing_work_order_part.qty_used * existing_work_order_part.unit_cost_snapshot
-                        existing_work_order_part.save(update_fields=['qty_used', 'total_parts_cost'])
-                        work_order_part = existing_work_order_part
-                        # Only add to list if not already present (avoid duplicates)
-                        if work_order_part not in work_order_parts:
-                            work_order_parts.append(work_order_part)
-                    else:
-                        # Create new WorkOrderPart record for this batch
-                        work_order_part = WorkOrderPart.objects.create(
-                            work_order=work_order,
-                            part=part,
-                            inventory_batch=batch,
-                            qty_used=qty_from_batch,
-                            unit_cost_snapshot=batch.last_unit_cost,
-                            total_parts_cost=qty_from_batch * batch.last_unit_cost
+                    # Validate and create WorkOrderPartRequest
+                    request_serializer = WorkOrderPartRequestBaseSerializer(data=work_order_part_request_data)
+                    if not request_serializer.is_valid():
+                        raise LocalBaseException(
+                            exception=request_serializer.errors,
+                            status_code=status.HTTP_400_BAD_REQUEST
                         )
-                        work_order_parts.append(work_order_part)
-                    
-                    # Update inventory batch qty_on_hand
-                    batch.qty_on_hand -= qty_from_batch
-                    batch.save(update_fields=['qty_on_hand'])
-                    
-                    # Create movement record for audit trail
-                    PartMovement.objects.create(
-                        part=part,
-                        inventory_batch=batch,
-                        from_location=location,
-                        to_location=None,  # Parts are consumed, not transferred
-                        movement_type=PartMovement.MovementType.ISSUE,
-                        qty_delta=-qty_from_batch,
-                        work_order=work_order,
-                        created_by=params.get('user')
-                    )
-                    
-                    remaining_qty -= qty_from_batch
+                    work_order_part_request = request_serializer.save()
                 
-                # Return response with all created work order parts
-                serialized_data = []
-                for wop in work_order_parts:
-                    serializer = self.serializer_class(wop)
-                    serialized_data.append(serializer.data)
+                # Prepare response data
+                response_data = {
+                    'work_order_part': self.serializer_class(work_order_part).data,
+                    'created_new_work_order_part': created_new
+                }
+                
+                if work_order_part_request:
+                    response_data['work_order_part_request'] = WorkOrderPartRequestBaseSerializer(work_order_part_request).data
+                    response_data['message'] = 'WorkOrderPart created/retrieved and WorkOrderPartRequest created successfully'
+                else:
+                    response_data['message'] = 'WorkOrderPart created successfully' if created_new else 'WorkOrderPart already exists'
                 
                 if return_instance:
-                    return work_order_parts, serialized_data
+                    return work_order_part, response_data
                 
-                return self.format_response(
-                    data={
-                        'work_order_parts': serialized_data,
-                        'total_qty_used': str(qty_used),
-                        'batches_used': len(work_order_parts),
-                        'location': {
-                            'id': str(location.id),
-                            'name': location.name
-                        }
-                    }, 
-                    status_code=201
-                )
+                return self.format_response(data=response_data, status_code=201)
         
         except Exception as e:
             return self.handle_exception(e)
