@@ -345,11 +345,15 @@ class WorkOrderPartBaseView(BaseAPIView):
     #         return self.handle_exception(e)
     
     def update(self, data, params, pk=None, *args, **kwargs):
-        """Update WorkOrderPart with proper inventory batch adjustment and movement logging"""
+        """Update WorkOrderPart and create WorkOrderPartRequest if request fields are present"""
         try:
-            from decimal import Decimal
             from django.db import transaction
-            from work_orders.models import WorkOrder
+            
+            # WorkOrderPartRequest fields to check for in the payload
+            work_order_part_request_fields = {
+                'inventory_batch', 'qty_needed', 'qty_used', 
+                'unit_cost_snapshot', 'is_approved'
+            }
             
             with transaction.atomic():
                 # Get the existing WorkOrderPart instance
@@ -361,7 +365,7 @@ class WorkOrderPartBaseView(BaseAPIView):
                 
                 try:
                     work_order_part = WorkOrderPart.objects.select_related(
-                        'work_order', 'part', 'inventory_batch', 'inventory_batch__location'
+                        'work_order', 'part'
                     ).get(id=pk)
                 except WorkOrderPart.DoesNotExist:
                     raise LocalBaseException(
@@ -369,516 +373,60 @@ class WorkOrderPartBaseView(BaseAPIView):
                         status_code=status.HTTP_404_NOT_FOUND
                     )
                 
-                # Get the old and new qty_used values
-                old_qty_used = work_order_part.qty_used
-                new_qty_used = data.get('qty_used', old_qty_used)
+                # Separate WorkOrderPart fields from WorkOrderPartRequest fields
+                work_order_part_data = {}
+                work_order_part_request_data = {}
                 
-                # If qty_used hasn't changed, proceed with regular update
-                if old_qty_used == new_qty_used:
-                    # Just update other fields (like unit_cost_snapshot)
-                    serializer = self.serializer_class(work_order_part, data=data, partial=True)
+                for key, value in data.items():
+                    if key in work_order_part_request_fields:
+                        work_order_part_request_data[key] = value
+                    else:
+                        work_order_part_data[key] = value
+                
+                # Update WorkOrderPart if there are valid fields to update
+                if work_order_part_data:
+                    serializer = self.serializer_class(work_order_part, data=work_order_part_data, partial=True)
                     if not serializer.is_valid():
                         raise LocalBaseException(
                             exception=serializer.errors,
                             status_code=status.HTTP_400_BAD_REQUEST
                         )
-                    
-                    updated_instance = serializer.save()
-                    return self.format_response(data=serializer.data, status_code=200)
+                    work_order_part = serializer.save()
                 
-                # Validate new_qty_used
-                try:
-                    new_qty_used = int(new_qty_used)
-                    if new_qty_used <= 0:
+                # Create WorkOrderPartRequest if there are request fields in the payload
+                work_order_part_request = None
+                if work_order_part_request_data:
+                    # Add the work_order_part reference
+                    work_order_part_request_data['work_order_part'] = work_order_part.id
+                    
+                    # Validate and create WorkOrderPartRequest
+                    request_serializer = WorkOrderPartRequestBaseSerializer(data=work_order_part_request_data)
+                    if not request_serializer.is_valid():
                         raise LocalBaseException(
-                            exception="qty_used must be a positive integer",
+                            exception=request_serializer.errors,
                             status_code=status.HTTP_400_BAD_REQUEST
                         )
-                except (ValueError, TypeError):
-                    raise LocalBaseException(
-                        exception="qty_used must be a valid positive integer",
-                        status_code=status.HTTP_400_BAD_REQUEST
-                    )
+                    work_order_part_request = request_serializer.save()
                 
-                # Get work order and location for inventory operations
-                work_order = work_order_part.work_order
-                part = work_order_part.part
-                location = work_order_part.inventory_batch.location
+                # Prepare response data
+                response_data = {
+                    'work_order_part': self.serializer_class(work_order_part).data
+                }
                 
-                qty_difference = new_qty_used - old_qty_used
-                
-                if qty_difference > 0:
-                    # Need to issue more parts using FIFO
-                    return self._handle_qty_increase(
-                        work_order_part, qty_difference, data, params
-                    )
+                if work_order_part_request:
+                    response_data['work_order_part_request'] = WorkOrderPartRequestBaseSerializer(work_order_part_request).data
+                    response_data['message'] = 'WorkOrderPart updated and WorkOrderPartRequest created successfully'
                 else:
-                    # Need to return parts using LIFO  
-                    return self._handle_qty_decrease(
-                        work_order_part, abs(qty_difference), data, params
-                    )
+                    response_data['message'] = 'WorkOrderPart updated successfully'
+                
+                return self.format_response(data=response_data, status_code=200)
         
         except Exception as e:
             return self.handle_exception(e)
     
-    def _handle_qty_increase(self, work_order_part, qty_increase, data, params):
-        """Handle increase in qty_used by issuing more parts using FIFO"""
-        from decimal import Decimal
-        
-        work_order = work_order_part.work_order
-        part = work_order_part.part
-        location = work_order_part.inventory_batch.location
-        
-        # Get available inventory batches using FIFO (oldest first)
-        available_batches = InventoryBatch.objects.filter(
-            part=part,
-            location=location,
-            qty_on_hand__gt=0
-        ).order_by('received_date')
-        
-        # Check if we have enough total inventory
-        total_available = sum(batch.qty_on_hand for batch in available_batches)
-        if total_available < qty_increase:
-            raise LocalBaseException(
-                exception=f"Insufficient inventory for increase. Requested: {qty_increase}, Available: {total_available}",
-                status_code=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Allocate inventory using FIFO
-        remaining_qty = qty_increase
-        allocated_batches = []
-        
-        for batch in available_batches:
-            if remaining_qty <= 0:
-                break
-            
-            # Determine how much to take from this batch
-            qty_from_batch = min(remaining_qty, batch.qty_on_hand)
-            
-            # Update inventory batch qty_on_hand
-            batch.qty_on_hand -= qty_from_batch
-            batch.save(update_fields=['qty_on_hand'])
-            
-            # Create movement record for audit trail
-            PartMovement.objects.create(
-                part=part,
-                inventory_batch=batch,
-                from_location=location,
-                to_location=None,  # Parts are consumed, not transferred
-                movement_type=PartMovement.MovementType.ISSUE,
-                qty_delta=-qty_from_batch,
-                work_order=work_order,
-                created_by=params.get('user')
-            )
-            
-            allocated_batches.append({
-                'batch': batch,
-                'qty_allocated': qty_from_batch
-            })
-            
-            remaining_qty -= qty_from_batch
-        
-        # If the increase is from the same batch as the original, just update that WorkOrderPart
-        original_batch = work_order_part.inventory_batch
-        same_batch_allocation = next(
-            (alloc for alloc in allocated_batches if alloc['batch'].id == original_batch.id), 
-            None
-        )
-        
-        if same_batch_allocation and len(allocated_batches) == 1:
-            # Simple case: all additional qty from same batch
-            work_order_part.qty_used += qty_increase
-            work_order_part.total_parts_cost = work_order_part.qty_used * work_order_part.unit_cost_snapshot
-            
-            # Update other fields if provided
-            for field, value in data.items():
-                if field not in ['qty_used'] and hasattr(work_order_part, field):
-                    setattr(work_order_part, field, value)
-            
-            work_order_part.save()
-            
-            serializer = self.serializer_class(work_order_part)
-            return self.format_response(
-                data={
-                    'updated_work_order_part': serializer.data,
-                    'qty_increase': str(qty_increase),
-                    'allocation_method': 'same_batch'
-                },
-                status_code=200
-            )
-        else:
-            # Complex case: need multiple batches, create additional WorkOrderPart records
-            # Keep original record unchanged, create new records for additional allocations
-            additional_records = []
-            
-            for allocation in allocated_batches:
-                if allocation['batch'].id == original_batch.id:
-                    # Update the original record
-                    work_order_part.qty_used += allocation['qty_allocated']
-                    work_order_part.total_parts_cost = work_order_part.qty_used * work_order_part.unit_cost_snapshot
-                    work_order_part.save()
-                else:
-                    # Check if we already have a WorkOrderPart record for this batch
-                    existing_record = WorkOrderPart.objects.filter(
-                        work_order=work_order,
-                        part=part,
-                        inventory_batch=allocation['batch']
-                    ).first()
-                    
-                    if existing_record:
-                        # Merge quantities with existing record
-                        existing_record.qty_used += allocation['qty_allocated']
-                        existing_record.total_parts_cost = existing_record.qty_used * existing_record.unit_cost_snapshot
-                        existing_record.save(update_fields=['qty_used', 'total_parts_cost'])
-                        additional_records.append(existing_record)
-                    else:
-                        # Create new WorkOrderPart record
-                        new_record = WorkOrderPart.objects.create(
-                            work_order=work_order,
-                            part=part,
-                            inventory_batch=allocation['batch'],
-                            qty_used=allocation['qty_allocated'],
-                            unit_cost_snapshot=allocation['batch'].last_unit_cost,
-                            total_parts_cost=allocation['qty_allocated'] * allocation['batch'].last_unit_cost
-                        )
-                        additional_records.append(new_record)
-            
-            # Update other fields in original record if provided
-            for field, value in data.items():
-                if field not in ['qty_used'] and hasattr(work_order_part, field):
-                    setattr(work_order_part, field, value)
-            work_order_part.save()
-            
-            # Serialize all records
-            serialized_data = []
-            serializer = self.serializer_class(work_order_part)
-            serialized_data.append(serializer.data)
-            
-            for record in additional_records:
-                serializer = self.serializer_class(record)
-                serialized_data.append(serializer.data)
-            
-            return self.format_response(
-                data={
-                    'work_order_parts': serialized_data,
-                    'qty_increase': str(qty_increase),
-                    'batches_allocated': len(allocated_batches),
-                    'allocation_method': 'multiple_batches'
-                },
-                status_code=200
-            )
-    
-    def _handle_qty_decrease(self, work_order_part, qty_decrease, data, params):
-        """Handle decrease in qty_used by returning parts using LIFO"""
-        from decimal import Decimal
-        
-        work_order = work_order_part.work_order
-        part = work_order_part.part
-        
-        # Get all WorkOrderPart records for this work_order and part
-        # Order by created_at DESC for LIFO (return most recent issues first)
-        work_order_parts = WorkOrderPart.objects.filter(
-            work_order=work_order,
-            part=part,
-            qty_used__gt=0  # Only positive quantities (issued parts)
-        ).order_by('-created_at')
-        
-        if not work_order_parts.exists():
-            raise LocalBaseException(
-                exception="No issued parts found for this work order and part combination",
-                status_code=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Calculate current total issued quantity
-        total_issued = sum(wop.qty_used for wop in work_order_parts)
-        
-        # Validate we have enough to return
-        if total_issued < qty_decrease:
-            raise LocalBaseException(
-                exception=f"Cannot return more than issued. Current: {total_issued}, Requested to decrease by: {qty_decrease}",
-                status_code=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Process returns using LIFO
-        remaining_to_return = qty_decrease
-        returned_records = []
-        
-        for wop in work_order_parts:
-            if remaining_to_return <= 0:
-                break
-            
-            # Determine how much to return from this record
-            qty_from_this_record = min(remaining_to_return, wop.qty_used)
-            
-            # Update inventory batch (add back to qty_on_hand)
-            inventory_batch = wop.inventory_batch
-            inventory_batch.qty_on_hand += qty_from_this_record
-            inventory_batch.save(update_fields=['qty_on_hand'])
-            
-            # Create return movement record for audit trail
-            PartMovement.objects.create(
-                part=part,
-                inventory_batch=inventory_batch,
-                from_location=None,  # Parts are being returned, not transferred from
-                to_location=inventory_batch.location,
-                movement_type=PartMovement.MovementType.RETURN,
-                qty_delta=qty_from_this_record,  # Positive for returns
-                work_order=work_order,
-                created_by=params.get('user')
-            )
-            
-            # Update or delete the WorkOrderPart record
-            if qty_from_this_record == wop.qty_used:
-                # Full return - delete the record
-                returned_records.append({
-                    'work_order_part_id': str(wop.id),
-                    'inventory_batch_id': str(inventory_batch.id),
-                    'qty_returned': str(qty_from_this_record),
-                    'action': 'deleted'
-                })
-                wop.delete()
-            else:
-                # Partial return - update the record
-                wop.qty_used -= qty_from_this_record
-                wop.total_parts_cost = wop.qty_used * wop.unit_cost_snapshot
-                
-                # Update other fields if this is the record being updated and it still exists
-                if wop.id == work_order_part.id:
-                    for field, value in data.items():
-                        if field not in ['qty_used'] and hasattr(wop, field):
-                            setattr(wop, field, value)
-                
-                wop.save()
-                
-                returned_records.append({
-                    'work_order_part_id': str(wop.id),
-                    'inventory_batch_id': str(inventory_batch.id),
-                    'qty_returned': str(qty_from_this_record),
-                    'remaining_qty_used': str(wop.qty_used),
-                    'action': 'updated'
-                })
-            
-            remaining_to_return -= qty_from_this_record
-        
-        # Get the updated/remaining WorkOrderPart records
-        updated_records = WorkOrderPart.objects.filter(
-            work_order=work_order,
-            part=part,
-            qty_used__gt=0
-        ).order_by('-created_at')
-        
-        # Serialize remaining records
-        serialized_data = []
-        for record in updated_records:
-            serializer = self.serializer_class(record)
-            serialized_data.append(serializer.data)
-        
-        return self.format_response(
-            data={
-                'operation': 'qty_decrease',
-                'work_order_parts': serialized_data,
-                'qty_decrease': str(qty_decrease),
-                'records_processed': len(returned_records),
-                'returned_records': returned_records
-            },
-            status_code=200
-        )
 
-    def return_parts_to_inventory(self, request):
-        """Return parts from work order back to inventory using LIFO"""
-        try:
-            from decimal import Decimal
-            from django.db import transaction
-            from work_orders.models import WorkOrder
-            from rest_framework import status
-            
-            with transaction.atomic():
-                # Get request data
-                work_order_id = request.data.get('work_order_id')
-                part_id = request.data.get('part_id') 
-                new_qty_used = request.data.get('qty_used')  # This is the desired FINAL amount
-                explicit_return_qty = request.data.get('qty_to_return')  # This is explicit return amount
-                
-                # Validate inputs
-                if not work_order_id:
-                    raise LocalBaseException(
-                        exception="work_order_id is required",
-                        status_code=status.HTTP_400_BAD_REQUEST
-                    )
-                
-                if not part_id:
-                    raise LocalBaseException(
-                        exception="part_id is required",
-                        status_code=status.HTTP_400_BAD_REQUEST
-                    )
-                
-                if not new_qty_used and not explicit_return_qty:
-                    raise LocalBaseException(
-                        exception="Either qty_used (final amount) or qty_to_return (return amount) is required",
-                        status_code=status.HTTP_400_BAD_REQUEST
-                    )
-                
-                # Validate work order and part exist
-                try:
-                    work_order = WorkOrder.objects.get(id=work_order_id)
-                    part = Part.objects.get(id=part_id)
-                except (WorkOrder.DoesNotExist, Part.DoesNotExist):
-                    raise LocalBaseException(
-                        exception="Work order or part not found",
-                        status_code=status.HTTP_404_NOT_FOUND
-                    )
-                
-                # Get all WorkOrderPart records for this work_order and part
-                # Order by created_at DESC for LIFO (return most recent issues first)
-                work_order_parts = WorkOrderPart.objects.filter(
-                    work_order=work_order,
-                    part=part,
-                    qty_used__gt=0  # Only positive quantities (issued parts)
-                ).order_by('-created_at')
-                
-                if not work_order_parts.exists():
-                    raise LocalBaseException(
-                        exception="No issued parts found for this work order and part combination",
-                        status_code=status.HTTP_400_BAD_REQUEST
-                    )
-                
-                # Calculate current total issued quantity
-                total_issued = sum(wop.qty_used for wop in work_order_parts)
-                
-                # Determine how much to return
-                if explicit_return_qty is not None:
-                    # Direct return amount specified
-                    try:
-                        qty_to_return = int(explicit_return_qty)
-                        if qty_to_return <= 0:
-                            raise LocalBaseException(
-                                exception="qty_to_return must be a positive value",
-                                status_code=status.HTTP_400_BAD_REQUEST
-                            )
-                    except (ValueError, TypeError):
-                        raise LocalBaseException(
-                            exception="qty_to_return must be a valid positive integer",
-                            status_code=status.HTTP_400_BAD_REQUEST
-                        )
-                else:
-                    # Calculate return amount from desired final qty_used
-                    try:
-                        new_qty_used = int(new_qty_used)
-                        if new_qty_used < 0:
-                            raise LocalBaseException(
-                                exception="qty_used (final amount) cannot be negative",
-                                status_code=status.HTTP_400_BAD_REQUEST
-                            )
-                    except (ValueError, TypeError):
-                        raise LocalBaseException(
-                            exception="qty_used must be a valid positive integer",
-                            status_code=status.HTTP_400_BAD_REQUEST
-                        )
-                    if new_qty_used > total_issued:
-                        raise LocalBaseException(
-                            exception=f"Cannot set qty_used higher than current amount. Current: {total_issued}, Requested: {new_qty_used}",
-                            status_code=status.HTTP_400_BAD_REQUEST
-                        )
-                    qty_to_return = total_issued - new_qty_used
-                    
-                    # If no return needed, return early
-                    if qty_to_return == 0:
-                        return self.format_response(
-                            data={
-                                'message': 'No return needed - qty_used is already at the requested amount',
-                                'current_qty_used': str(total_issued)
-                            },
-                            status_code=200
-                        )
-                
-                # Validate we have enough to return
-                if total_issued < qty_to_return:
-                    raise LocalBaseException(
-                        exception=f"Cannot return more than issued. Current: {total_issued}, Requested: {qty_to_return}",
-                        status_code=status.HTTP_400_BAD_REQUEST
-                    )
-                
-                # Process returns using LIFO
-                remaining_to_return = qty_to_return
-                returned_records = []
-                
-                for wop in work_order_parts:
-                    if remaining_to_return <= 0:
-                        break
-                    
-                    # Determine how much to return from this record
-                    qty_from_this_record = min(remaining_to_return, wop.qty_used)
-                    
-                    # Update inventory batch (add back to qty_on_hand)
-                    inventory_batch = wop.inventory_batch
-                    inventory_batch.qty_on_hand += qty_from_this_record
-                    inventory_batch.save(update_fields=['qty_on_hand'])
-                    
-                    # Create return movement record for audit trail
-                    PartMovement.objects.create(
-                        part=part,
-                        inventory_batch=inventory_batch,
-                        from_location=None,  # Parts are being returned, not transferred from
-                        to_location=inventory_batch.location,
-                        movement_type=PartMovement.MovementType.RETURN,
-                        qty_delta=qty_from_this_record,  # Positive for returns
-                        work_order=work_order,
-                        created_by=request.user
-                    )
-                    
-                    # Update or delete the WorkOrderPart record
-                    if qty_from_this_record == wop.qty_used:
-                        # Full return - delete the record
-                        returned_records.append({
-                            'work_order_part_id': str(wop.id),
-                            'inventory_batch_id': str(inventory_batch.id),
-                            'qty_returned': str(qty_from_this_record),
-                            'action': 'deleted'
-                        })
-                        wop.delete()
-                    else:
-                        # Partial return - update the record
-                        wop.qty_used -= qty_from_this_record
-                        wop.total_parts_cost = wop.qty_used * wop.unit_cost_snapshot
-                        wop.save(update_fields=['qty_used', 'total_parts_cost'])
-                        
-                        returned_records.append({
-                            'work_order_part_id': str(wop.id),
-                            'inventory_batch_id': str(inventory_batch.id),
-                            'qty_returned': str(qty_from_this_record),
-                            'remaining_qty_used': str(wop.qty_used),
-                            'action': 'updated'
-                        })
-                    
-                    remaining_to_return -= qty_from_this_record
-                
-                # Calculate final qty_used after returns
-                final_qty_used = total_issued - qty_to_return
-                
-                # Return success response
-                return self.format_response(
-                    data={
-                        'operation': 'return_parts',
-                        'work_order': {
-                            'id': str(work_order.id),
-                            'code': work_order.code
-                        },
-                        'part': {
-                            'id': str(part.id),
-                            'part_number': part.part_number,
-                            'name': part.name
-                        },
-                        'previous_qty_used': str(total_issued),
-                        'qty_returned': str(qty_to_return),
-                        'final_qty_used': str(final_qty_used),
-                        'records_processed': len(returned_records),
-                        'returned_records': returned_records
-                    },
-                    status_code=200
-                )
-        
-        except Exception as e:
-            return self.handle_exception(e)
+
+
 
 
 class WorkOrderPartRequestBaseView(BaseAPIView):

@@ -33,13 +33,6 @@ class WorkOrderPartRequestApiView(WorkOrderPartRequestBaseView):
     serializer_class = WorkOrderPartRequestApiSerializer
 
 
-class WorkOrderPartReturnApiView(WorkOrderPartBaseView):
-    """API view for returning parts from work orders back to inventory"""
-    
-    def post(self, request, *args, **kwargs):
-        """Return parts from work order to inventory"""
-        return super().return_parts_to_inventory(request)
-
 
 class PartMovementApiView(PartMovementBaseView):
     """API view for PartMovement read-only operations"""
