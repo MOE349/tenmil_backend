@@ -306,6 +306,7 @@ class WorkOrderPartBaseView(BaseAPIView):
                 qty_difference = 0
                 current_total_qty = 0
                 new_qty_used = 0
+                position_filter = {}
                 
                 # Handle qty_used with or without location
                 if 'qty_used' in data:
@@ -397,23 +398,50 @@ class WorkOrderPartBaseView(BaseAPIView):
                 
                 if qty_difference > 0:
                     # Addition - need to allocate more inventory using FIFO
-                    available_batches = InventoryBatch.objects.filter(
-                        part=work_order_part.part,
-                        location=location,
-                        qty_on_hand__gt=0
-                    ).order_by('received_date')  # FIFO
+                    # First check if there are existing WOPR records to determine position constraints
+                    position_filter = {}  # Reset for this operation
+                    existing_requests = work_order_part.part_requests.filter(qty_used__gt=0)
+                    
+                    if existing_requests.exists():
+                        # Get position from existing WOPR records (should be consistent across all)
+                        first_request = existing_requests.first()
+                        if first_request.inventory_batch:
+                            # Filter by exact position to maintain consistency
+                            position_filter = {
+                                'aisle': first_request.inventory_batch.aisle,
+                                'row': first_request.inventory_batch.row,
+                                'bin': first_request.inventory_batch.bin
+                            }
+                    
+                    # Build filter for available batches with position constraints
+                    batch_filter = {
+                        'part': work_order_part.part,
+                        'location': location,
+                        'qty_on_hand__gt': 0
+                    }
+                    batch_filter.update(position_filter)
+                    
+                    available_batches = InventoryBatch.objects.filter(**batch_filter).order_by('received_date')  # FIFO
+                    
+                    # Create position description for error messages
+                    position_desc = ""
+                    if position_filter:
+                        aisle = position_filter.get('aisle') or ''
+                        row = position_filter.get('row') or ''
+                        bin_val = position_filter.get('bin') or ''
+                        position_desc = f" at position A{aisle}/R{row}/B{bin_val}"
                     
                     if not available_batches.exists():
                         raise LocalBaseException(
-                            exception=f"No inventory available for part {work_order_part.part.part_number} at location {location.name}",
+                            exception=f"No inventory available for part {work_order_part.part.part_number} at location {location.name}{position_desc}",
                             status_code=status.HTTP_400_BAD_REQUEST
                         )
                     
-                    # Check if we have enough total inventory
+                    # Check if we have enough total inventory at this specific position
                     total_available = sum(batch.qty_on_hand for batch in available_batches)
                     if total_available < qty_difference:
                         raise LocalBaseException(
-                            exception=f"Insufficient inventory. Requested: {qty_difference}, Available: {total_available}",
+                            exception=f"Insufficient inventory at location {location.name}{position_desc}. Requested: {qty_difference}, Available: {total_available}",
                             status_code=status.HTTP_400_BAD_REQUEST
                         )
                     
@@ -468,6 +496,7 @@ class WorkOrderPartBaseView(BaseAPIView):
                     
                 elif qty_difference < 0:
                     # Return - need to return parts back to inventory using LIFO
+                    position_filter = {}  # Reset for this operation
                     qty_to_return = abs(qty_difference)
                     
                     # Get WorkOrderPartRequest records ordered by most recent (LIFO for returns)
@@ -531,6 +560,7 @@ class WorkOrderPartBaseView(BaseAPIView):
                         
                 else:
                     # No change in qty_used, just use any existing inventory batch
+                    position_filter = {}  # Reset for this operation
                     existing_request = work_order_part.part_requests.first()
                     inventory_batch = existing_request.inventory_batch if existing_request else None
                 
@@ -566,20 +596,33 @@ class WorkOrderPartBaseView(BaseAPIView):
                 
                 # Add inventory operation details if qty_used was processed
                 if 'qty_used' in data and location:
-                    response_data['inventory_operation'] = {
+                    inventory_operation = {
                         'location': {
                             'id': str(location.id),
                             'name': location.name
                         },
                         'inventory_batch': {
                             'id': str(inventory_batch.id),
-                            'received_date': inventory_batch.received_date.isoformat()
+                            'received_date': inventory_batch.received_date.isoformat(),
+                            'aisle': inventory_batch.aisle or '',
+                            'row': inventory_batch.row or '',
+                            'bin': inventory_batch.bin or ''
                         } if inventory_batch else None,
                         'operation_type': 'addition' if qty_difference > 0 else 'return' if qty_difference < 0 else 'no_change',
                         'qty_difference': qty_difference,
                         'new_total_qty_used': new_qty_used,
                         'previous_total_qty_used': current_total_qty
                     }
+                    
+                    # Add position-specific information if available
+                    if inventory_batch:
+                        aisle = inventory_batch.aisle or ''
+                        row = inventory_batch.row or ''
+                        bin_val = inventory_batch.bin or ''
+                        inventory_operation['position'] = f"A{aisle}/R{row}/B{bin_val}"
+                        inventory_operation['fifo_applied_to_position'] = True if qty_difference > 0 and 'position_filter' in locals() and position_filter else False
+                    
+                    response_data['inventory_operation'] = inventory_operation
                 
                 # Get updated part requests for response
                 updated_requests = work_order_part.part_requests.all()
@@ -589,9 +632,15 @@ class WorkOrderPartBaseView(BaseAPIView):
                 # Set appropriate message based on operation
                 if 'qty_used' in data:
                     if qty_difference > 0:
-                        response_data['message'] = f'WorkOrderPart updated successfully. Added {qty_difference} parts to inventory consumption.'
+                        position_msg = ""
+                        if position_filter:
+                            aisle = position_filter.get('aisle') or ''
+                            row = position_filter.get('row') or ''
+                            bin_val = position_filter.get('bin') or ''
+                            position_msg = f" using position-specific FIFO at A{aisle}/R{row}/B{bin_val}"
+                        response_data['message'] = f'WorkOrderPart updated successfully. Added {qty_difference} parts to inventory consumption{position_msg}.'
                     elif qty_difference < 0:
-                        response_data['message'] = f'WorkOrderPart updated successfully. Returned {abs(qty_difference)} parts to inventory.'
+                        response_data['message'] = f'WorkOrderPart updated successfully. Returned {abs(qty_difference)} parts to inventory using LIFO.'
                     else:
                         response_data['message'] = 'WorkOrderPart updated successfully. No quantity change.'
                 else:
