@@ -171,13 +171,17 @@ class WorkOrderPartRequest(BaseModel):
         help_text="Optional: Quantity needed for planning purposes"
     )
     qty_used = models.IntegerField(
-        _("Quantity Used"), 
+        _("Quantity Used"),
+        null=True,
+        blank=True, 
         help_text="Positive for issues, negative for returns"
     )
     unit_cost_snapshot = models.DecimalField(
         _("Unit Cost Snapshot"), 
         max_digits=10, 
         decimal_places=4,
+        null=True,
+        blank=True,
         help_text="Unit cost at time of transaction"
     )
     total_parts_cost = models.DecimalField(
@@ -203,6 +207,10 @@ class WorkOrderPartRequest(BaseModel):
         verbose_name_plural = _("Work Order Part Requests")
 
     def clean(self):
+        # When qty_used is provided, inventory_batch is required
+        if self.qty_used is not None and self.qty_used != 0 and self.inventory_batch is None:
+            raise ValidationError(_("Inventory batch is required when quantity used is specified"))
+        
         # Allow qty_used = 0 for planning purposes when inventory_batch is null
         if self.qty_used == 0 and self.inventory_batch is not None:
             raise ValidationError(_("Quantity used cannot be zero when inventory batch is specified"))
@@ -212,15 +220,21 @@ class WorkOrderPartRequest(BaseModel):
             raise ValidationError(_("Quantity needed must be positive if specified"))
 
     def save(self, *args, **kwargs):
-        # Auto-calculate total_parts_cost (handle null unit_cost_snapshot for planning)
-        if self.unit_cost_snapshot is not None:
+        # Auto approve if qty_used is provided
+        if self.qty_used is not None and self.qty_used > 0:
+            self.is_approved = True
+
+        # Auto-calculate total_parts_cost (handle null values for planning)
+        if self.unit_cost_snapshot is not None and self.qty_used is not None:
             self.total_parts_cost = self.qty_used * self.unit_cost_snapshot
         else:
             self.total_parts_cost = 0
+            
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"WO {self.work_order_part.work_order.code} - {self.work_order_part.part.part_number} - Qty: {self.qty_used}"
+        qty_display = self.qty_used if self.qty_used is not None else "TBD"
+        return f"WO {self.work_order_part.work_order.code} - {self.work_order_part.part.part_number} - Qty: {qty_display}"
 
 
 class PartMovement(BaseModel):

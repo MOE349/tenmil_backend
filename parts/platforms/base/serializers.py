@@ -162,13 +162,13 @@ class WorkOrderPartRequestBaseSerializer(BaseSerializer):
             "part_number": instance.work_order_part.part.part_number,
             "end_point": "/parts/work_order_part"
         }
-        
-        response['inventory_batch'] = {
-            "id": str(instance.inventory_batch.id),
-            "received_date": instance.inventory_batch.received_date,
-            "location": instance.inventory_batch.location.name,
-            "end_point": "/parts/inventory_batch"
-        }
+        if instance.inventory_batch:
+            response['inventory_batch'] = {
+                "id": str(instance.inventory_batch.id),
+                "received_date": instance.inventory_batch.received_date,
+                "location": instance.inventory_batch.location.name,
+                "end_point": "/parts/inventory_batch"
+            }
         
         return response
 

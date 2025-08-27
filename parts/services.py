@@ -883,7 +883,8 @@ class InventoryService:
         # Get batches for return (oldest first)
         candidate_batches = InventoryBatch.objects.filter(
             part=part,
-            location=location
+            location=location,
+            is_approved=True
         ).select_for_update(skip_locked=True).order_by('received_date')
         
         allocations = []

@@ -310,11 +310,37 @@ class WorkOrderPartBaseView(BaseAPIView):
                 decoded_position = {}
                 use_provided_position = False
                 
+                # Handle qty_needed for planning purposes (create placeholder WOPR)
+                if 'qty_needed' in data and 'qty_used' not in data:
+                    qty_needed_value = data.get('qty_needed')
+                    if qty_needed_value and qty_needed_value > 0:
+                        # Check if a planning record already exists
+                        existing_planning_request = work_order_part.part_requests.filter(
+                            qty_used__isnull=True,  # Planning records have no qty_used
+                            inventory_batch__isnull=True  # Planning records have no inventory_batch
+                        ).first()
+                        
+                        if existing_planning_request:
+                            # Update existing planning record
+                            existing_planning_request.qty_needed = qty_needed_value
+                            existing_planning_request.save(update_fields=['qty_needed'])
+                        else:
+                            # Create new planning record
+                            from parts.models import WorkOrderPartRequest
+                            WorkOrderPartRequest.objects.create(
+                                work_order_part=work_order_part,
+                                qty_needed=qty_needed_value,
+                                # inventory_batch=None (default)
+                                # qty_used=None (default) 
+                                # unit_cost_snapshot=None (default)
+                                # is_approved=False (default)
+                            )
+
                 # Handle qty_used with or without location
                 if 'qty_used' in data:
                     # If location is not provided, try to extract from existing WorkOrderPartRequest
                     if 'location' not in data:
-                        existing_requests = work_order_part.part_requests.all()
+                        existing_requests = work_order_part.part_requests.filter(is_approved=True)
                         if not existing_requests.exists():
                             raise LocalBaseException(
                                 exception="qty_used provided without location. No existing WorkOrderPartRequest records found to extract location from. Please provide location parameter.",
@@ -444,7 +470,7 @@ class WorkOrderPartBaseView(BaseAPIView):
                         
                     else:
                         # Existing records with sum > 0: Must validate against existing position
-                        existing_requests = all_requests.filter(qty_used__gt=0)
+                        existing_requests = all_requests.filter(is_approved=True)
                         if existing_requests.exists():
                             first_request = existing_requests.first()
                             if first_request.inventory_batch:
@@ -602,9 +628,7 @@ class WorkOrderPartBaseView(BaseAPIView):
                     qty_to_return = abs(qty_difference)
                     
                     # Get WorkOrderPartRequest records ordered by most recent (LIFO for returns)
-                    request_records = work_order_part.part_requests.filter(
-                        qty_used__gt=0
-                    ).order_by('-created_at')
+                    request_records = work_order_part.part_requests.filter(is_approved=True).order_by('-created_at')
                     
                     if not request_records.exists():
                         raise LocalBaseException(
@@ -663,7 +687,7 @@ class WorkOrderPartBaseView(BaseAPIView):
                 else:
                     # No change in qty_used, just use any existing inventory batch
                     position_filter = {}  # Reset for this operation
-                    existing_request = work_order_part.part_requests.first()
+                    existing_request = work_order_part.part_requests.filter(is_approved=True).first()
                     inventory_batch = existing_request.inventory_batch if existing_request else None
                 
                 # Separate WorkOrderPart fields from WorkOrderPartRequest fields
@@ -751,6 +775,9 @@ class WorkOrderPartBaseView(BaseAPIView):
                         response_data['message'] = f'WorkOrderPart updated successfully. Returned {abs(qty_difference)} parts to inventory using LIFO.'
                     else:
                         response_data['message'] = 'WorkOrderPart updated successfully. No quantity change.'
+                elif 'qty_needed' in data and 'qty_used' not in data:
+                    qty_needed_value = data.get('qty_needed', 0)
+                    response_data['message'] = f'WorkOrderPart updated successfully. Planning record created/updated with qty_needed: {qty_needed_value}.'
                 else:
                     response_data['message'] = 'WorkOrderPart updated successfully'
                 
