@@ -19,6 +19,10 @@ class PMIterationChecklistApiView(PMIterationChecklistBaseView):
     serializer_class = PMIterationChecklistApiSerializer
 
 
+class PMIterationPartsApiView(PMIterationPartsBaseView):
+    serializer_class = PMIterationPartsApiSerializer
+
+
 class ManualPMGenerationApiView(ManualPMGenerationBaseView):
     """API view for manual PM work order generation"""
     pass

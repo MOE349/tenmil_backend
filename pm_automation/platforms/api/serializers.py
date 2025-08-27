@@ -17,3 +17,7 @@ class PMIterationChecklistApiSerializer(PMIterationChecklistSerializer):
     pass
 
 
+class PMIterationPartsApiSerializer(PMIterationPartsSerializer):
+    pass
+
+
