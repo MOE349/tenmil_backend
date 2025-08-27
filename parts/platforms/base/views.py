@@ -311,30 +311,38 @@ class WorkOrderPartBaseView(BaseAPIView):
                 use_provided_position = False
                 
                 # Handle qty_needed for planning purposes (create placeholder WOPR)
+                # Allow qty_needed even when qty_used is provided
+                planning_record_created = False
                 if 'qty_needed' in data and 'qty_used' not in data:
-                    qty_needed_value = data.get('qty_needed')
-                    if qty_needed_value and qty_needed_value > 0:
-                        # Check if a planning record already exists
-                        existing_planning_request = work_order_part.part_requests.filter(
-                            qty_used__isnull=True,  # Planning records have no qty_used
-                            inventory_batch__isnull=True  # Planning records have no inventory_batch
-                        ).first()
-                        
-                        if existing_planning_request:
-                            # Update existing planning record
-                            existing_planning_request.qty_needed = qty_needed_value
-                            existing_planning_request.save(update_fields=['qty_needed'])
-                        else:
-                            # Create new planning record
-                            from parts.models import WorkOrderPartRequest
-                            WorkOrderPartRequest.objects.create(
-                                work_order_part=work_order_part,
-                                qty_needed=qty_needed_value,
-                                # inventory_batch=None (default)
-                                # qty_used=None (default) 
-                                # unit_cost_snapshot=None (default)
-                                # is_approved=False (default)
-                            )
+                    try:
+                        qty_needed_value = int(data.get('qty_needed'))
+                        if qty_needed_value > 0:
+                            # Check if a planning record already exists (unapproved records)
+                            existing_planning_request = work_order_part.part_requests.filter(
+                                is_approved=False  # Planning records are not approved
+                            ).first()
+                            
+                            if existing_planning_request:
+                                # Update existing planning record
+                                existing_planning_request.qty_needed = qty_needed_value
+                                existing_planning_request.save(update_fields=['qty_needed'])
+                            else:
+                                # Create new planning record
+                                from parts.models import WorkOrderPartRequest
+                                WorkOrderPartRequest.objects.create(
+                                    work_order_part=work_order_part,
+                                    qty_needed=qty_needed_value,
+                                    # inventory_batch=None (default)
+                                    # qty_used=None (default) 
+                                    # unit_cost_snapshot=None (default)
+                                    # is_approved=False (default)
+                                )
+                            planning_record_created = True
+                    except (ValueError, TypeError):
+                        raise LocalBaseException(
+                            exception="qty_needed must be a valid integer",
+                            status_code=status.HTTP_400_BAD_REQUEST
+                        )
 
                 # Handle qty_used with or without location
                 if 'qty_used' in data:
@@ -606,16 +614,40 @@ class WorkOrderPartBaseView(BaseAPIView):
                             # Update existing request
                             existing_request.qty_used += qty_from_batch
                             existing_request.total_parts_cost = existing_request.qty_used * existing_request.unit_cost_snapshot
-                            existing_request.save(update_fields=['qty_used', 'total_parts_cost'])
+                            
+                            # Update qty_needed if provided (for combined planning + consumption)
+                            update_fields = ['qty_used', 'total_parts_cost']
+                            if 'qty_needed' in data:
+                                try:
+                                    qty_needed_value = int(data.get('qty_needed'))
+                                    if qty_needed_value > 0:
+                                        existing_request.qty_needed = qty_needed_value
+                                        update_fields.append('qty_needed')
+                                except (ValueError, TypeError):
+                                    pass  # Skip invalid qty_needed
+                            
+                            existing_request.save(update_fields=update_fields)
                         else:
                             # Create new request for this batch
                             from parts.models import WorkOrderPartRequest
-                            WorkOrderPartRequest.objects.create(
-                                work_order_part=work_order_part,
-                                inventory_batch=batch,
-                                qty_used=qty_from_batch,
-                                unit_cost_snapshot=batch.last_unit_cost
-                            )
+                            # Include qty_needed if provided along with qty_used
+                            create_data = {
+                                'work_order_part': work_order_part,
+                                'inventory_batch': batch,
+                                'qty_used': qty_from_batch,
+                                'unit_cost_snapshot': batch.last_unit_cost
+                            }
+                            
+                            # Add qty_needed if provided (for combined planning + consumption)
+                            if 'qty_needed' in data:
+                                try:
+                                    qty_needed_value = int(data.get('qty_needed'))
+                                    if qty_needed_value > 0:
+                                        create_data['qty_needed'] = qty_needed_value
+                                except (ValueError, TypeError):
+                                    pass  # Skip invalid qty_needed
+                            
+                            WorkOrderPartRequest.objects.create(**create_data)
                         
                         remaining_qty -= qty_from_batch
                     
@@ -770,14 +802,38 @@ class WorkOrderPartBaseView(BaseAPIView):
                                 position_msg = f" using existing position-specific FIFO at A{aisle}/R{row}/B{bin_val}"
                         else:
                             position_msg = " using location-wide FIFO"
-                        response_data['message'] = f'WorkOrderPart updated successfully. Added {qty_difference} parts to inventory consumption{position_msg}.'
+                        base_msg = f'WorkOrderPart updated successfully. Added {qty_difference} parts to inventory consumption{position_msg}.'
+                        if 'qty_needed' in data:
+                            try:
+                                qty_needed_value = int(data.get('qty_needed'))
+                                base_msg += f' Planning qty_needed: {qty_needed_value} included in consumption records.'
+                            except (ValueError, TypeError):
+                                pass
+                        response_data['message'] = base_msg
                     elif qty_difference < 0:
-                        response_data['message'] = f'WorkOrderPart updated successfully. Returned {abs(qty_difference)} parts to inventory using LIFO.'
+                        base_msg = f'WorkOrderPart updated successfully. Returned {abs(qty_difference)} parts to inventory using LIFO.'
+                        if 'qty_needed' in data:
+                            try:
+                                qty_needed_value = int(data.get('qty_needed'))
+                                base_msg += f' Planning qty_needed: {qty_needed_value} noted.'
+                            except (ValueError, TypeError):
+                                pass
+                        response_data['message'] = base_msg
                     else:
-                        response_data['message'] = 'WorkOrderPart updated successfully. No quantity change.'
-                elif 'qty_needed' in data and 'qty_used' not in data:
-                    qty_needed_value = data.get('qty_needed', 0)
-                    response_data['message'] = f'WorkOrderPart updated successfully. Planning record created/updated with qty_needed: {qty_needed_value}.'
+                        base_msg = 'WorkOrderPart updated successfully. No quantity change.'
+                        if 'qty_needed' in data:
+                            try:
+                                qty_needed_value = int(data.get('qty_needed'))
+                                base_msg += f' Planning qty_needed: {qty_needed_value} noted.'
+                            except (ValueError, TypeError):
+                                pass
+                        response_data['message'] = base_msg
+                elif planning_record_created:
+                    try:
+                        qty_needed_value = int(data.get('qty_needed', 0))
+                        response_data['message'] = f'WorkOrderPart updated successfully. Planning record created/updated with qty_needed: {qty_needed_value}.'
+                    except (ValueError, TypeError):
+                        response_data['message'] = 'WorkOrderPart updated successfully. Planning record created/updated.'
                 else:
                     response_data['message'] = 'WorkOrderPart updated successfully'
                 
