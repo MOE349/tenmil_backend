@@ -121,6 +121,11 @@ class PMIterationChecklistBaseView(BaseAPIView):
     model_class = PMIterationChecklist
 
 
+class PMIterationPartsBaseView(BaseAPIView):
+    serializer_class = PMIterationPartsSerializer
+    model_class = PMIterationParts
+
+
 class ManualPMGenerationBaseView(BaseAPIView):
     serializer_class = PMSettingsBaseSerializer
     model_class = PMSettings
@@ -469,6 +474,16 @@ class ManualPMGenerationBaseView(BaseAPIView):
                 logger.info(f"Copied cumulative checklist for iteration '{highest_order_iteration.name}' to work order {work_order.id}")
         except Exception as e:
             logger.error(f"Error copying iteration checklists to work order {work_order.id}: {e}")
+        
+        # Copy the cumulative parts for triggered iterations
+        try:
+            if triggered_iterations:
+                # Get the highest-order iteration (which will have the most comprehensive parts list)
+                highest_order_iteration = max(triggered_iterations, key=lambda x: x.order)
+                pm_settings.copy_iteration_parts_to_work_order(work_order, highest_order_iteration)
+                logger.info(f"Copied cumulative parts for iteration '{highest_order_iteration.name}' to work order {work_order.id}")
+        except Exception as e:
+            logger.error(f"Error copying iteration parts to work order {work_order.id}: {e}")
         
         # Log creation with request user (not system admin)
         log_description = f"Work Order Created ({work_order_type.title()} PM Generation)"

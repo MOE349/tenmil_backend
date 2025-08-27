@@ -333,6 +333,17 @@ class PMAutomationService:
         except Exception as e:
             logger.error(f"Error copying iteration checklists to work order {work_order.id}: {e}")
         
+        # Copy the cumulative parts for all triggered iterations
+        try:
+            # Get the highest-order iteration (which will have the most comprehensive parts list)
+            highest_order_iteration = max(triggered_iterations, key=lambda x: x.order)
+            
+            # Copy the cumulative parts for the highest-order iteration
+            pm_settings.copy_iteration_parts_to_work_order(work_order, highest_order_iteration)
+            logger.info(f"Copied cumulative parts for highest-order iteration '{highest_order_iteration.name}' to work order {work_order.id}")
+        except Exception as e:
+            logger.error(f"Error copying iteration parts to work order {work_order.id}: {e}")
+        
         # Log creation with system admin as user
         WorkOrderLog.objects.create(
             work_order=work_order,

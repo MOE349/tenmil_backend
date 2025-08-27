@@ -334,6 +334,88 @@ class PMSettings(BaseModel):
                 source_pm_iteration_checklist=item
             )
 
+    def get_cumulative_parts_for_iteration(self, iteration):
+        """Get cumulative parts for a specific iteration"""
+        if not iteration:
+            return []
+        
+        # Get all iterations up to and including the current one
+        all_iterations = list(self.get_iterations())
+        current_index = all_iterations.index(iteration)
+        relevant_iterations = all_iterations[:current_index + 1]
+        
+        # Collect all parts from relevant iterations, aggregating quantities by part
+        parts_dict = {}
+        for iter_item in relevant_iterations:
+            for part_item in iter_item.parts.all():
+                part_key = part_item.part.id
+                if part_key in parts_dict:
+                    # Add to existing quantity
+                    parts_dict[part_key]['qty_needed'] += part_item.qty_needed
+                else:
+                    # Store part with initial quantity
+                    parts_dict[part_key] = {
+                        'part': part_item.part,
+                        'qty_needed': part_item.qty_needed
+                    }
+        
+        return list(parts_dict.values())
+    
+    def copy_iteration_parts_to_work_order(self, work_order, iteration):
+        """Copy cumulative parts for a specific iteration to work order"""
+        parts_data = self.get_cumulative_parts_for_iteration(iteration)
+        
+        for part_data in parts_data:
+            # Create or get WorkOrderPart record
+            from parts.models import WorkOrderPart, WorkOrderPartRequest
+            work_order_part, created = WorkOrderPart.objects.get_or_create(
+                work_order=work_order,
+                part=part_data['part'],
+                defaults={}
+            )
+            
+            if created:
+                logger.info(f"Created WorkOrderPart for {part_data['part'].part_number} in WO {work_order.id} (PM generated)")
+                
+                # Create WorkOrderPartRequest for planning purposes
+                WorkOrderPartRequest.objects.create(
+                    work_order_part=work_order_part,
+                    inventory_batch=None,  # No specific batch for planning
+                    qty_needed=part_data['qty_needed'],
+                    qty_used=0,  # Not consumed yet
+                    unit_cost_snapshot=part_data['part'].last_price or 0,  # Use current part price or 0
+                    is_approved=False  # Needs approval before consumption
+                )
+                logger.info(f"Created WorkOrderPartRequest for {part_data['part'].part_number} with qty_needed={part_data['qty_needed']}")
+            else:
+                logger.info(f"WorkOrderPart already exists for {part_data['part'].part_number} in WO {work_order.id}")
+                
+                # Check if we need to update qty_needed for existing part request
+                existing_request = work_order_part.part_requests.filter(
+                    inventory_batch__isnull=True,  # Planning request
+                    qty_used=0  # Not consumed yet
+                ).first()
+                
+                if existing_request:
+                    # Update qty_needed if it's different
+                    if existing_request.qty_needed != part_data['qty_needed']:
+                        existing_request.qty_needed = part_data['qty_needed']
+                        existing_request.save(update_fields=['qty_needed'])
+                        logger.info(f"Updated qty_needed to {part_data['qty_needed']} for existing part request")
+                else:
+                    # Create new planning request if none exists
+                    WorkOrderPartRequest.objects.create(
+                        work_order_part=work_order_part,
+                        inventory_batch=None,
+                        qty_needed=part_data['qty_needed'],
+                        qty_used=0,
+                        unit_cost_snapshot=part_data['part'].last_price or 0,
+                        is_approved=False
+                    )
+                    logger.info(f"Created new planning WorkOrderPartRequest for existing WorkOrderPart")
+        
+        logger.info(f"Added {len(parts_data)} predefined parts to work order {work_order.id}")
+
     def get_iterations_for_trigger(self):
         """
         Get iterations that should be triggered based on the current counter.
@@ -502,6 +584,25 @@ class PMIterationChecklist(BaseModel):
     
     def __str__(self):
         return f"{self.iteration} - {self.name}"
+
+
+class PMIterationParts(BaseModel):
+    """Parts predefined for PM iterations"""
+    iteration = models.ForeignKey(PMIteration, on_delete=models.CASCADE, related_name='parts')
+    part = models.ForeignKey('parts.Part', on_delete=models.CASCADE, help_text="Part required for this PM iteration")
+    qty_needed = models.PositiveIntegerField(default=1, help_text="Quantity of this part needed for the PM")
+    
+    class Meta:
+        verbose_name = _("PM Iteration Parts")
+        verbose_name_plural = _("PM Iteration Parts")
+        unique_together = ['iteration', 'part']
+        indexes = [
+            models.Index(fields=['iteration']),
+            models.Index(fields=['part']),
+        ]
+    
+    def __str__(self):
+        return f"{self.iteration} - {self.part.part_number} (Qty: {self.qty_needed})"
 
 
 class PMTrigger(BaseModel):

@@ -760,10 +760,6 @@ class WorkOrderPartBaseView(BaseAPIView):
             return self.handle_exception(e)
     
 
-
-
-
-
 class WorkOrderPartRequestBaseView(BaseAPIView):
     """Base view for WorkOrderPartRequest CRUD operations"""
     serializer_class = WorkOrderPartRequestBaseSerializer

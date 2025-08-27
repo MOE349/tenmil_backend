@@ -159,7 +159,10 @@ class WorkOrderPartRequest(BaseModel):
     inventory_batch = models.ForeignKey(
         InventoryBatch, 
         on_delete=models.CASCADE,
-        related_name="work_order_part_requests"
+        related_name="work_order_part_requests",
+        null=True,
+        blank=True,
+        help_text="Inventory batch used (null for planning purposes)"
     )
     qty_needed = models.IntegerField(
         _("Quantity Needed"), 
@@ -200,16 +203,20 @@ class WorkOrderPartRequest(BaseModel):
         verbose_name_plural = _("Work Order Part Requests")
 
     def clean(self):
-        if self.qty_used == 0:
-            raise ValidationError(_("Quantity used cannot be zero"))
-        if self.unit_cost_snapshot < 0:
+        # Allow qty_used = 0 for planning purposes when inventory_batch is null
+        if self.qty_used == 0 and self.inventory_batch is not None:
+            raise ValidationError(_("Quantity used cannot be zero when inventory batch is specified"))
+        if self.unit_cost_snapshot is not None and self.unit_cost_snapshot < 0:
             raise ValidationError(_("Unit cost snapshot cannot be negative"))
         if self.qty_needed is not None and self.qty_needed <= 0:
             raise ValidationError(_("Quantity needed must be positive if specified"))
 
     def save(self, *args, **kwargs):
-        # Auto-calculate total_parts_cost
-        self.total_parts_cost = self.qty_used * self.unit_cost_snapshot
+        # Auto-calculate total_parts_cost (handle null unit_cost_snapshot for planning)
+        if self.unit_cost_snapshot is not None:
+            self.total_parts_cost = self.qty_used * self.unit_cost_snapshot
+        else:
+            self.total_parts_cost = 0
         super().save(*args, **kwargs)
 
     def __str__(self):

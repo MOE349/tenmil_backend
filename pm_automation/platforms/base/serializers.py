@@ -10,8 +10,35 @@ class PMIterationChecklistSerializer(BaseSerializer):
         fields = '__all__'
 
 
+class PMIterationPartsSerializer(BaseSerializer):
+    class Meta:
+        model = PMIterationParts
+        fields = '__all__'
+    
+    def mod_to_representation(self, instance):
+        response = super().mod_to_representation(instance)
+        response['id'] = str(instance.id)
+        
+        # Add part details
+        if instance.part:
+            response['part'] = {
+                "id": str(instance.part.id),
+                "part_number": instance.part.part_number,
+                "name": instance.part.name,
+                "last_price": str(instance.part.last_price) if instance.part.last_price else None,
+                "end_point": "/parts/part"
+            }
+        
+        # Add computed fields
+        if instance.part and instance.part.last_price:
+            response['estimated_total_cost'] = str(instance.part.last_price * instance.qty_needed)
+        
+        return response
+
+
 class PMIterationSerializer(BaseSerializer):
     checklist_items = PMIterationChecklistSerializer(many=True, read_only=True)
+    parts = PMIterationPartsSerializer(many=True, read_only=True)
     
     class Meta:
         model = PMIteration

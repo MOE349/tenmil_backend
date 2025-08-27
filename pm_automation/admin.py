@@ -1,11 +1,18 @@
 from django.contrib import admin
-from pm_automation.models import PMSettings, PMTrigger, PMIteration, PMIterationChecklist
+from pm_automation.models import PMSettings, PMTrigger, PMIteration, PMIterationChecklist, PMIterationParts
 
 
 class PMIterationChecklistInline(admin.TabularInline):
     model = PMIterationChecklist
     extra = 1
     fields = ['name']
+
+
+class PMIterationPartsInline(admin.TabularInline):
+    model = PMIterationParts
+    extra = 1
+    fields = ['part', 'qty_needed']
+    autocomplete_fields = ['part']
 
 
 class PMIterationInline(admin.TabularInline):
@@ -79,7 +86,7 @@ class PMIterationAdmin(admin.ModelAdmin):
     list_filter = ['pm_settings']
     search_fields = ['name', 'pm_settings__name']
     ordering = ['pm_settings', 'interval_value']
-    inlines = [PMIterationChecklistInline]
+    inlines = [PMIterationChecklistInline, PMIterationPartsInline]
     readonly_fields = ['is_default_iteration', 'multiplier']
     
     def multiplier(self, obj):
@@ -111,3 +118,29 @@ class PMIterationChecklistAdmin(admin.ModelAdmin):
     def iteration_pm_settings(self, obj):
         return obj.iteration.pm_settings
     iteration_pm_settings.short_description = 'PM Settings'
+
+
+@admin.register(PMIterationParts)
+class PMIterationPartsAdmin(admin.ModelAdmin):
+    list_display = ['part_number', 'part_name', 'qty_needed', 'iteration', 'iteration_pm_settings', 'estimated_cost']
+    list_filter = ['iteration__pm_settings', 'part']
+    search_fields = ['part__part_number', 'part__name', 'iteration__name']
+    autocomplete_fields = ['part']
+    
+    def part_number(self, obj):
+        return obj.part.part_number if obj.part else 'N/A'
+    part_number.short_description = 'Part Number'
+    
+    def part_name(self, obj):
+        return obj.part.name if obj.part else 'N/A'
+    part_name.short_description = 'Part Name'
+    
+    def iteration_pm_settings(self, obj):
+        return obj.iteration.pm_settings
+    iteration_pm_settings.short_description = 'PM Settings'
+    
+    def estimated_cost(self, obj):
+        if obj.part and obj.part.last_price:
+            return f"${obj.part.last_price * obj.qty_needed:.2f}"
+        return 'N/A'
+    estimated_cost.short_description = 'Estimated Cost'
