@@ -1,5 +1,5 @@
 from company.models import Location
-from company.platforms.base.serializers import LocationBaseSerializer
+from company.platforms.base.serializers import LocationBaseSerializer, SiteBaseSerializer
 from configurations.base_features.serializers.base_serializer import BaseSerializer
 from configurations.base_features.db.db_helpers import get_object_by_content_type_and_id # will move to lazy import below to avoid cycles
 from configurations.mixins.file_attachment_mixins import FileAttachmentSerializerMixin
