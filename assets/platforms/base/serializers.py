@@ -19,16 +19,8 @@ class AssetBaseSerializer(FileAttachmentSerializerMixin, BaseSerializer):
     def mod_to_representation(self, instance):
         response = super().mod_to_representation(instance)
         response['id'] = str(instance.id)
-        response['location'] = {
-            "id": str(instance.location.id),
-            "name": f"{instance.location.name} - {instance.location.site.name}",
-            "end_point": "/company/location"
-        }
-        response['site'] = {
-            "id": str(instance.location.site.id),
-            "name": instance.location.site.name,
-            "end_point": "/company/site"
-        }
+        response['location'] = LocationBaseSerializer(instance.location).data
+        response['site'] = SiteBaseSerializer(instance.location.site).data
         response['category'] = {
             "id": str(instance.category.id),
             "name": instance.category.name,
