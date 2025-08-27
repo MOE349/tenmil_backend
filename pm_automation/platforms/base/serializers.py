@@ -28,7 +28,7 @@ class PMIterationPartsSerializer(BaseSerializer):
                 "last_price": str(instance.part.last_price) if instance.part.last_price else None,
                 "end_point": "/parts/part"
             }
-        
+            response['part_number'] = instance.part.part_number
         # Add computed fields
         if instance.part and instance.part.last_price:
             response['estimated_total_cost'] = str(instance.part.last_price * instance.qty_needed)
