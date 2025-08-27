@@ -133,12 +133,14 @@ class WorkOrderPartBaseSerializer(BaseSerializer):
         }
         response["part_name"] = instance.part.name
         
-        # Include total qty_used from all related part requests
+        # Include total qty_used and qty_needed from all related part requests
         from django.db.models import Sum
-        total_qty_used = instance.part_requests.aggregate(
-            total=Sum('qty_used')
-        )['total'] or 0
-        response['qty_used'] = total_qty_used
+        aggregates = instance.part_requests.aggregate(
+            total_qty_used=Sum('qty_used'),
+            total_qty_needed=Sum('qty_needed')
+        )
+        response['qty_used'] = aggregates['total_qty_used'] or 0
+        response['qty_needed'] = aggregates['total_qty_needed'] or 0
         
         return response
 
