@@ -16,6 +16,6 @@ class LocationBaseSerializer(BaseSerializer):
     def to_representation(self, instance):
         response = super().to_representation(instance)
         response['site'] = SiteBaseSerializer(instance.site).data
-        response["name"] = f"{instance.name} - {instance.site.name}",
+        response["name"] = f"{instance.site.code} - {instance.name}",
         return response
 
