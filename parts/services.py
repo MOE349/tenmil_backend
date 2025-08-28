@@ -1718,11 +1718,14 @@ class WorkOrderPartRequestWorkflowService:
                              if is_fully_available 
                              else WorkOrderPartRequestLog.ActionType.PARTIAL_AVAILABLE)
                 
+                # Update WOPR flags
+                wopr.is_available = True
+                
                 # Create audit log
                 wopr._create_audit_log(
                     previous_flags={
                         'is_requested': wopr.is_requested,
-                        'is_available': wopr.is_available,
+                        'is_available': False,  # Previous state before update
                         'is_ordered': wopr.is_ordered,
                         'is_delivered': wopr.is_delivered,
                     },

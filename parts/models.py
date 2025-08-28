@@ -295,7 +295,7 @@ class WorkOrderPartRequest(BaseModel):
             self.is_requested = False
             self.is_available = False
             self.is_ordered = False
-            self.is_delivered = False
+            self.is_delivered = True
             
 
         # Auto-calculate total_parts_cost (handle null values for planning)
