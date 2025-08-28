@@ -1966,9 +1966,7 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
                 is_available=False  # Not yet processed by warehouse
             ).select_related(
                 'work_order_part__work_order',
-                'work_order_part__work_order__asset',
-                'work_order_part__work_order__asset__location',
-                'work_order_part__work_order__asset__location__site',
+                'work_order_part__work_order__content_type',
                 'work_order_part__part',
                 'inventory_batch__location'
             ).prefetch_related(
@@ -2017,33 +2015,42 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
                 # Get request timeline
                 first_requested = wopr.get_first_requested_at()
                 
-                # Format asset information
+                # Format asset information using GenericForeignKey
                 work_order = wopr.work_order_part.work_order
                 asset_display = None
                 asset_location_display = None
                 
-                if work_order.asset:
-                    # Format: "(asset_code) asset_name" e.g. "(T01) JLG Telehandler"
-                    asset_code = getattr(work_order.asset, 'code', '') or getattr(work_order.asset, 'asset_code', '') or ''
-                    asset_name = getattr(work_order.asset, 'name', '') or getattr(work_order.asset, 'asset_name', '') or ''
-                    if asset_code and asset_name:
-                        asset_display = f"({asset_code}) {asset_name}"
-                    elif asset_name:
-                        asset_display = asset_name
-                    elif asset_code:
-                        asset_display = f"({asset_code})"
-                    
-                    # Format asset location: "site_code - location_name" e.g. "RC - MOUNTAIN"
-                    if work_order.asset.location:
-                        location = work_order.asset.location
-                        site_code = location.site.code if location.site else ''
-                        location_name = location.name if location else ''
-                        if site_code and location_name:
-                            asset_location_display = f"{site_code} - {location_name}"
-                        elif location_name:
-                            asset_location_display = location_name
-                        elif site_code:
-                            asset_location_display = site_code
+                # Get the asset using the GenericForeignKey approach
+                if work_order.content_type and work_order.object_id:
+                    try:
+                        from configurations.base_features.db.db_helpers import get_object_by_content_type_and_id
+                        asset = get_object_by_content_type_and_id(work_order.content_type.id, work_order.object_id)
+                        
+                        if asset:
+                            # Format: "(asset_code) asset_name" e.g. "(T01) JLG Telehandler"
+                            asset_code = getattr(asset, 'code', '') or getattr(asset, 'asset_code', '') or ''
+                            asset_name = getattr(asset, 'name', '') or getattr(asset, 'asset_name', '') or ''
+                            if asset_code and asset_name:
+                                asset_display = f"({asset_code}) {asset_name}"
+                            elif asset_name:
+                                asset_display = asset_name
+                            elif asset_code:
+                                asset_display = f"({asset_code})"
+                            
+                            # Format asset location: "site_code - location_name" e.g. "RC - MOUNTAIN"
+                            if hasattr(asset, 'location') and asset.location:
+                                location = asset.location
+                                site_code = location.site.code if hasattr(location, 'site') and location.site else ''
+                                location_name = location.name if location else ''
+                                if site_code and location_name:
+                                    asset_location_display = f"{site_code} - {location_name}"
+                                elif location_name:
+                                    asset_location_display = location_name
+                                elif site_code:
+                                    asset_location_display = site_code
+                    except Exception:
+                        # If asset retrieval fails, continue without asset info
+                        pass
                 
                 item_data = {
                     'id': str(wopr.id),
