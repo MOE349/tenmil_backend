@@ -137,7 +137,8 @@ class WorkOrderPartBaseSerializer(BaseSerializer):
         from django.db.models import Sum, Max, Q
         aggregates = instance.part_requests.aggregate(
             total_qty_used=Sum('qty_used'),
-            total_qty_needed=Sum('qty_needed'),
+            # qty_needed should only include records that are not approved and not delivered
+            total_qty_needed=Sum('qty_needed', filter=Q(is_approved=False, is_delivered=False)),
             total_qty_available=Sum('qty_available'),
             total_qty_delivered=Sum('qty_delivered')
         )
