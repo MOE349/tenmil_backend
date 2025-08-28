@@ -1493,19 +1493,51 @@ class WorkOrderPartRequestWorkflowService:
                 wop = WorkOrderPart.objects.select_for_update().get(id=wop_id)
                 
                 # Get or create WorkOrderPartRequest for planning
-                wopr, created = WorkOrderPartRequest.objects.get_or_create(
-                    work_order_part=wop,
-                    inventory_batch__isnull=True,  # Planning record (no specific batch)
-                    qty_used__isnull=True,        # Not yet consumed
-                    defaults={
-                        'qty_needed': qty_needed,
-                        'is_requested': True
-                    }
-                )
-                
-                # If not created, update the existing planning record
-                if not created:
-                    wopr.qty_needed = qty_needed
+                # Handle potential multiple planning records by getting the first active one
+                try:
+                    wopr = WorkOrderPartRequest.objects.filter(
+                        work_order_part=wop,
+                        inventory_batch__isnull=True,  # Planning record (no specific batch)
+                        qty_used__isnull=True,        # Not yet consumed
+                        is_delivered=False,           # Not yet delivered
+                    ).first()
+                    
+                    if wopr:
+                        # Update existing planning record
+                        wopr.qty_needed = qty_needed
+                        wopr.is_requested = True
+                        created = False
+                    else:
+                        # Create new planning record
+                        wopr = WorkOrderPartRequest.objects.create(
+                            work_order_part=wop,
+                            qty_needed=qty_needed,
+                            is_requested=True
+                        )
+                        created = True
+                        
+                except WorkOrderPartRequest.MultipleObjectsReturned:
+                    # If multiple planning records exist, get the most recent one
+                    wopr = WorkOrderPartRequest.objects.filter(
+                        work_order_part=wop,
+                        inventory_batch__isnull=True,
+                        qty_used__isnull=True,
+                        is_delivered=False,
+                    ).order_by('-created_at').first()
+                    
+                    if wopr:
+                        wopr.qty_needed = qty_needed
+                        wopr.is_requested = True
+                        created = False
+                    else:
+                        # Fallback: create new record
+                        wopr = WorkOrderPartRequest.objects.create(
+                            work_order_part=wop,
+                            qty_needed=qty_needed,
+                            is_requested=True
+                        )
+                        created = True
+
                 
                 # Create audit log with user context
                 wopr._create_audit_log(
