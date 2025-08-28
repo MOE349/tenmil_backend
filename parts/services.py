@@ -22,7 +22,7 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 
-from .models import Part, InventoryBatch, WorkOrderPart, PartMovement
+from .models import Part, InventoryBatch, WorkOrderPart, PartMovement, WorkOrderPartRequest, WorkOrderPartRequestLog
 from company.models import Location
 from work_orders.models import WorkOrder
 from tenant_users.models import TenantUser
@@ -1303,8 +1303,406 @@ class LocationStringDecoder:
             return None
 
 
-# Global service instance
+class WorkOrderPartRequestWorkflowService:
+    """Business logic for WOPR workflow operations"""
+    
+    @staticmethod
+    def request_parts(wopr_id: str, qty_needed: int, performed_by: TenantUser = None, notes: str = None, **kwargs) -> Dict[str, Any]:
+        """
+        Mechanic requests parts
+        
+        Args:
+            wopr_id: WorkOrderPartRequest ID
+            qty_needed: Quantity needed
+            performed_by: User performing the action
+            notes: Optional notes
+            **kwargs: Additional metadata (ip_address, user_agent)
+            
+        Returns:
+            Dict with success status and updated WOPR data
+        """
+        try:
+            with transaction.atomic():
+                wopr = WorkOrderPartRequest.objects.select_for_update().get(id=wopr_id)
+                
+                # Update quantities and flags
+                wopr.qty_needed = qty_needed
+                
+                # Create audit log with user context
+                wopr._create_audit_log(
+                    previous_flags={
+                        'is_requested': wopr.is_requested,
+                        'is_available': wopr.is_available,
+                        'is_ordered': wopr.is_ordered,
+                        'is_delivered': wopr.is_delivered,
+                    },
+                    new_flags={
+                        'is_requested': True,
+                        'is_available': wopr.is_available,
+                        'is_ordered': wopr.is_ordered,
+                        'is_delivered': wopr.is_delivered,
+                    },
+                    action_type=WorkOrderPartRequestLog.ActionType.REQUESTED,
+                    performed_by=performed_by,
+                    notes=notes,
+                    qty_in_action=qty_needed,
+                    qty_total_after_action=qty_needed,
+                    **kwargs
+                )
+                
+                wopr.save()
+                
+                return {
+                    'success': True,
+                    'message': 'Parts requested successfully',
+                    'wopr_id': str(wopr.id),
+                    'qty_needed': wopr.qty_needed,
+                    'is_requested': wopr.is_requested
+                }
+                
+        except WorkOrderPartRequest.DoesNotExist:
+            raise ValidationError(f"WorkOrderPartRequest with ID {wopr_id} not found")
+        except Exception as e:
+            raise ValidationError(f"Failed to request parts: {str(e)}")
+    
+    @staticmethod
+    def confirm_availability(wopr_id: str, qty_available: int, inventory_batch_id: str, 
+                           performed_by: TenantUser = None, notes: str = None, **kwargs) -> Dict[str, Any]:
+        """
+        Warehouse keeper confirms availability and reserves parts
+        
+        Args:
+            wopr_id: WorkOrderPartRequest ID
+            qty_available: Quantity available
+            inventory_batch_id: Inventory batch to reserve from
+            performed_by: User performing the action
+            notes: Optional notes
+            **kwargs: Additional metadata
+            
+        Returns:
+            Dict with success status and updated data
+        """
+        try:
+            with transaction.atomic():
+                wopr = WorkOrderPartRequest.objects.select_for_update().get(id=wopr_id)
+                inventory_batch = InventoryBatch.objects.select_for_update().get(id=inventory_batch_id)
+                
+                # Validate availability
+                available_qty = inventory_batch.qty_on_hand - inventory_batch.qty_reserved
+                if qty_available > available_qty:
+                    raise ValidationError(f"Only {available_qty} parts available in batch, requested {qty_available}")
+                
+                # Reserve the parts
+                inventory_batch.qty_reserved += qty_available
+                inventory_batch.save()
+                
+                # Update WOPR
+                wopr.qty_available = qty_available
+                wopr.inventory_batch = inventory_batch
+                
+                # Determine action type based on fulfillment
+                is_fully_available = qty_available >= (wopr.qty_needed or 0)
+                action_type = (WorkOrderPartRequestLog.ActionType.FULLY_AVAILABLE 
+                             if is_fully_available 
+                             else WorkOrderPartRequestLog.ActionType.PARTIAL_AVAILABLE)
+                
+                # Create audit log
+                wopr._create_audit_log(
+                    previous_flags={
+                        'is_requested': wopr.is_requested,
+                        'is_available': wopr.is_available,
+                        'is_ordered': wopr.is_ordered,
+                        'is_delivered': wopr.is_delivered,
+                    },
+                    new_flags={
+                        'is_requested': wopr.is_requested,
+                        'is_available': True,
+                        'is_ordered': wopr.is_ordered,
+                        'is_delivered': wopr.is_delivered,
+                    },
+                    action_type=action_type,
+                    performed_by=performed_by,
+                    notes=notes,
+                    qty_in_action=qty_available,
+                    qty_total_after_action=qty_available,
+                    **kwargs
+                )
+                
+                wopr.save()
+                
+                return {
+                    'success': True,
+                    'message': f'Parts {"fully" if is_fully_available else "partially"} available and reserved',
+                    'wopr_id': str(wopr.id),
+                    'qty_available': wopr.qty_available,
+                    'qty_needed': wopr.qty_needed,
+                    'is_available': wopr.is_available,
+                    'is_fully_available': is_fully_available,
+                    'inventory_batch_id': str(inventory_batch.id),
+                    'location': str(inventory_batch.location)
+                }
+                
+        except (WorkOrderPartRequest.DoesNotExist, InventoryBatch.DoesNotExist) as e:
+            raise ValidationError(f"Record not found: {str(e)}")
+        except Exception as e:
+            raise ValidationError(f"Failed to confirm availability: {str(e)}")
+    
+    @staticmethod
+    def mark_ordered(wopr_id: str, performed_by: TenantUser = None, notes: str = None, **kwargs) -> Dict[str, Any]:
+        """
+        Mark parts as ordered externally
+        
+        Args:
+            wopr_id: WorkOrderPartRequest ID
+            performed_by: User performing the action
+            notes: Optional notes
+            **kwargs: Additional metadata
+            
+        Returns:
+            Dict with success status
+        """
+        try:
+            with transaction.atomic():
+                wopr = WorkOrderPartRequest.objects.select_for_update().get(id=wopr_id)
+                
+                # Create audit log
+                wopr._create_audit_log(
+                    previous_flags={
+                        'is_requested': wopr.is_requested,
+                        'is_available': wopr.is_available,
+                        'is_ordered': wopr.is_ordered,
+                        'is_delivered': wopr.is_delivered,
+                    },
+                    new_flags={
+                        'is_requested': wopr.is_requested,
+                        'is_available': wopr.is_available,
+                        'is_ordered': True,
+                        'is_delivered': wopr.is_delivered,
+                    },
+                    action_type=WorkOrderPartRequestLog.ActionType.ORDERED,
+                    performed_by=performed_by,
+                    notes=notes,
+                    **kwargs
+                )
+                
+                wopr.is_ordered = True
+                wopr.save()
+                
+                return {
+                    'success': True,
+                    'message': 'Parts marked as ordered',
+                    'wopr_id': str(wopr.id),
+                    'is_ordered': wopr.is_ordered
+                }
+                
+        except WorkOrderPartRequest.DoesNotExist:
+            raise ValidationError(f"WorkOrderPartRequest with ID {wopr_id} not found")
+        except Exception as e:
+            raise ValidationError(f"Failed to mark as ordered: {str(e)}")
+    
+    @staticmethod
+    def deliver_parts(wopr_id: str, qty_delivered: int, performed_by: TenantUser = None, 
+                     notes: str = None, **kwargs) -> Dict[str, Any]:
+        """
+        Warehouse keeper delivers parts (marks ready for pickup)
+        
+        Args:
+            wopr_id: WorkOrderPartRequest ID
+            qty_delivered: Quantity being delivered
+            performed_by: User performing the action
+            notes: Optional notes
+            **kwargs: Additional metadata
+            
+        Returns:
+            Dict with success status and updated data
+        """
+        try:
+            with transaction.atomic():
+                wopr = WorkOrderPartRequest.objects.select_for_update().get(id=wopr_id)
+                
+                # Validate delivery quantity
+                max_deliverable = wopr.qty_available - wopr.qty_delivered
+                if qty_delivered > max_deliverable:
+                    raise ValidationError(f"Cannot deliver {qty_delivered} parts. Only {max_deliverable} available for delivery")
+                
+                # Update delivery quantity
+                new_total_delivered = wopr.qty_delivered + qty_delivered
+                
+                # Determine action type
+                is_fully_delivered = new_total_delivered >= (wopr.qty_needed or 0)
+                action_type = (WorkOrderPartRequestLog.ActionType.FULLY_DELIVERED 
+                             if is_fully_delivered 
+                             else WorkOrderPartRequestLog.ActionType.PARTIAL_DELIVERED)
+                
+                # Create audit log
+                wopr._create_audit_log(
+                    previous_flags={
+                        'is_requested': wopr.is_requested,
+                        'is_available': wopr.is_available,
+                        'is_ordered': wopr.is_ordered,
+                        'is_delivered': wopr.is_delivered,
+                    },
+                    new_flags={
+                        'is_requested': wopr.is_requested,
+                        'is_available': wopr.is_available,
+                        'is_ordered': wopr.is_ordered,
+                        'is_delivered': True,
+                    },
+                    action_type=action_type,
+                    performed_by=performed_by,
+                    notes=notes,
+                    qty_in_action=qty_delivered,
+                    qty_total_after_action=new_total_delivered,
+                    **kwargs
+                )
+                
+                wopr.qty_delivered = new_total_delivered
+                wopr.save()
+                
+                return {
+                    'success': True,
+                    'message': f'Parts {"fully" if is_fully_delivered else "partially"} delivered',
+                    'wopr_id': str(wopr.id),
+                    'qty_delivered_this_action': qty_delivered,
+                    'qty_delivered_total': wopr.qty_delivered,
+                    'qty_needed': wopr.qty_needed,
+                    'is_delivered': wopr.is_delivered,
+                    'is_fully_delivered': is_fully_delivered
+                }
+                
+        except WorkOrderPartRequest.DoesNotExist:
+            raise ValidationError(f"WorkOrderPartRequest with ID {wopr_id} not found")
+        except Exception as e:
+            raise ValidationError(f"Failed to deliver parts: {str(e)}")
+    
+    @staticmethod
+    def pickup_parts(wopr_id: str, qty_picked_up: int, performed_by: TenantUser = None, 
+                    notes: str = None, **kwargs) -> Dict[str, Any]:
+        """
+        Mechanic picks up parts (confirms receipt)
+        
+        Args:
+            wopr_id: WorkOrderPartRequest ID
+            qty_picked_up: Quantity being picked up
+            performed_by: User performing the action
+            notes: Optional notes
+            **kwargs: Additional metadata
+            
+        Returns:
+            Dict with success status
+        """
+        try:
+            with transaction.atomic():
+                wopr = WorkOrderPartRequest.objects.select_for_update().get(id=wopr_id)
+                
+                # Validate pickup quantity
+                available_for_pickup = wopr.qty_delivered
+                if qty_picked_up > available_for_pickup:
+                    raise ValidationError(f"Cannot pick up {qty_picked_up} parts. Only {available_for_pickup} delivered and available")
+                
+                # Create audit log
+                wopr._create_audit_log(
+                    previous_flags={
+                        'is_requested': wopr.is_requested,
+                        'is_available': wopr.is_available,
+                        'is_ordered': wopr.is_ordered,
+                        'is_delivered': wopr.is_delivered,
+                    },
+                    new_flags={
+                        'is_requested': wopr.is_requested,
+                        'is_available': wopr.is_available,
+                        'is_ordered': wopr.is_ordered,
+                        'is_delivered': wopr.is_delivered,
+                    },
+                    action_type=WorkOrderPartRequestLog.ActionType.PICKED_UP,
+                    performed_by=performed_by,
+                    notes=notes,
+                    qty_in_action=qty_picked_up,
+                    qty_total_after_action=qty_picked_up,
+                    **kwargs
+                )
+                
+                return {
+                    'success': True,
+                    'message': f'Parts picked up successfully',
+                    'wopr_id': str(wopr.id),
+                    'qty_picked_up': qty_picked_up,
+                    'qty_delivered_total': wopr.qty_delivered
+                }
+                
+        except WorkOrderPartRequest.DoesNotExist:
+            raise ValidationError(f"WorkOrderPartRequest with ID {wopr_id} not found")
+        except Exception as e:
+            raise ValidationError(f"Failed to pickup parts: {str(e)}")
+    
+    @staticmethod
+    def cancel_availability(wopr_id: str, performed_by: TenantUser = None, 
+                          notes: str = None, **kwargs) -> Dict[str, Any]:
+        """
+        Cancel parts availability and release reservation
+        
+        Args:
+            wopr_id: WorkOrderPartRequest ID
+            performed_by: User performing the action
+            notes: Optional notes
+            **kwargs: Additional metadata
+            
+        Returns:
+            Dict with success status
+        """
+        try:
+            with transaction.atomic():
+                wopr = WorkOrderPartRequest.objects.select_for_update().get(id=wopr_id)
+                
+                # Release reservation if exists
+                if wopr.inventory_batch and wopr.qty_available > 0:
+                    inventory_batch = InventoryBatch.objects.select_for_update().get(id=wopr.inventory_batch.id)
+                    inventory_batch.qty_reserved -= wopr.qty_available
+                    inventory_batch.save()
+                
+                # Create audit log
+                wopr._create_audit_log(
+                    previous_flags={
+                        'is_requested': wopr.is_requested,
+                        'is_available': wopr.is_available,
+                        'is_ordered': wopr.is_ordered,
+                        'is_delivered': wopr.is_delivered,
+                    },
+                    new_flags={
+                        'is_requested': wopr.is_requested,
+                        'is_available': False,
+                        'is_ordered': wopr.is_ordered,
+                        'is_delivered': wopr.is_delivered,
+                    },
+                    action_type=WorkOrderPartRequestLog.ActionType.AVAILABILITY_CANCELLED,
+                    performed_by=performed_by,
+                    notes=notes,
+                    qty_in_action=wopr.qty_available,
+                    qty_total_after_action=0,
+                    **kwargs
+                )
+                
+                # Reset availability
+                wopr.qty_available = 0
+                wopr.inventory_batch = None
+                wopr.save()
+                
+                return {
+                    'success': True,
+                    'message': 'Parts availability cancelled and reservation released',
+                    'wopr_id': str(wopr.id),
+                    'is_available': wopr.is_available
+                }
+                
+        except WorkOrderPartRequest.DoesNotExist:
+            raise ValidationError(f"WorkOrderPartRequest with ID {wopr_id} not found")
+        except Exception as e:
+            raise ValidationError(f"Failed to cancel availability: {str(e)}")
+
+
+# Global service instances
 inventory_service = InventoryService()
+workflow_service = WorkOrderPartRequestWorkflowService()
 
 # Global decoder instance
 location_decoder = LocationStringDecoder()

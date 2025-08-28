@@ -21,6 +21,15 @@ class WorkOrderPartRequestApiSerializer(WorkOrderPartRequestBaseSerializer):
     pass
 
 
+class WorkOrderPartRequestLogApiSerializer(WorkOrderPartRequestLogBaseSerializer):
+    """API serializer for WorkOrderPartRequestLog model with API-specific customizations"""
+    
+    class Meta:
+        model = None  # Will be set by the base serializer
+        fields = '__all__'
+        read_only_fields = ('id', 'created_at', 'updated_at')
+
+
 class PartMovementApiSerializer(PartMovementBaseSerializer):
     """API serializer for PartMovement model with API-specific customizations"""
     pass

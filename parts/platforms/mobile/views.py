@@ -22,3 +22,13 @@ class PartmovementMobileView(PartMovementBaseView):
     serializer_class = PartmovementMobileSerializer
 
 
+class WorkOrderPartRequestWorkflowMobileView(WorkOrderPartRequestWorkflowBaseView):
+    """Mobile view for WOPR workflow operations"""
+    pass
+
+
+class WorkOrderPartRequestLogMobileView(WorkOrderPartRequestLogBaseView):
+    """Mobile view for WorkOrderPartRequestLog read-only operations"""
+    serializer_class = WorkOrderPartRequestLogMobileSerializer
+
+

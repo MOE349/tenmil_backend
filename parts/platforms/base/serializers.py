@@ -553,3 +553,128 @@ class WorkOrderPartMovementSerializer(PartMovementBaseSerializer):
         return response
 
 
+# Workflow Serializers for WorkOrderPartRequest Actions
+
+class RequestPartsSerializer(serializers.Serializer):
+    """Serializer for mechanic requesting parts"""
+    qty_needed = serializers.IntegerField(
+        min_value=1,
+        help_text="Quantity of parts needed"
+    )
+    notes = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=1000,
+        help_text="Optional notes about the request"
+    )
+
+
+class ConfirmAvailabilitySerializer(serializers.Serializer):
+    """Serializer for warehouse keeper confirming parts availability"""
+    qty_available = serializers.IntegerField(
+        min_value=1,
+        help_text="Quantity available for reservation"
+    )
+    inventory_batch_id = serializers.UUIDField(
+        help_text="Inventory batch to reserve from"
+    )
+    notes = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=1000,
+        help_text="Optional notes about availability"
+    )
+    
+    def validate(self, data):
+        """Validate that the inventory batch exists and has sufficient quantity"""
+        from parts.models import InventoryBatch
+        
+        try:
+            inventory_batch = InventoryBatch.objects.get(id=data['inventory_batch_id'])
+            available_qty = inventory_batch.qty_on_hand - inventory_batch.qty_reserved
+            
+            if data['qty_available'] > available_qty:
+                raise serializers.ValidationError(
+                    f"Only {available_qty} parts available in batch, requested {data['qty_available']}"
+                )
+                
+        except InventoryBatch.DoesNotExist:
+            raise serializers.ValidationError("Inventory batch not found")
+            
+        return data
+
+
+class MarkOrderedSerializer(serializers.Serializer):
+    """Serializer for marking parts as ordered externally"""
+    notes = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=1000,
+        help_text="Optional notes about the order"
+    )
+
+
+class DeliverPartsSerializer(serializers.Serializer):
+    """Serializer for warehouse keeper delivering parts"""
+    qty_delivered = serializers.IntegerField(
+        min_value=1,
+        help_text="Quantity being delivered"
+    )
+    notes = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=1000,
+        help_text="Optional notes about delivery"
+    )
+
+
+class PickupPartsSerializer(serializers.Serializer):
+    """Serializer for mechanic picking up parts"""
+    qty_picked_up = serializers.IntegerField(
+        min_value=1,
+        help_text="Quantity being picked up"
+    )
+    notes = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=1000,
+        help_text="Optional notes about pickup"
+    )
+
+
+class CancelAvailabilitySerializer(serializers.Serializer):
+    """Serializer for cancelling parts availability"""
+    notes = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=1000,
+        help_text="Optional notes about cancellation"
+    )
+
+
+class WorkOrderPartRequestLogBaseSerializer(BaseSerializer):
+    """Base serializer for WorkOrderPartRequestLog"""
+    
+    class Meta:
+        model = None  # Will be set by platform-specific serializers
+        fields = '__all__'
+        read_only_fields = ('id', 'created_at', 'updated_at')
+    
+    def mod_to_representation(self, instance):
+        response = super().mod_to_representation(instance)
+        
+        # Add computed fields
+        if instance.performed_by:
+            response['performed_by_email'] = instance.performed_by.email
+            response['performed_by_name'] = f"{instance.performed_by.first_name} {instance.performed_by.last_name}".strip()
+        
+        if instance.work_order_part_request:
+            response['work_order_code'] = instance.work_order_part_request.work_order_part.work_order.code
+            response['part_number'] = instance.work_order_part_request.work_order_part.part.part_number
+            response['part_name'] = instance.work_order_part_request.work_order_part.part.name
+        
+        # Format action type for display
+        response['action_type_display'] = instance.get_action_type_display()
+        
+        return response
+

@@ -22,3 +22,13 @@ class PartmovementDashboardView(PartMovementBaseView):
     serializer_class = PartmovementDashboardSerializer
 
 
+class WorkOrderPartRequestWorkflowDashboardView(WorkOrderPartRequestWorkflowBaseView):
+    """Dashboard view for WOPR workflow operations"""
+    pass
+
+
+class WorkOrderPartRequestLogDashboardView(WorkOrderPartRequestLogBaseView):
+    """Dashboard view for WorkOrderPartRequestLog read-only operations"""
+    serializer_class = WorkOrderPartRequestLogDashboardSerializer
+
+

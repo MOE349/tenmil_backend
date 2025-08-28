@@ -1,11 +1,11 @@
-from rest_framework import status
+from rest_framework import status, viewsets
 from datetime import datetime
 from django.core.exceptions import ValidationError
 from configurations.base_features.views.base_api_view import BaseAPIView
 from configurations.base_features.exceptions.base_exceptions import LocalBaseException
-from parts.models import Part, InventoryBatch, WorkOrderPart, WorkOrderPartRequest, PartMovement
+from parts.models import Part, InventoryBatch, WorkOrderPart, WorkOrderPartRequest, PartMovement, WorkOrderPartRequestLog
 from parts.platforms.base.serializers import *
-from parts.services import inventory_service, InsufficientStockError, InvalidOperationError
+from parts.services import inventory_service, workflow_service, InsufficientStockError, InvalidOperationError
 
 
 class PartBaseView(BaseAPIView):
@@ -1729,6 +1729,353 @@ class WorkOrderPartMovementBaseView(PartMovementBaseView):
         params = super().get_request_params(request)
         # Filter to only show movements that are related to work orders
         params['work_order__isnull'] = False
+        return params
+
+
+class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
+    """Base view for WOPR workflow operations"""
+    model_class = WorkOrderPartRequest
+    http_method_names = ['get', 'post']
+    
+    def _get_client_metadata(self, request):
+        """Extract client metadata for audit logging"""
+        return {
+            'ip_address': request.META.get('REMOTE_ADDR'),
+            'user_agent': request.META.get('HTTP_USER_AGENT', '')[:500]  # Truncate long user agents
+        }
+    
+    def request_parts(self, request, pk=None):
+        """
+        POST /work-order-part-requests/{id}/request
+        Mechanic requests parts
+        """
+        try:
+            serializer = RequestPartsSerializer(data=request.data)
+            if not serializer.is_valid():
+                return self.format_response(
+                    data=None,
+                    errors=serializer.errors,
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Get client metadata
+            metadata = self._get_client_metadata(request)
+            
+            # Call service
+            result = workflow_service.request_parts(
+                wopr_id=pk,
+                qty_needed=serializer.validated_data['qty_needed'],
+                performed_by=request.user,
+                notes=serializer.validated_data.get('notes'),
+                **metadata
+            )
+            
+            return self.format_response(
+                data=result,
+                status_code=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            return self.handle_exception(e)
+    
+    def confirm_availability(self, request, pk=None):
+        """
+        POST /work-order-part-requests/{id}/confirm-availability
+        Warehouse keeper confirms availability and reserves parts
+        """
+        try:
+            serializer = ConfirmAvailabilitySerializer(data=request.data)
+            if not serializer.is_valid():
+                return self.format_response(
+                    data=None,
+                    errors=serializer.errors,
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Get client metadata
+            metadata = self._get_client_metadata(request)
+            
+            # Call service
+            result = workflow_service.confirm_availability(
+                wopr_id=pk,
+                qty_available=serializer.validated_data['qty_available'],
+                inventory_batch_id=str(serializer.validated_data['inventory_batch_id']),
+                performed_by=request.user,
+                notes=serializer.validated_data.get('notes'),
+                **metadata
+            )
+            
+            return self.format_response(
+                data=result,
+                status_code=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            return self.handle_exception(e)
+    
+    def mark_ordered(self, request, pk=None):
+        """
+        POST /work-order-part-requests/{id}/mark-ordered
+        Mark parts as ordered externally
+        """
+        try:
+            serializer = MarkOrderedSerializer(data=request.data)
+            if not serializer.is_valid():
+                return self.format_response(
+                    data=None,
+                    errors=serializer.errors,
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Get client metadata
+            metadata = self._get_client_metadata(request)
+            
+            # Call service
+            result = workflow_service.mark_ordered(
+                wopr_id=pk,
+                performed_by=request.user,
+                notes=serializer.validated_data.get('notes'),
+                **metadata
+            )
+            
+            return self.format_response(
+                data=result,
+                status_code=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            return self.handle_exception(e)
+    
+    def deliver_parts(self, request, pk=None):
+        """
+        POST /work-order-part-requests/{id}/deliver
+        Warehouse keeper delivers parts (marks ready for pickup)
+        """
+        try:
+            serializer = DeliverPartsSerializer(data=request.data)
+            if not serializer.is_valid():
+                return self.format_response(
+                    data=None,
+                    errors=serializer.errors,
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Get client metadata
+            metadata = self._get_client_metadata(request)
+            
+            # Call service
+            result = workflow_service.deliver_parts(
+                wopr_id=pk,
+                qty_delivered=serializer.validated_data['qty_delivered'],
+                performed_by=request.user,
+                notes=serializer.validated_data.get('notes'),
+                **metadata
+            )
+            
+            return self.format_response(
+                data=result,
+                status_code=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            return self.handle_exception(e)
+    
+    def pickup_parts(self, request, pk=None):
+        """
+        POST /work-order-part-requests/{id}/pickup
+        Mechanic picks up parts (confirms receipt)
+        """
+        try:
+            serializer = PickupPartsSerializer(data=request.data)
+            if not serializer.is_valid():
+                return self.format_response(
+                    data=None,
+                    errors=serializer.errors,
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Get client metadata
+            metadata = self._get_client_metadata(request)
+            
+            # Call service
+            result = workflow_service.pickup_parts(
+                wopr_id=pk,
+                qty_picked_up=serializer.validated_data['qty_picked_up'],
+                performed_by=request.user,
+                notes=serializer.validated_data.get('notes'),
+                **metadata
+            )
+            
+            return self.format_response(
+                data=result,
+                status_code=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            return self.handle_exception(e)
+    
+    def cancel_availability(self, request, pk=None):
+        """
+        POST /work-order-part-requests/{id}/cancel-availability
+        Cancel parts availability and release reservation
+        """
+        try:
+            serializer = CancelAvailabilitySerializer(data=request.data)
+            if not serializer.is_valid():
+                return self.format_response(
+                    data=None,
+                    errors=serializer.errors,
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Get client metadata
+            metadata = self._get_client_metadata(request)
+            
+            # Call service
+            result = workflow_service.cancel_availability(
+                wopr_id=pk,
+                performed_by=request.user,
+                notes=serializer.validated_data.get('notes'),
+                **metadata
+            )
+            
+            return self.format_response(
+                data=result,
+                status_code=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            return self.handle_exception(e)
+    
+    def pending_requests(self, request):
+        """
+        GET /work-order-part-requests/pending
+        Get all pending part requests for warehouse keepers
+        """
+        try:
+            # Get query parameters for filtering
+            work_order_id = request.query_params.get('work_order_id')
+            part_id = request.query_params.get('part_id')
+            location_id = request.query_params.get('location_id')
+            limit = int(request.query_params.get('limit', 100))
+            offset = int(request.query_params.get('offset', 0))
+            
+            # Base queryset for pending requests
+            queryset = WorkOrderPartRequest.objects.filter(
+                is_requested=True,
+                is_available=False  # Not yet processed by warehouse
+            ).select_related(
+                'work_order_part__work_order',
+                'work_order_part__part',
+                'inventory_batch__location'
+            ).prefetch_related(
+                'audit_logs'
+            )
+            
+            # Apply filters
+            if work_order_id:
+                queryset = queryset.filter(work_order_part__work_order_id=work_order_id)
+            if part_id:
+                queryset = queryset.filter(work_order_part__part_id=part_id)
+            if location_id:
+                # Filter by parts that have inventory in the specified location
+                queryset = queryset.filter(
+                    work_order_part__part__inventory_batches__location_id=location_id,
+                    work_order_part__part__inventory_batches__qty_on_hand__gt=0
+                ).distinct()
+            
+            # Order by priority (most recent first, then by work order priority if available)
+            queryset = queryset.order_by('-created_at')
+            
+            # Apply pagination
+            total_count = queryset.count()
+            queryset = queryset[offset:offset + limit]
+            
+            # Serialize the data
+            serialized_data = []
+            for wopr in queryset:
+                # Get available inventory for this part
+                available_inventory = []
+                for batch in wopr.work_order_part.part.inventory_batches.filter(qty_on_hand__gt=0):
+                    available_qty = batch.qty_on_hand - batch.qty_reserved
+                    if available_qty > 0:
+                        available_inventory.append({
+                            'inventory_batch_id': str(batch.id),
+                            'location': str(batch.location),
+                            'location_id': str(batch.location.id),
+                            'available_qty': available_qty,
+                            'unit_cost': str(batch.last_unit_cost),
+                            'aisle': batch.aisle,
+                            'row': batch.row,
+                            'bin': batch.bin,
+                            'received_date': batch.received_date.isoformat()
+                        })
+                
+                # Get request timeline
+                first_requested = wopr.get_first_requested_at()
+                
+                item_data = {
+                    'id': str(wopr.id),
+                    'work_order_code': wopr.work_order_part.work_order.code,
+                    'work_order_id': str(wopr.work_order_part.work_order.id),
+                    'part_number': wopr.work_order_part.part.part_number,
+                    'part_name': wopr.work_order_part.part.name,
+                    'part_id': str(wopr.work_order_part.part.id),
+                    'qty_needed': wopr.qty_needed,
+                    'qty_available': wopr.qty_available,
+                    'qty_delivered': wopr.qty_delivered,
+                    'is_requested': wopr.is_requested,
+                    'is_available': wopr.is_available,
+                    'is_ordered': wopr.is_ordered,
+                    'is_delivered': wopr.is_delivered,
+                    'requested_at': first_requested.isoformat() if first_requested else None,
+                    'created_at': wopr.created_at.isoformat(),
+                    'available_inventory': available_inventory,
+                    'total_available_qty': sum(inv['available_qty'] for inv in available_inventory),
+                    'can_fulfill': sum(inv['available_qty'] for inv in available_inventory) >= (wopr.qty_needed or 0)
+                }
+                serialized_data.append(item_data)
+            
+            return self.format_response(
+                data={
+                    'results': serialized_data,
+                    'count': len(serialized_data),
+                    'total_count': total_count,
+                    'has_more': (offset + limit) < total_count,
+                    'next_offset': offset + limit if (offset + limit) < total_count else None
+                },
+                status_code=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            return self.handle_exception(e)
+
+
+class WorkOrderPartRequestLogBaseView(BaseAPIView):
+    """Base view for WorkOrderPartRequestLog CRUD operations"""
+    serializer_class = WorkOrderPartRequestLogBaseSerializer
+    model_class = WorkOrderPartRequestLog
+    http_method_names = ['get']  # Read-only
+    
+    def get_request_params(self, request):
+        """Override to add workflow-specific filtering"""
+        params = super().get_request_params(request)
+        
+        # Add filtering by work order part request
+        wopr_id = request.query_params.get('work_order_part_request_id')
+        if wopr_id:
+            params['work_order_part_request'] = wopr_id
+        
+        # Add filtering by action type
+        action_type = request.query_params.get('action_type')
+        if action_type:
+            params['action_type'] = action_type
+        
+        # Add filtering by user
+        performed_by = request.query_params.get('performed_by')
+        if performed_by:
+            params['performed_by'] = performed_by
+        
         return params
 
 

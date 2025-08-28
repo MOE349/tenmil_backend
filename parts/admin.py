@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.translation import gettext_lazy as _
-from .models import Part, InventoryBatch, WorkOrderPart, WorkOrderPartRequest, PartMovement
+from .models import Part, InventoryBatch, WorkOrderPart, WorkOrderPartRequest, PartMovement, WorkOrderPartRequestLog
 
 
 @admin.register(Part)
@@ -31,11 +31,46 @@ class WorkOrderPartAdmin(admin.ModelAdmin):
 
 @admin.register(WorkOrderPartRequest)
 class WorkOrderPartRequestAdmin(admin.ModelAdmin):
-    list_display = ['work_order_part', 'qty_needed', 'qty_used', 'unit_cost_snapshot', 'total_parts_cost', 'is_approved', 'created_at']
-    list_filter = ['is_approved', 'created_at']
+    list_display = ['work_order_part', 'qty_needed', 'qty_used', 'qty_available', 'qty_delivered', 'workflow_status', 'is_approved', 'created_at']
+    list_filter = ['is_approved', 'is_requested', 'is_available', 'is_ordered', 'is_delivered', 'created_at']
     search_fields = ['work_order_part__work_order__code', 'work_order_part__part__part_number', 'work_order_part__part__name']
     readonly_fields = ['total_parts_cost', 'created_at', 'updated_at']
     list_select_related = ['work_order_part__work_order', 'work_order_part__part', 'inventory_batch']
+    
+    def workflow_status(self, obj):
+        """Display current workflow status"""
+        statuses = []
+        if obj.is_requested:
+            statuses.append("Requested")
+        if obj.is_available:
+            statuses.append("Available")
+        if obj.is_ordered:
+            statuses.append("Ordered")
+        if obj.is_delivered:
+            statuses.append("Delivered")
+        return " | ".join(statuses) if statuses else "Draft"
+    workflow_status.short_description = "Workflow Status"
+
+
+@admin.register(WorkOrderPartRequestLog)
+class WorkOrderPartRequestLogAdmin(admin.ModelAdmin):
+    list_display = ['work_order_part_request', 'action_type', 'performed_by', 'qty_in_action', 'qty_total_after_action', 'created_at']
+    list_filter = ['action_type', 'created_at', 'performed_by']
+    search_fields = [
+        'work_order_part_request__work_order_part__work_order__code', 
+        'work_order_part_request__work_order_part__part__part_number',
+        'performed_by__email'
+    ]
+    readonly_fields = ['created_at', 'updated_at']
+    list_select_related = ['work_order_part_request__work_order_part__work_order', 'work_order_part_request__work_order_part__part', 'performed_by']
+    
+    def has_change_permission(self, request, obj=None):
+        # Audit logs should be immutable after creation
+        return False
+    
+    def has_delete_permission(self, request, obj=None):
+        # Audit logs should be immutable after creation
+        return False
 
 
 @admin.register(PartMovement)

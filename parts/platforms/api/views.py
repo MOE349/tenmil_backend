@@ -5,11 +5,13 @@ from rest_framework import viewsets
 
 from parts.platforms.base.views import (
     PartBaseView, InventoryBatchBaseView, WorkOrderPartBaseView, WorkOrderPartRequestBaseView,
-    PartMovementBaseView, WorkOrderPartMovementBaseView, InventoryOperationsBaseView
+    PartMovementBaseView, WorkOrderPartMovementBaseView, InventoryOperationsBaseView,
+    WorkOrderPartRequestWorkflowBaseView, WorkOrderPartRequestLogBaseView
 )
 from parts.platforms.api.serializers import (
     PartApiSerializer, InventoryBatchApiSerializer, WorkOrderPartApiSerializer,
-    WorkOrderPartRequestApiSerializer, PartMovementApiSerializer, WorkOrderPartMovementApiSerializer
+    WorkOrderPartRequestApiSerializer, PartMovementApiSerializer, WorkOrderPartMovementApiSerializer,
+    WorkOrderPartRequestLogApiSerializer
 )
 
 
@@ -91,5 +93,15 @@ class InventoryOperationsApiView(InventoryOperationsBaseView, viewsets.ViewSet):
     def get_part_locations(self, request):
         """Get part locations with simplified name-based response format"""
         return super().get_part_locations(request)
+
+
+class WorkOrderPartRequestWorkflowApiView(WorkOrderPartRequestWorkflowBaseView):
+    """API view for WOPR workflow operations"""
+    pass
+
+
+class WorkOrderPartRequestLogApiView(WorkOrderPartRequestLogBaseView):
+    """API view for WorkOrderPartRequestLog read-only operations"""
+    serializer_class = WorkOrderPartRequestLogApiSerializer
 
 

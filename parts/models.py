@@ -195,6 +195,40 @@ class WorkOrderPartRequest(BaseModel):
         default=False,
         help_text="Whether this part request has been approved"
     )
+    
+    # Multi-flag workflow tracking
+    is_requested = models.BooleanField(
+        _("Is Requested"), 
+        default=False,
+        help_text="Mechanic has submitted the request"
+    )
+    is_available = models.BooleanField(
+        _("Is Available"), 
+        default=False,
+        help_text="Parts are available (partially or completely)"
+    )
+    is_ordered = models.BooleanField(
+        _("Is Ordered"), 
+        default=False,
+        help_text="Parts have been ordered externally"
+    )
+    is_delivered = models.BooleanField(
+        _("Is Delivered"), 
+        default=False,
+        help_text="Parts have been delivered (partially or completely)"
+    )
+    
+    # Quantity tracking for partial fulfillment
+    qty_available = models.IntegerField(
+        _("Quantity Available"),
+        default=0,
+        help_text="Total quantity currently available for pickup"
+    )
+    qty_delivered = models.IntegerField(
+        _("Quantity Delivered"),
+        default=0, 
+        help_text="Total quantity delivered to mechanic so far"
+    )
 
     class Meta:
         indexes = [
@@ -202,6 +236,13 @@ class WorkOrderPartRequest(BaseModel):
             models.Index(fields=['inventory_batch']),
             models.Index(fields=['is_approved']),
             models.Index(fields=['work_order_part', 'is_approved']),
+            # Workflow indexes
+            models.Index(fields=['is_requested']),
+            models.Index(fields=['is_available']),
+            models.Index(fields=['is_ordered']),
+            models.Index(fields=['is_delivered']),
+            models.Index(fields=['is_requested', 'is_available']),
+            models.Index(fields=['work_order_part', 'is_requested']),
         ]
         verbose_name = _("Work Order Part Request")
         verbose_name_plural = _("Work Order Part Requests")
@@ -220,9 +261,39 @@ class WorkOrderPartRequest(BaseModel):
             raise ValidationError(_("Quantity needed must be positive if specified"))
 
     def save(self, *args, **kwargs):
+        from django.utils import timezone
+        
+        # Capture previous state for audit logging
+        previous_flags = {}
+        if self.pk:
+            try:
+                old_instance = WorkOrderPartRequest.objects.get(pk=self.pk)
+                previous_flags = {
+                    'is_requested': old_instance.is_requested,
+                    'is_available': old_instance.is_available,
+                    'is_ordered': old_instance.is_ordered,
+                    'is_delivered': old_instance.is_delivered,
+                }
+            except WorkOrderPartRequest.DoesNotExist:
+                pass
+        
         # Auto approve if qty_used is provided
         if self.qty_used is not None and self.qty_used > 0:
             self.is_approved = True
+
+        # New workflow logic with auto-set flags
+        if self.qty_needed and not self.is_requested:
+            self.is_requested = True
+            
+        if self.qty_available > 0:
+            self.is_available = True
+        else:
+            self.is_available = False
+            
+        if self.qty_delivered > 0:
+            self.is_delivered = True
+        else:
+            self.is_delivered = False
 
         # Auto-calculate total_parts_cost (handle null values for planning)
         if self.unit_cost_snapshot is not None and self.qty_used is not None:
@@ -231,10 +302,227 @@ class WorkOrderPartRequest(BaseModel):
             self.total_parts_cost = 0
             
         super().save(*args, **kwargs)
+        
+        # Create audit log entry if flags changed
+        current_flags = {
+            'is_requested': self.is_requested,
+            'is_available': self.is_available,
+            'is_ordered': self.is_ordered,
+            'is_delivered': self.is_delivered,
+        }
+        
+        if previous_flags != current_flags:
+            self._create_audit_log(previous_flags, current_flags)
+    
+    def _create_audit_log(self, previous_flags, new_flags, action_type=None, performed_by=None, notes=None, **kwargs):
+        """Helper method to create audit log entries"""
+        # Determine action type from flag changes if not provided
+        if not action_type:
+            if new_flags['is_requested'] and not previous_flags.get('is_requested', False):
+                action_type = WorkOrderPartRequestLog.ActionType.REQUESTED
+            elif new_flags['is_available'] and not previous_flags.get('is_available', False):
+                # Determine if partial or full availability
+                if self.qty_available >= (self.qty_needed or 0):
+                    action_type = WorkOrderPartRequestLog.ActionType.FULLY_AVAILABLE
+                else:
+                    action_type = WorkOrderPartRequestLog.ActionType.PARTIAL_AVAILABLE
+            elif new_flags['is_ordered'] and not previous_flags.get('is_ordered', False):
+                action_type = WorkOrderPartRequestLog.ActionType.ORDERED
+            elif new_flags['is_delivered'] and not previous_flags.get('is_delivered', False):
+                # Determine if partial or full delivery
+                if self.qty_delivered >= (self.qty_needed or 0):
+                    action_type = WorkOrderPartRequestLog.ActionType.FULLY_DELIVERED
+                else:
+                    action_type = WorkOrderPartRequestLog.ActionType.PARTIAL_DELIVERED
+        
+        if action_type:
+            WorkOrderPartRequestLog.objects.create(
+                work_order_part_request=self,
+                action_type=action_type,
+                performed_by=performed_by,
+                qty_needed_snapshot=self.qty_needed,
+                qty_available_snapshot=self.qty_available,
+                qty_delivered_snapshot=self.qty_delivered,
+                qty_used_snapshot=self.qty_used,
+                inventory_batch_snapshot=self.inventory_batch,
+                notes=notes,
+                previous_status_flags=previous_flags,
+                new_status_flags=new_flags,
+                **kwargs
+            )
+
+    def get_first_requested_at(self):
+        """Get timestamp of first request"""
+        log = self.audit_logs.filter(
+            action_type=WorkOrderPartRequestLog.ActionType.REQUESTED
+        ).first()
+        return log.created_at if log else None
+    
+    def get_first_available_at(self):
+        """Get timestamp when parts first became available"""
+        log = self.audit_logs.filter(
+            action_type__in=[
+                WorkOrderPartRequestLog.ActionType.PARTIAL_AVAILABLE,
+                WorkOrderPartRequestLog.ActionType.FULLY_AVAILABLE
+            ]
+        ).first()
+        return log.created_at if log else None
+    
+    def get_fully_available_at(self):
+        """Get timestamp when all parts became available"""
+        log = self.audit_logs.filter(
+            action_type=WorkOrderPartRequestLog.ActionType.FULLY_AVAILABLE
+        ).first()
+        return log.created_at if log else None
+    
+    def get_delivery_history(self):
+        """Get all delivery events with quantities"""
+        return self.audit_logs.filter(
+            action_type__in=[
+                WorkOrderPartRequestLog.ActionType.PARTIAL_DELIVERED,
+                WorkOrderPartRequestLog.ActionType.FULLY_DELIVERED
+            ]
+        ).order_by('created_at')
+    
+    def is_fully_fulfilled(self):
+        """Check if request is completely fulfilled"""
+        return self.qty_delivered >= (self.qty_needed or 0)
 
     def __str__(self):
         qty_display = self.qty_used if self.qty_used is not None else "TBD"
         return f"WO {self.work_order_part.work_order.code} - {self.work_order_part.part.part_number} - Qty: {qty_display}"
+
+
+class WorkOrderPartRequestLog(BaseModel):
+    """Specialized audit trail for WorkOrderPartRequest workflow operations"""
+    
+    class ActionType(models.TextChoices):
+        REQUESTED = 'requested', _('Requested')           
+        PARTIAL_AVAILABLE = 'partial_available', _('Partial Available')
+        FULLY_AVAILABLE = 'fully_available', _('Fully Available')
+        ORDERED = 'ordered', _('Ordered')                 
+        PARTIAL_DELIVERED = 'partial_delivered', _('Partial Delivered')
+        FULLY_DELIVERED = 'fully_delivered', _('Fully Delivered')
+        PICKED_UP = 'picked_up', _('Picked Up')          
+        CONSUMED = 'consumed', _('Consumed')              
+        CANCELLED = 'cancelled', _('Cancelled')           
+        RETURNED = 'returned', _('Returned')
+        AVAILABILITY_CANCELLED = 'availability_cancelled', _('Availability Cancelled')
+        BATCH_REASSIGNED = 'batch_reassigned', _('Batch Reassigned')
+        
+    work_order_part_request = models.ForeignKey(
+        WorkOrderPartRequest,
+        on_delete=models.CASCADE,
+        related_name="audit_logs"
+    )
+    action_type = models.CharField(
+        _("Action Type"),
+        max_length=25,
+        choices=ActionType.choices
+    )
+    performed_by = models.ForeignKey(
+        TenantUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="wopr_audit_logs",
+        help_text="User who performed this action"
+    )
+    
+    # Quantity-specific tracking for partial operations
+    qty_in_action = models.IntegerField(
+        _("Quantity in Action"),
+        null=True,
+        blank=True,
+        help_text="Specific quantity involved in this action"
+    )
+    qty_total_after_action = models.IntegerField(
+        _("Total Quantity After Action"),
+        null=True,
+        blank=True,
+        help_text="Total quantity after this action completed"
+    )
+    
+    # Snapshot data at time of action
+    qty_needed_snapshot = models.IntegerField(
+        _("Qty Needed Snapshot"),
+        null=True,
+        blank=True,
+        help_text="qty_needed value at time of action"
+    )
+    qty_available_snapshot = models.IntegerField(
+        _("Qty Available Snapshot"),
+        null=True,
+        blank=True,
+        help_text="qty_available value at time of action"
+    )
+    qty_delivered_snapshot = models.IntegerField(
+        _("Qty Delivered Snapshot"),
+        null=True,
+        blank=True,
+        help_text="qty_delivered value at time of action"
+    )
+    qty_used_snapshot = models.IntegerField(
+        _("Qty Used Snapshot"), 
+        null=True,
+        blank=True,
+        help_text="qty_used value at time of action"
+    )
+    
+    inventory_batch_snapshot = models.ForeignKey(
+        InventoryBatch,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Inventory batch at time of action"
+    )
+    
+    # Action-specific metadata
+    notes = models.TextField(
+        _("Notes"),
+        blank=True,
+        null=True,
+        help_text="Optional notes about this action"
+    )
+    previous_status_flags = models.JSONField(
+        _("Previous Status Flags"),
+        default=dict,
+        help_text="Snapshot of all status flags before this action"
+    )
+    new_status_flags = models.JSONField(
+        _("New Status Flags"),
+        default=dict,
+        help_text="Snapshot of all status flags after this action"
+    )
+    
+    # System metadata
+    ip_address = models.GenericIPAddressField(
+        _("IP Address"),
+        null=True,
+        blank=True,
+        help_text="IP address of user performing action"
+    )
+    user_agent = models.TextField(
+        _("User Agent"),
+        blank=True,
+        null=True,
+        help_text="Browser/app user agent"
+    )
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['work_order_part_request', 'created_at']),
+            models.Index(fields=['action_type', 'created_at']),
+            models.Index(fields=['performed_by', 'created_at']),
+            models.Index(fields=['work_order_part_request', 'action_type']),
+        ]
+        verbose_name = _("Work Order Part Request Log")
+        verbose_name_plural = _("Work Order Part Request Logs")
+        ordering = ['-created_at']
+
+    def __str__(self):
+        user_display = self.performed_by.email if self.performed_by else "System"
+        return f"WOPR {self.work_order_part_request.id} - {self.action_type} by {user_display} @ {self.created_at}"
 
 
 class PartMovement(BaseModel):

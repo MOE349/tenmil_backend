@@ -2,7 +2,8 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from parts.platforms.api.views import (
     PartApiView, InventoryBatchApiView, WorkOrderPartApiView, WorkOrderPartRequestApiView,
-    PartMovementApiView, WorkOrderPartMovementApiView, InventoryOperationsApiView
+    PartMovementApiView, WorkOrderPartMovementApiView, InventoryOperationsApiView,
+    WorkOrderPartRequestWorkflowApiView, WorkOrderPartRequestLogApiView
 )
 
 # Create a router for the operations viewset
@@ -47,4 +48,46 @@ urlpatterns = [
     path('work-orders/<uuid:work_order_id>/parts', 
          InventoryOperationsApiView.as_view({'get': 'get_work_order_parts'}), 
          name='work-order-parts-summary'),
+    
+    # Workflow endpoints for WorkOrderPartRequest
+    path('work-order-part-requests/pending', 
+         WorkOrderPartRequestWorkflowApiView.as_view({'get': 'pending_requests'}), 
+         name='wopr-pending-requests'),
+    
+    path('work-order-part-requests/<uuid:pk>/request', 
+         WorkOrderPartRequestWorkflowApiView.as_view({'post': 'request_parts'}), 
+         name='wopr-request'),
+    
+    path('work-order-part-requests/<uuid:pk>/confirm-availability', 
+         WorkOrderPartRequestWorkflowApiView.as_view({'post': 'confirm_availability'}), 
+         name='wopr-confirm-availability'),
+    
+    path('work-order-part-requests/<uuid:pk>/mark-ordered', 
+         WorkOrderPartRequestWorkflowApiView.as_view({'post': 'mark_ordered'}), 
+         name='wopr-mark-ordered'),
+    
+    path('work-order-part-requests/<uuid:pk>/deliver', 
+         WorkOrderPartRequestWorkflowApiView.as_view({'post': 'deliver_parts'}), 
+         name='wopr-deliver'),
+    
+    path('work-order-part-requests/<uuid:pk>/pickup', 
+         WorkOrderPartRequestWorkflowApiView.as_view({'post': 'pickup_parts'}), 
+         name='wopr-pickup'),
+    
+    path('work-order-part-requests/<uuid:pk>/cancel-availability', 
+         WorkOrderPartRequestWorkflowApiView.as_view({'post': 'cancel_availability'}), 
+         name='wopr-cancel-availability'),
+    
+    # Audit log endpoints
+    path('work-order-part-requests/<uuid:pk>/audit-log', 
+         WorkOrderPartRequestLogApiView.as_view(), 
+         name='wopr-audit-log'),
+    
+    path('work-order-part-request-logs', 
+         WorkOrderPartRequestLogApiView.as_view(), 
+         name='wopr-logs-list'),
+    
+    path('work-order-part-request-logs/<uuid:pk>', 
+         WorkOrderPartRequestLogApiView.as_view(), 
+         name='wopr-logs-detail'),
 ]
