@@ -1866,7 +1866,6 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
             # Call service
             workflow_service.deliver_parts(
                 wopr_id=pk,
-                qty_delivered=serializer.validated_data['qty_delivered'],
                 performed_by=request.user,
                 notes=serializer.validated_data.get('notes'),
                 **metadata

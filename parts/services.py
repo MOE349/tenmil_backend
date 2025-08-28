@@ -1750,14 +1750,13 @@ class WorkOrderPartRequestWorkflowService:
             raise ValidationError(f"Failed to mark as ordered: {str(e)}")
     
     @staticmethod
-    def deliver_parts(wopr_id: str, qty_delivered: int, performed_by: TenantUser = None, 
+    def deliver_parts(wopr_id: str, performed_by: TenantUser = None, 
                      notes: str = None, **kwargs) -> Dict[str, Any]:
         """
-        Warehouse keeper delivers parts (marks ready for pickup)
+        Warehouse keeper marks parts as delivered (simple workflow state change)
         
         Args:
             wopr_id: WorkOrderPartRequest ID
-            qty_delivered: Quantity being delivered
             performed_by: User performing the action
             notes: Optional notes
             **kwargs: Additional metadata
@@ -1769,20 +1768,6 @@ class WorkOrderPartRequestWorkflowService:
             with transaction.atomic():
                 wopr = WorkOrderPartRequest.objects.select_for_update().get(id=wopr_id)
                 
-                # Validate delivery quantity
-                max_deliverable = wopr.qty_available - wopr.qty_delivered
-                if qty_delivered > max_deliverable:
-                    raise ValidationError(f"Cannot deliver {qty_delivered} parts. Only {max_deliverable} available for delivery")
-                
-                # Update delivery quantity
-                new_total_delivered = wopr.qty_delivered + qty_delivered
-                
-                # Determine action type
-                is_fully_delivered = new_total_delivered >= (wopr.qty_needed or 0)
-                action_type = (WorkOrderPartRequestLog.ActionType.FULLY_DELIVERED 
-                             if is_fully_delivered 
-                             else WorkOrderPartRequestLog.ActionType.PARTIAL_DELIVERED)
-                
                 # Create audit log
                 wopr._create_audit_log(
                     previous_flags={
@@ -1792,31 +1777,37 @@ class WorkOrderPartRequestWorkflowService:
                         'is_delivered': wopr.is_delivered,
                     },
                     new_flags={
-                        'is_requested': wopr.is_requested,
-                        'is_available': wopr.is_available,
-                        'is_ordered': wopr.is_ordered,
+                        'is_requested': False,
+                        'is_available': False,
+                        'is_ordered': False,
                         'is_delivered': True,
                     },
-                    action_type=action_type,
+                    action_type=WorkOrderPartRequestLog.ActionType.FULLY_DELIVERED,
                     performed_by=performed_by,
                     notes=notes,
-                    qty_in_action=qty_delivered,
-                    qty_total_after_action=new_total_delivered,
+                    qty_in_action=wopr.qty_available,
+                    qty_total_after_action=wopr.qty_available,
                     **kwargs
                 )
                 
-                wopr.qty_delivered = new_total_delivered
+                # Update workflow flags
+                wopr.is_requested = False
+                wopr.is_available = False
+                wopr.is_ordered = False
+                wopr.is_delivered = True
+                wopr.qty_delivered = wopr.qty_available  # Set delivered qty to available qty
                 wopr.save()
                 
                 return {
                     'success': True,
-                    'message': f'Parts {"fully" if is_fully_delivered else "partially"} delivered',
+                    'message': 'Parts marked as delivered',
                     'wopr_id': str(wopr.id),
-                    'qty_delivered_this_action': qty_delivered,
-                    'qty_delivered_total': wopr.qty_delivered,
+                    'qty_delivered': wopr.qty_delivered,
                     'qty_needed': wopr.qty_needed,
-                    'is_delivered': wopr.is_delivered,
-                    'is_fully_delivered': is_fully_delivered
+                    'is_requested': wopr.is_requested,
+                    'is_available': wopr.is_available,
+                    'is_ordered': wopr.is_ordered,
+                    'is_delivered': wopr.is_delivered
                 }
                 
         except WorkOrderPartRequest.DoesNotExist:

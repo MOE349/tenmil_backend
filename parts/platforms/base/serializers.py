@@ -662,11 +662,7 @@ class MarkOrderedSerializer(serializers.Serializer):
 
 
 class DeliverPartsSerializer(serializers.Serializer):
-    """Serializer for warehouse keeper delivering parts"""
-    qty_delivered = serializers.IntegerField(
-        min_value=1,
-        help_text="Quantity being delivered"
-    )
+    """Serializer for warehouse keeper marking parts as delivered"""
     notes = serializers.CharField(
         required=False,
         allow_blank=True,
