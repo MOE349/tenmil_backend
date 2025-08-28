@@ -79,35 +79,26 @@ class InventoryService:
     @staticmethod
     def decode_location(coded_location: str) -> Tuple[str, str, str, str, str]:
         """
-        Decode location string format: SITE_CODE - LOCATION_NAME - AISLE/ROW/BIN
-        Example: "RC - MOUNTAIN - A5/R7/B1"
-        Returns: (site_code, location_name, aisle, row, bin)
+        Decode location string format using existing LocationStringDecoder
+        
+        Args:
+            coded_location: Location string in format "SITE_CODE - LOCATION_NAME - AISLE/ROW/BIN - qty: X.X"
+            
+        Returns:
+            Tuple of (site_code, location_name, aisle, row, bin)
         """
-        # Split by ' - ' to get main parts
-        main_parts = coded_location.split(' - ')
-        if len(main_parts) < 3:
-            raise InvalidOperationError(f"Invalid coded location format: {coded_location}. Expected: SITE_CODE - LOCATION_NAME - AISLE/ROW/BIN")
-        
-        site_code = main_parts[0].strip()
-        location_name = main_parts[1].strip()
-        
-        # The third part contains AISLE/ROW/BIN, possibly with additional info like qty
-        position_part = main_parts[2].strip()
-        
-        # Extract just the AISLE/ROW/BIN part (before any additional info like "- qty:")
-        if ' - ' in position_part:
-            position_part = position_part.split(' - ')[0].strip()
-        
-        # Split AISLE/ROW/BIN by '/'
-        position_parts = position_part.split('/')
-        if len(position_parts) != 3:
-            raise InvalidOperationError(f"Invalid position format in coded location: {position_part}. Expected: AISLE/ROW/BIN")
-        
-        aisle = position_parts[0].strip()
-        row = position_parts[1].strip()
-        bin_code = position_parts[2].strip()
-        
-        return (site_code, location_name, aisle, row, bin_code)
+        try:
+            # Use existing LocationStringDecoder
+            decoded = location_decoder.decode_location_string(coded_location)
+            return (
+                decoded['site_code'],
+                decoded['location_name'], 
+                decoded['aisle'],
+                decoded['row'],
+                decoded['bin']
+            )
+        except ValueError as e:
+            raise InvalidOperationError(str(e))
     
     @staticmethod
     def get_fifo_batches_by_location(part_id: str, coded_location: str = None, location_id: str = None) -> List[InventoryBatch]:
