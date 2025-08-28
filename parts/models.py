@@ -291,20 +291,11 @@ class WorkOrderPartRequest(BaseModel):
         # Auto approve if qty_used is provided
         if self.qty_used is not None and self.qty_used > 0:
             self.is_approved = True
-
-        # New workflow logic with auto-set flags
-        if self.qty_needed and not self.is_requested:
-            self.is_requested = True
-            
-        if self.qty_available > 0:
-            self.is_available = True
-        else:
+            self.is_requested = False
             self.is_available = False
-            
-        if self.qty_delivered > 0:
-            self.is_delivered = True
-        else:
+            self.is_ordered = False
             self.is_delivered = False
+            
 
         # Auto-calculate total_parts_cost (handle null values for planning)
         if self.unit_cost_snapshot is not None and self.qty_used is not None:

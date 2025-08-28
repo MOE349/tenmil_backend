@@ -1753,7 +1753,7 @@ class WorkOrderPartRequestWorkflowService:
     def deliver_parts(wopr_id: str, performed_by: TenantUser = None, 
                      notes: str = None, **kwargs) -> Dict[str, Any]:
         """
-        Warehouse keeper marks parts as delivered (simple workflow state change)
+        Warehouse keeper delivers parts - handles inventory movements and quantity updates
         
         Args:
             wopr_id: WorkOrderPartRequest ID
@@ -1767,6 +1767,77 @@ class WorkOrderPartRequestWorkflowService:
         try:
             with transaction.atomic():
                 wopr = WorkOrderPartRequest.objects.select_for_update().get(id=wopr_id)
+                wop = wopr.work_order_part
+                qty_to_deliver = wopr.qty_available
+                
+                if qty_to_deliver <= 0:
+                    raise ValidationError("No available quantity to deliver")
+                
+                # Get all WOPR records for this WorkOrderPart that have reserved inventory
+                related_woprs = WorkOrderPartRequest.objects.filter(
+                    work_order_part=wop,
+                    qty_available__gt=0,
+                    inventory_batch__isnull=False
+                ).select_for_update()
+                
+                total_delivered = 0
+                batch_movements = []
+                
+                # Process inventory movements for all related WOPR records
+                for related_wopr in related_woprs:
+                    if total_delivered >= qty_to_deliver:
+                        break
+                        
+                    batch = related_wopr.inventory_batch
+                    if not batch:
+                        continue
+                    
+                    # Calculate how much to deliver from this batch
+                    qty_from_this_batch = min(
+                        related_wopr.qty_available,
+                        qty_to_deliver - total_delivered
+                    )
+                    
+                    if qty_from_this_batch > 0:
+                        # Update inventory batch: resolve reservations and consume inventory
+                        batch.qty_on_hand -= batch.qty_reserved
+                        batch.qty_reserved = 0
+                        batch.save(update_fields=['qty_on_hand', 'qty_reserved'])
+                        
+                        # Create movement record for consumption
+                        PartMovement.objects.create(
+                            part=batch.part,
+                            inventory_batch=batch,
+                            movement_type=PartMovement.MovementType.ISSUE,
+                            quantity=qty_from_this_batch,
+                            unit_cost=batch.last_unit_cost,
+                            total_cost=qty_from_this_batch * batch.last_unit_cost,
+                            work_order_part=wop,
+                            performed_by=performed_by,
+                            notes=notes or f"Delivered for WOPR {wopr_id}"
+                        )
+                        
+                        batch_movements.append({
+                            'batch_id': str(batch.id),
+                            'qty_delivered': qty_from_this_batch,
+                            'unit_cost': float(batch.last_unit_cost),
+                            'total_cost': float(qty_from_this_batch * batch.last_unit_cost)
+                        })
+                        
+                        total_delivered += qty_from_this_batch
+                
+                # Update WorkOrderPart quantities
+                # Add qty_available to qty_used (or set if None)
+                if wop.qty_used is None:
+                    wop.qty_used = qty_to_deliver
+                else:
+                    wop.qty_used += qty_to_deliver
+                
+                # Subtract qty_available from qty_needed
+                if wop.qty_needed is not None:
+                    wop.qty_needed = max(0, wop.qty_needed - qty_to_deliver)
+                
+                wop.save(update_fields=['qty_used', 'qty_needed'])
                 
                 # Create audit log
                 wopr._create_audit_log(
@@ -1785,29 +1856,33 @@ class WorkOrderPartRequestWorkflowService:
                     action_type=WorkOrderPartRequestLog.ActionType.FULLY_DELIVERED,
                     performed_by=performed_by,
                     notes=notes,
-                    qty_in_action=wopr.qty_available,
-                    qty_total_after_action=wopr.qty_available,
+                    qty_in_action=qty_to_deliver,
+                    qty_total_after_action=qty_to_deliver,
                     **kwargs
                 )
                 
-                # Update workflow flags
+                # Update WOPR workflow flags
                 wopr.is_requested = False
                 wopr.is_available = False
                 wopr.is_ordered = False
                 wopr.is_delivered = True
-                wopr.qty_delivered = wopr.qty_available  # Set delivered qty to available qty
+                wopr.qty_delivered = qty_to_deliver
                 wopr.save()
                 
                 return {
                     'success': True,
-                    'message': 'Parts marked as delivered',
+                    'message': 'Parts delivered and inventory updated',
                     'wopr_id': str(wopr.id),
+                    'wop_id': str(wop.id),
                     'qty_delivered': wopr.qty_delivered,
-                    'qty_needed': wopr.qty_needed,
-                    'is_requested': wopr.is_requested,
-                    'is_available': wopr.is_available,
-                    'is_ordered': wopr.is_ordered,
-                    'is_delivered': wopr.is_delivered
+                    'wop_qty_used': wop.qty_used,
+                    'wop_qty_needed': wop.qty_needed,
+                    'is_requested': False,
+                    'is_available': False,
+                    'is_ordered': False,
+                    'is_delivered': True,
+                    'batch_movements': batch_movements,
+                    'total_cost': sum(m['total_cost'] for m in batch_movements)
                 }
                 
         except WorkOrderPartRequest.DoesNotExist:
