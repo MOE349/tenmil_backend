@@ -120,10 +120,10 @@ class InventoryBatch(BaseModel):
 
     @property
     def coded_location(self):
-        """Generate coded location string: SITE_CODE-LOCATION_NAME-AISLE-ROW-BIN"""
+        """Generate coded location string: SITE_CODE - LOCATION_NAME - AISLE/ROW/BIN"""
         site_code = self.location.site.code if self.location.site else 'UNK'
         location_name = self.location.name or 'UNK'
-        return f"{site_code}-{location_name}-{self.aisle}-{self.row}-{self.bin}"
+        return f"{site_code} - {location_name} - {self.aisle}/{self.row}/{self.bin}"
     
     @property
     def available_qty(self):

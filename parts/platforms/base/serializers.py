@@ -624,7 +624,7 @@ class ConfirmAvailabilitySerializer(serializers.Serializer):
     )
     coded_location = serializers.CharField(
         max_length=200,
-        help_text="Location code in format SITE_CODE-LOCATION_NAME-AISLE-ROW-BIN"
+        help_text="Location code in format 'SITE_CODE - LOCATION_NAME - AISLE/ROW/BIN' (e.g., 'RC - MOUNTAIN - A5/R7/B1')"
     )
     notes = serializers.CharField(
         required=False,
@@ -635,14 +635,15 @@ class ConfirmAvailabilitySerializer(serializers.Serializer):
     
     def validate_coded_location(self, value):
         """Validate coded location format and existence"""
-        parts = value.split('-')
-        if len(parts) != 5:
+        try:
+            from parts.services import InventoryService
+            site_code, location_name, aisle, row, bin_code = InventoryService.decode_location(value)
+        except Exception as e:
             raise serializers.ValidationError(
-                "Invalid coded location format. Expected: SITE_CODE-LOCATION_NAME-AISLE-ROW-BIN"
+                f"Invalid coded location format: {str(e)}. Expected: 'SITE_CODE - LOCATION_NAME - AISLE/ROW/BIN' (e.g., 'RC - MOUNTAIN - A5/R7/B1')"
             )
         
         # Validate location exists
-        site_code, location_name = parts[0], parts[1]
         try:
             from company.models import Location
             Location.objects.select_related('site').get(
