@@ -287,11 +287,7 @@ class WorkOrderPartRequest(BaseModel):
                     'is_delivered': old_instance.is_delivered,
                 }
             except WorkOrderPartRequest.DoesNotExist:
-                pass
-        
-        # Auto approve if qty_used is provided
-        if self.qty_used is not None and self.qty_used > 0:
-            self.is_approved = True
+                pass    
             
 
         # Auto-calculate total_parts_cost (handle null values for planning)

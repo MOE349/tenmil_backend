@@ -1657,6 +1657,7 @@ class WorkOrderPartRequestWorkflowService:
                 wopr.is_available = False
                 wopr.is_ordered = False
                 wopr.is_delivered = False
+                wopr.is_approved = False
                 
                 # Create audit log with user context
                 wopr._create_audit_log(
@@ -1939,6 +1940,7 @@ class WorkOrderPartRequestWorkflowService:
                         'is_available': False,
                         'is_ordered': False,
                         'is_delivered': False,
+                        'is_approved': False,
                     }
                     action_type = WorkOrderPartRequestLog.ActionType.PARTIAL_DELIVERED
                     message_type = "partially"
@@ -1949,6 +1951,7 @@ class WorkOrderPartRequestWorkflowService:
                         'is_available': False,
                         'is_ordered': False,
                         'is_delivered': True,
+                        'is_approved': True,
                     }
                     action_type = WorkOrderPartRequestLog.ActionType.FULLY_DELIVERED
                     message_type = "fully"
