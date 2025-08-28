@@ -1978,7 +1978,11 @@ class WorkOrderPartRequestWorkflowService:
                 wopr.is_delivered = new_flags['is_delivered']
                 
                 # Update qty_delivered (cumulative total)
-                wopr.qty_delivered = 0
+                if wopr.qty_delivered is None:
+                    wopr.qty_delivered = qty_to_deliver
+                else:
+                    wopr.qty_delivered += qty_to_deliver
+                wopr.qty_available = 0
                 wopr.save()
                 
                 return {
