@@ -202,6 +202,26 @@ class InventoryService:
         
         if total_available < qty_needed:
             part = Part.objects.get(id=part_id)
+            # Add debugging info to help identify the issue
+            batch_info = []
+            for batch in batches:
+                batch_info.append({
+                    'id': str(batch.id),
+                    'location': str(batch.location),
+                    'position': f"{batch.aisle}/{batch.row}/{batch.bin}",
+                    'qty_on_hand': batch.qty_on_hand,
+                    'qty_reserved': batch.qty_reserved,
+                    'available_qty': batch.available_qty
+                })
+            
+            error_msg = f"Insufficient stock for {part.part_number}: requested {qty_needed}, available {total_available}"
+            if coded_location:
+                error_msg += f" at location '{coded_location}'"
+            if batch_info:
+                error_msg += f". Found {len(batch_info)} batches: {batch_info}"
+            else:
+                error_msg += ". No batches found matching criteria."
+                
             raise InsufficientStockError(part.part_number, qty_needed, total_available)
         
         # Allocate from batches in FIFO order
@@ -1856,9 +1876,9 @@ class WorkOrderPartRequestWorkflowService:
                     )
                     
                     if qty_from_this_batch > 0:
-                        # Update inventory batch: resolve reservations and consume inventory
-                        batch.qty_on_hand -= batch.qty_reserved
-                        batch.qty_reserved = 0
+                        # Update inventory batch: consume delivered quantity and clear reservations
+                        batch.qty_on_hand -= qty_from_this_batch
+                        batch.qty_reserved -= qty_from_this_batch  # Reduce reservations by delivered amount
                         batch.save(update_fields=['qty_on_hand', 'qty_reserved'])
                         
                         # Create movement record for consumption
