@@ -1966,6 +1966,9 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
                 is_available=False  # Not yet processed by warehouse
             ).select_related(
                 'work_order_part__work_order',
+                'work_order_part__work_order__asset',
+                'work_order_part__work_order__asset__location',
+                'work_order_part__work_order__asset__location__site',
                 'work_order_part__part',
                 'inventory_batch__location'
             ).prefetch_related(
@@ -2014,10 +2017,40 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
                 # Get request timeline
                 first_requested = wopr.get_first_requested_at()
                 
+                # Format asset information
+                work_order = wopr.work_order_part.work_order
+                asset_display = None
+                asset_location_display = None
+                
+                if work_order.asset:
+                    # Format: "(asset_code) asset_name" e.g. "(T01) JLG Telehandler"
+                    asset_code = getattr(work_order.asset, 'code', '') or getattr(work_order.asset, 'asset_code', '') or ''
+                    asset_name = getattr(work_order.asset, 'name', '') or getattr(work_order.asset, 'asset_name', '') or ''
+                    if asset_code and asset_name:
+                        asset_display = f"({asset_code}) {asset_name}"
+                    elif asset_name:
+                        asset_display = asset_name
+                    elif asset_code:
+                        asset_display = f"({asset_code})"
+                    
+                    # Format asset location: "site_code - location_name" e.g. "RC - MOUNTAIN"
+                    if work_order.asset.location:
+                        location = work_order.asset.location
+                        site_code = location.site.code if location.site else ''
+                        location_name = location.name if location else ''
+                        if site_code and location_name:
+                            asset_location_display = f"{site_code} - {location_name}"
+                        elif location_name:
+                            asset_location_display = location_name
+                        elif site_code:
+                            asset_location_display = site_code
+                
                 item_data = {
                     'id': str(wopr.id),
                     'work_order_code': wopr.work_order_part.work_order.code,
                     'work_order_id': str(wopr.work_order_part.work_order.id),
+                    'asset': asset_display,
+                    'asset_location': asset_location_display,
                     'part_number': wopr.work_order_part.part.part_number,
                     'part_name': wopr.work_order_part.part.name,
                     'part_id': str(wopr.work_order_part.part.id),
@@ -2037,7 +2070,13 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
                 serialized_data.append(item_data)
             
             return self.format_response(
-                data=serialized_data,
+                data={
+                    'results': serialized_data,
+                    'count': len(serialized_data),
+                    'total_count': total_count,
+                    'has_more': (offset + limit) < total_count,
+                    'next_offset': offset + limit if (offset + limit) < total_count else None
+                },
                 status_code=status.HTTP_200_OK
             )
             
