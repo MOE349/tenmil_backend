@@ -1537,16 +1537,22 @@ class WorkOrderPartRequestWorkflowService:
                     ).first()
                     
                     if wopr:
-                        # Update existing planning record
+                        # Update existing planning record and reset all flags
                         wopr.qty_needed = qty_needed
                         wopr.is_requested = True
+                        wopr.is_available = False
+                        wopr.is_ordered = False
+                        wopr.is_delivered = False
                         created = False
                     else:
                         # Create new planning record
                         wopr = WorkOrderPartRequest.objects.create(
                             work_order_part=wop,
                             qty_needed=qty_needed,
-                            is_requested=True
+                            is_requested=True,
+                            is_available=False,
+                            is_ordered=False,
+                            is_delivered=False
                         )
                         created = True
                         
@@ -1562,13 +1568,19 @@ class WorkOrderPartRequestWorkflowService:
                     if wopr:
                         wopr.qty_needed = qty_needed
                         wopr.is_requested = True
+                        wopr.is_available = False
+                        wopr.is_ordered = False
+                        wopr.is_delivered = False
                         created = False
                     else:
                         # Fallback: create new record
                         wopr = WorkOrderPartRequest.objects.create(
                             work_order_part=wop,
                             qty_needed=qty_needed,
-                            is_requested=True
+                            is_requested=True,
+                            is_available=False,
+                            is_ordered=False,
+                            is_delivered=False
                         )
                         created = True
 
@@ -1577,15 +1589,15 @@ class WorkOrderPartRequestWorkflowService:
                 wopr._create_audit_log(
                     previous_flags={
                         'is_requested': wopr.is_requested if not created else False,
-                        'is_available': wopr.is_available,
-                        'is_ordered': wopr.is_ordered,
-                        'is_delivered': wopr.is_delivered,
+                        'is_available': True if not created and wopr.is_available else False,
+                        'is_ordered': True if not created and wopr.is_ordered else False,
+                        'is_delivered': True if not created and wopr.is_delivered else False,
                     },
                     new_flags={
                         'is_requested': True,
-                        'is_available': wopr.is_available,
-                        'is_ordered': wopr.is_ordered,
-                        'is_delivered': wopr.is_delivered,
+                        'is_available': False,
+                        'is_ordered': False,
+                        'is_delivered': False,
                     },
                     action_type=WorkOrderPartRequestLog.ActionType.REQUESTED,
                     performed_by=performed_by,
@@ -1631,22 +1643,29 @@ class WorkOrderPartRequestWorkflowService:
             with transaction.atomic():
                 wopr = WorkOrderPartRequest.objects.select_for_update().get(id=wopr_id)
                 
-                # Update quantities and flags
+                # Capture previous state before changes
+                previous_flags = {
+                    'is_requested': wopr.is_requested,
+                    'is_available': wopr.is_available,
+                    'is_ordered': wopr.is_ordered,
+                    'is_delivered': wopr.is_delivered,
+                }
+                
+                # Update quantities and reset all flags
                 wopr.qty_needed = qty_needed
+                wopr.is_requested = True
+                wopr.is_available = False
+                wopr.is_ordered = False
+                wopr.is_delivered = False
                 
                 # Create audit log with user context
                 wopr._create_audit_log(
-                    previous_flags={
-                        'is_requested': wopr.is_requested,
-                        'is_available': wopr.is_available,
-                        'is_ordered': wopr.is_ordered,
-                        'is_delivered': wopr.is_delivered,
-                    },
+                    previous_flags=previous_flags,
                     new_flags={
                         'is_requested': True,
-                        'is_available': wopr.is_available,
-                        'is_ordered': wopr.is_ordered,
-                        'is_delivered': wopr.is_delivered,
+                        'is_available': False,
+                        'is_ordered': False,
+                        'is_delivered': False,
                     },
                     action_type=WorkOrderPartRequestLog.ActionType.REQUESTED,
                     performed_by=performed_by,
@@ -1900,9 +1919,35 @@ class WorkOrderPartRequestWorkflowService:
                 else:
                     wopr.qty_used += qty_to_deliver
                 
-                # Subtract qty_available from qty_needed
+                # Subtract qty_available from qty_needed and determine delivery type
+                original_qty_needed = wopr.qty_needed or 0
                 if wopr.qty_needed is not None:
                     wopr.qty_needed = max(0, wopr.qty_needed - qty_to_deliver)
+                
+                # Determine if this is a partial or full delivery
+                is_partial_delivery = (wopr.qty_needed or 0) > 0
+                
+                # Set flags based on delivery type
+                if is_partial_delivery:
+                    # Partial delivery: reset for next request cycle
+                    new_flags = {
+                        'is_requested': True,   # Reset to allow new request for remaining qty
+                        'is_available': False,
+                        'is_ordered': False,
+                        'is_delivered': False,
+                    }
+                    action_type = WorkOrderPartRequestLog.ActionType.PARTIAL_DELIVERED
+                    message_type = "partially"
+                else:
+                    # Full delivery: mark as completed
+                    new_flags = {
+                        'is_requested': False,
+                        'is_available': False,
+                        'is_ordered': False,
+                        'is_delivered': True,
+                    }
+                    action_type = WorkOrderPartRequestLog.ActionType.FULLY_DELIVERED
+                    message_type = "fully"
                 
                 # Create audit log
                 wopr._create_audit_log(
@@ -1912,13 +1957,8 @@ class WorkOrderPartRequestWorkflowService:
                         'is_ordered': wopr.is_ordered,
                         'is_delivered': wopr.is_delivered,
                     },
-                    new_flags={
-                        'is_requested': False,
-                        'is_available': False,
-                        'is_ordered': False,
-                        'is_delivered': True,
-                    },
-                    action_type=WorkOrderPartRequestLog.ActionType.FULLY_DELIVERED,
+                    new_flags=new_flags,
+                    action_type=action_type,
                     performed_by=performed_by,
                     notes=notes,
                     qty_in_action=qty_to_deliver,
@@ -1927,25 +1967,26 @@ class WorkOrderPartRequestWorkflowService:
                 )
                 
                 # Update WOPR workflow flags
-                wopr.is_requested = False
-                wopr.is_available = False
-                wopr.is_ordered = False
-                wopr.is_delivered = True
+                wopr.is_requested = new_flags['is_requested']
+                wopr.is_available = new_flags['is_available']
+                wopr.is_ordered = new_flags['is_ordered']
+                wopr.is_delivered = new_flags['is_delivered']
                 wopr.qty_delivered = qty_to_deliver
                 wopr.save()
                 
                 return {
                     'success': True,
-                    'message': 'Parts delivered and inventory updated',
+                    'message': f'Parts {message_type} delivered and inventory updated',
                     'wopr_id': str(wopr.id),
                     'wop_id': str(wop.id),
                     'qty_delivered': wopr.qty_delivered,
                     'qty_used': wopr.qty_used,
                     'qty_needed': wopr.qty_needed,
-                    'is_requested': False,
-                    'is_available': False,
-                    'is_ordered': False,
-                    'is_delivered': True,
+                    'is_requested': wopr.is_requested,
+                    'is_available': wopr.is_available,
+                    'is_ordered': wopr.is_ordered,
+                    'is_delivered': wopr.is_delivered,
+                    'is_partial_delivery': is_partial_delivery,
                     'batch_movements': batch_movements,
                     'total_cost': sum(m['total_cost'] for m in batch_movements)
                 }
