@@ -1962,8 +1962,7 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
             
             # Base queryset for pending requests
             queryset = WorkOrderPartRequest.objects.filter(
-                is_requested=True,
-                is_available=False  # Not yet processed by warehouse
+                is_requested=True
             ).select_related(
                 'work_order_part__work_order',
                 'work_order_part__work_order__content_type',
