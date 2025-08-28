@@ -1924,8 +1924,12 @@ class WorkOrderPartRequestWorkflowService:
                 if wopr.qty_needed is not None:
                     wopr.qty_needed = max(0, wopr.qty_needed - qty_to_deliver)
                 
+                # Calculate total delivered after this delivery
+                current_qty_delivered = (wopr.qty_delivered or 0) + qty_to_deliver
+                
                 # Determine if this is a partial or full delivery
-                is_partial_delivery = (wopr.qty_needed or 0) > 0
+                # Compare total delivered against original request (before we updated qty_needed)
+                is_partial_delivery = current_qty_delivered < original_qty_needed
                 
                 # Set flags based on delivery type
                 if is_partial_delivery:
@@ -1971,7 +1975,12 @@ class WorkOrderPartRequestWorkflowService:
                 wopr.is_available = new_flags['is_available']
                 wopr.is_ordered = new_flags['is_ordered']
                 wopr.is_delivered = new_flags['is_delivered']
-                wopr.qty_delivered = qty_to_deliver
+                
+                # Update qty_delivered (cumulative total)
+                if wopr.qty_delivered is None:
+                    wopr.qty_delivered = qty_to_deliver
+                else:
+                    wopr.qty_delivered += qty_to_deliver
                 wopr.save()
                 
                 return {
