@@ -1746,8 +1746,8 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
     
     def request_parts(self, request, pk=None):
         """
-        POST /work-order-part-requests/{id}/request
-        Mechanic requests parts
+        POST /work-order-parts/{id}/request
+        Mechanic requests parts for a WorkOrderPart
         """
         try:
             serializer = RequestPartsSerializer(data=request.data)
@@ -1761,9 +1761,9 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
             # Get client metadata
             metadata = self._get_client_metadata(request)
             
-            # Call service
-            result = workflow_service.request_parts(
-                wopr_id=pk,
+            # Call service with WorkOrderPart ID
+            result = workflow_service.request_parts_for_work_order_part(
+                wop_id=pk,
                 qty_needed=serializer.validated_data['qty_needed'],
                 performed_by=request.user,
                 notes=serializer.validated_data.get('notes'),

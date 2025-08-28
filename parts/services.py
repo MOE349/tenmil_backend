@@ -1307,6 +1307,80 @@ class WorkOrderPartRequestWorkflowService:
     """Business logic for WOPR workflow operations"""
     
     @staticmethod
+    def request_parts_for_work_order_part(wop_id: str, qty_needed: int, performed_by: TenantUser = None, notes: str = None, **kwargs) -> Dict[str, Any]:
+        """
+        Mechanic requests parts for a WorkOrderPart
+        
+        Args:
+            wop_id: WorkOrderPart ID
+            qty_needed: Quantity needed
+            performed_by: User performing the action
+            notes: Optional notes
+            **kwargs: Additional metadata (ip_address, user_agent)
+            
+        Returns:
+            Dict with success status and WOPR data
+        """
+        try:
+            with transaction.atomic():
+                # Get the WorkOrderPart
+                wop = WorkOrderPart.objects.select_for_update().get(id=wop_id)
+                
+                # Get or create WorkOrderPartRequest for planning
+                wopr, created = WorkOrderPartRequest.objects.get_or_create(
+                    work_order_part=wop,
+                    inventory_batch__isnull=True,  # Planning record (no specific batch)
+                    qty_used__isnull=True,        # Not yet consumed
+                    defaults={
+                        'qty_needed': qty_needed,
+                        'is_requested': True
+                    }
+                )
+                
+                # If not created, update the existing planning record
+                if not created:
+                    wopr.qty_needed = qty_needed
+                
+                # Create audit log with user context
+                wopr._create_audit_log(
+                    previous_flags={
+                        'is_requested': wopr.is_requested if not created else False,
+                        'is_available': wopr.is_available,
+                        'is_ordered': wopr.is_ordered,
+                        'is_delivered': wopr.is_delivered,
+                    },
+                    new_flags={
+                        'is_requested': True,
+                        'is_available': wopr.is_available,
+                        'is_ordered': wopr.is_ordered,
+                        'is_delivered': wopr.is_delivered,
+                    },
+                    action_type=WorkOrderPartRequestLog.ActionType.REQUESTED,
+                    performed_by=performed_by,
+                    notes=notes,
+                    qty_in_action=qty_needed,
+                    qty_total_after_action=qty_needed,
+                    **kwargs
+                )
+                
+                wopr.save()
+                
+                return {
+                    'success': True,
+                    'message': 'Parts requested successfully',
+                    'wopr_id': str(wopr.id),
+                    'wop_id': str(wop.id),
+                    'qty_needed': wopr.qty_needed,
+                    'is_requested': wopr.is_requested,
+                    'created': created
+                }
+                
+        except WorkOrderPart.DoesNotExist:
+            raise ValidationError(f"WorkOrderPart with ID {wop_id} not found")
+        except Exception as e:
+            raise ValidationError(f"Failed to request parts: {str(e)}")
+    
+    @staticmethod
     def request_parts(wopr_id: str, qty_needed: int, performed_by: TenantUser = None, notes: str = None, **kwargs) -> Dict[str, Any]:
         """
         Mechanic requests parts
