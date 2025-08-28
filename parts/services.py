@@ -1930,8 +1930,6 @@ class WorkOrderPartRequestWorkflowService:
                 remaining_qty_needed = wopr.qty_needed or 0
                 is_partial_delivery = remaining_qty_needed > 0
                 
-                print(f"DEBUG: original_qty_needed={original_qty_needed}, qty_to_deliver={qty_to_deliver}, remaining_qty_needed={remaining_qty_needed}, is_partial_delivery={is_partial_delivery}")
-                
                 # Set flags based on delivery type
                 if is_partial_delivery:
                     # Partial delivery: reset for next request cycle
