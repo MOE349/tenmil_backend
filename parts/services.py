@@ -1826,18 +1826,16 @@ class WorkOrderPartRequestWorkflowService:
                         
                         total_delivered += qty_from_this_batch
                 
-                # Update WorkOrderPart quantities
+                # Update WOPR quantities
                 # Add qty_available to qty_used (or set if None)
-                if wop.qty_used is None:
-                    wop.qty_used = qty_to_deliver
+                if wopr.qty_used is None:
+                    wopr.qty_used = qty_to_deliver
                 else:
-                    wop.qty_used += qty_to_deliver
+                    wopr.qty_used += qty_to_deliver
                 
                 # Subtract qty_available from qty_needed
-                if wop.qty_needed is not None:
-                    wop.qty_needed = max(0, wop.qty_needed - qty_to_deliver)
-                
-                wop.save(update_fields=['qty_used', 'qty_needed'])
+                if wopr.qty_needed is not None:
+                    wopr.qty_needed = max(0, wopr.qty_needed - qty_to_deliver)
                 
                 # Create audit log
                 wopr._create_audit_log(
@@ -1875,8 +1873,8 @@ class WorkOrderPartRequestWorkflowService:
                     'wopr_id': str(wopr.id),
                     'wop_id': str(wop.id),
                     'qty_delivered': wopr.qty_delivered,
-                    'wop_qty_used': wop.qty_used,
-                    'wop_qty_needed': wop.qty_needed,
+                    'qty_used': wopr.qty_used,
+                    'qty_needed': wopr.qty_needed,
                     'is_requested': False,
                     'is_available': False,
                     'is_ordered': False,
