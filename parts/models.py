@@ -120,9 +120,10 @@ class InventoryBatch(BaseModel):
 
     @property
     def coded_location(self):
-        """Generate coded location string: LOCATION_CODE-AISLE-ROW-BIN"""
-        location_code = getattr(self.location, 'code', '') or str(self.location.id)
-        return f"{location_code}-{self.aisle}-{self.row}-{self.bin}"
+        """Generate coded location string: SITE_CODE-LOCATION_NAME-AISLE-ROW-BIN"""
+        site_code = self.location.site.code if self.location.site else 'UNK'
+        location_name = self.location.name or 'UNK'
+        return f"{site_code}-{location_name}-{self.aisle}-{self.row}-{self.bin}"
     
     @property
     def available_qty(self):

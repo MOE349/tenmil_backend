@@ -624,7 +624,7 @@ class ConfirmAvailabilitySerializer(serializers.Serializer):
     )
     coded_location = serializers.CharField(
         max_length=200,
-        help_text="Location code in format LOCATION_CODE-AISLE-ROW-BIN"
+        help_text="Location code in format SITE_CODE-LOCATION_NAME-AISLE-ROW-BIN"
     )
     notes = serializers.CharField(
         required=False,
@@ -636,18 +636,21 @@ class ConfirmAvailabilitySerializer(serializers.Serializer):
     def validate_coded_location(self, value):
         """Validate coded location format and existence"""
         parts = value.split('-')
-        if len(parts) != 4:
+        if len(parts) != 5:
             raise serializers.ValidationError(
-                "Invalid coded location format. Expected: LOCATION_CODE-AISLE-ROW-BIN"
+                "Invalid coded location format. Expected: SITE_CODE-LOCATION_NAME-AISLE-ROW-BIN"
             )
         
         # Validate location exists
-        location_code = parts[0]
+        site_code, location_name = parts[0], parts[1]
         try:
             from company.models import Location
-            Location.objects.get(code=location_code)
+            Location.objects.select_related('site').get(
+                site__code=site_code,
+                name=location_name
+            )
         except Location.DoesNotExist:
-            raise serializers.ValidationError(f"Location not found for code: {location_code}")
+            raise serializers.ValidationError(f"Location not found for site code '{site_code}' and location name '{location_name}'")
         
         return value
 

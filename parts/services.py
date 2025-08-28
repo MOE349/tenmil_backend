@@ -77,14 +77,14 @@ class InventoryService:
         self.User = get_user_model()
     
     @staticmethod
-    def decode_location(coded_location: str) -> Tuple[str, str, str, str]:
+    def decode_location(coded_location: str) -> Tuple[str, str, str, str, str]:
         """
-        Decode location string format: LOCATION_CODE-AISLE-ROW-BIN
-        Returns: (location_code, aisle, row, bin)
+        Decode location string format: SITE_CODE-LOCATION_NAME-AISLE-ROW-BIN
+        Returns: (site_code, location_name, aisle, row, bin)
         """
         parts = coded_location.split('-')
-        if len(parts) != 4:
-            raise InvalidOperationError(f"Invalid coded location format: {coded_location}. Expected: LOCATION_CODE-AISLE-ROW-BIN")
+        if len(parts) != 5:
+            raise InvalidOperationError(f"Invalid coded location format: {coded_location}. Expected: SITE_CODE-LOCATION_NAME-AISLE-ROW-BIN")
         return tuple(parts)
     
     @staticmethod
@@ -107,10 +107,13 @@ class InventoryService:
         
         # Filter by coded location if provided
         if coded_location:
-            location_code, aisle, row, bin_code = InventoryService.decode_location(coded_location)
-            # Find location by code
+            site_code, location_name, aisle, row, bin_code = InventoryService.decode_location(coded_location)
+            # Find location by site code and location name
             try:
-                location = Location.objects.get(code=location_code)
+                location = Location.objects.select_related('site').get(
+                    site__code=site_code,
+                    name=location_name
+                )
                 queryset = queryset.filter(
                     location=location,
                     aisle=aisle,
@@ -118,7 +121,7 @@ class InventoryService:
                     bin=bin_code
                 )
             except Location.DoesNotExist:
-                raise InvalidOperationError(f"Location not found for code: {location_code}")
+                raise InvalidOperationError(f"Location not found for site code '{site_code}' and location name '{location_name}'")
         elif location_id:
             queryset = queryset.filter(location_id=location_id)
         
