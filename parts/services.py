@@ -250,16 +250,14 @@ class InventoryService:
                 part=batch.part,
                 inventory_batch=batch,
                 movement_type=movement_type,
-                quantity=qty_to_allocate,
-                unit_cost=batch.last_unit_cost,
-                total_cost=qty_to_allocate * batch.last_unit_cost,
-                work_order_part=work_order_part,
-                performed_by=performed_by,
-                notes=notes or f"FIFO {allocation_type} allocation"
+                qty_delta=qty_to_allocate if allocation_type == 'reserve' else -qty_to_allocate,
+                created_by=performed_by,
+                receipt_id=notes or f"FIFO {allocation_type} allocation"
             )
             
             total_qty += qty_to_allocate
             total_cost += qty_to_allocate * batch.last_unit_cost
+            
             batch_details.append({
                 'batch_id': str(batch.id),
                 'coded_location': batch.coded_location,

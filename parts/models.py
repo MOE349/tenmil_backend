@@ -540,6 +540,7 @@ class PartMovement(BaseModel):
         ADJUSTMENT = 'adjustment', _('Adjustment')
         RTV_OUT = 'rtv_out', _('Return to Vendor Out')
         COUNT_ADJUST = 'count_adjust', _('Count Adjustment')
+        RESERVE = 'reserve', _('Reserve')
 
     part = models.ForeignKey(
         Part, 
