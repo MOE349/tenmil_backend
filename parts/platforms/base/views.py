@@ -2077,16 +2077,9 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
                 serialized_data.append(item_data)
             
             return self.format_response(
-                data={
-                    'results': serialized_data,
-                    'count': len(serialized_data),
-                    'total_count': total_count,
-                    'has_more': (offset + limit) < total_count,
-                    'next_offset': offset + limit if (offset + limit) < total_count else None
-                },
+                data=serialized_data,
                 status_code=status.HTTP_200_OK
-            )
-            
+            )            
         except Exception as e:
             return self.handle_exception(e)
 
