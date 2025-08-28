@@ -147,22 +147,24 @@ class WorkOrderPartBaseSerializer(BaseSerializer):
         response['qty_delivered'] = aggregates['total_qty_delivered'] or 0
         
         # Aggregate workflow flags - combine logic from all related part requests
+        # Use Count with filter for boolean OR logic (ANY record has flag = True)
+        from django.db.models import Count
         workflow_aggregates = instance.part_requests.aggregate(
             # A WOP is "requested" if ANY related WOPR is requested
-            is_requested=Max('is_requested'),
+            is_requested_count=Count('id', filter=Q(is_requested=True)),
             # A WOP is "available" if ANY related WOPR is available
-            is_available=Max('is_available'), 
+            is_available_count=Count('id', filter=Q(is_available=True)),
             # A WOP is "ordered" if ANY related WOPR is ordered
-            is_ordered=Max('is_ordered'),
+            is_ordered_count=Count('id', filter=Q(is_ordered=True)),
             # A WOP is "delivered" if ANY related WOPR is delivered
-            is_delivered=Max('is_delivered')
+            is_delivered_count=Count('id', filter=Q(is_delivered=True))
         )
         
-        # Convert None to False for boolean fields
-        response['is_requested'] = workflow_aggregates['is_requested'] or False
-        response['is_available'] = workflow_aggregates['is_available'] or False
-        response['is_ordered'] = workflow_aggregates['is_ordered'] or False
-        response['is_delivered'] = workflow_aggregates['is_delivered'] or False
+        # Convert counts to boolean values (True if count > 0)
+        response['is_requested'] = (workflow_aggregates['is_requested_count'] or 0) > 0
+        response['is_available'] = (workflow_aggregates['is_available_count'] or 0) > 0
+        response['is_ordered'] = (workflow_aggregates['is_ordered_count'] or 0) > 0
+        response['is_delivered'] = (workflow_aggregates['is_delivered_count'] or 0) > 0
         
         # Add workflow status summary
         workflow_statuses = []
