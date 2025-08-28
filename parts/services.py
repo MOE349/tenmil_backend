@@ -76,6 +76,172 @@ class InventoryService:
     def __init__(self):
         self.User = get_user_model()
     
+    @staticmethod
+    def decode_location(coded_location: str) -> Tuple[str, str, str, str]:
+        """
+        Decode location string format: LOCATION_CODE-AISLE-ROW-BIN
+        Returns: (location_code, aisle, row, bin)
+        """
+        parts = coded_location.split('-')
+        if len(parts) != 4:
+            raise InvalidOperationError(f"Invalid coded location format: {coded_location}. Expected: LOCATION_CODE-AISLE-ROW-BIN")
+        return tuple(parts)
+    
+    @staticmethod
+    def get_fifo_batches_by_location(part_id: str, coded_location: str = None, location_id: str = None) -> List[InventoryBatch]:
+        """
+        Get inventory batches in FIFO order (oldest first) for a part at specific location
+        
+        Args:
+            part_id: Part UUID
+            coded_location: Optional coded location string (LOCATION_CODE-AISLE-ROW-BIN)
+            location_id: Optional specific location UUID (alternative to coded_location)
+        
+        Returns:
+            List of InventoryBatch objects ordered by received_date (FIFO)
+        """
+        queryset = InventoryBatch.objects.filter(
+            part_id=part_id,
+            qty_on_hand__gt=0  # Only batches with available stock
+        ).select_related('location', 'part')
+        
+        # Filter by coded location if provided
+        if coded_location:
+            location_code, aisle, row, bin_code = InventoryService.decode_location(coded_location)
+            # Find location by code
+            try:
+                location = Location.objects.get(code=location_code)
+                queryset = queryset.filter(
+                    location=location,
+                    aisle=aisle,
+                    row=row,
+                    bin=bin_code
+                )
+            except Location.DoesNotExist:
+                raise InvalidOperationError(f"Location not found for code: {location_code}")
+        elif location_id:
+            queryset = queryset.filter(location_id=location_id)
+        
+        # Order by received_date for FIFO
+        return list(queryset.order_by('received_date'))
+    
+    @staticmethod
+    @transaction.atomic
+    def allocate_inventory_fifo(
+        part_id: str, 
+        qty_needed: int, 
+        allocation_type: str = 'reserve',  # 'reserve' or 'consume'
+        coded_location: str = None,
+        location_id: str = None,
+        work_order_part: WorkOrderPart = None,
+        performed_by: TenantUser = None,
+        notes: str = None
+    ) -> Dict[str, Any]:
+        """
+        Allocate inventory using FIFO logic with location constraints
+        
+        Args:
+            part_id: Part UUID
+            qty_needed: Quantity to allocate
+            allocation_type: 'reserve' (for qty_reserved) or 'consume' (for qty_used)
+            coded_location: Optional coded location string (LOCATION_CODE-AISLE-ROW-BIN)
+            location_id: Optional specific location UUID
+            work_order_part: Optional WorkOrderPart for movement tracking
+            performed_by: User performing the action
+            notes: Optional notes
+        
+        Returns:
+            Dict with allocation summary and batch details
+            
+        Raises:
+            InsufficientStockError: If not enough stock available
+            InvalidOperationError: If location is invalid
+        """
+        if qty_needed <= 0:
+            return {
+                'total_qty_allocated': 0,
+                'total_cost': 0.0,
+                'batch_details': [],
+                'allocation_type': allocation_type
+            }
+        
+        # Get FIFO ordered batches
+        batches = InventoryService.get_fifo_batches_by_location(part_id, coded_location, location_id)
+        
+        if not batches:
+            part = Part.objects.get(id=part_id)
+            raise InsufficientStockError(part.part_number, qty_needed, 0)
+        
+        # Calculate total available quantity
+        total_available = sum(batch.available_qty for batch in batches)
+        
+        if total_available < qty_needed:
+            part = Part.objects.get(id=part_id)
+            raise InsufficientStockError(part.part_number, qty_needed, total_available)
+        
+        # Allocate from batches in FIFO order
+        total_qty = 0
+        total_cost = Decimal('0.00')
+        batch_details = []
+        remaining_qty = qty_needed
+        
+        for batch in batches:
+            if remaining_qty <= 0:
+                break
+            
+            available_in_batch = batch.available_qty
+            if available_in_batch <= 0:
+                continue
+            
+            # Take what we need or what's available, whichever is smaller
+            qty_to_allocate = min(remaining_qty, available_in_batch)
+            
+            if allocation_type == 'reserve':
+                # Reserve inventory (increase qty_reserved)
+                batch.qty_reserved += qty_to_allocate
+                movement_type = PartMovement.MovementType.RESERVE
+            elif allocation_type == 'consume':
+                # Consume inventory (decrease qty_on_hand)
+                batch.qty_on_hand -= qty_to_allocate
+                movement_type = PartMovement.MovementType.ISSUE
+            else:
+                raise InvalidOperationError(f"Invalid allocation_type: {allocation_type}")
+            
+            batch.save(update_fields=['qty_reserved', 'qty_on_hand'])
+            
+            # Create movement record
+            movement = PartMovement.objects.create(
+                part=batch.part,
+                inventory_batch=batch,
+                movement_type=movement_type,
+                quantity=qty_to_allocate,
+                unit_cost=batch.last_unit_cost,
+                total_cost=qty_to_allocate * batch.last_unit_cost,
+                work_order_part=work_order_part,
+                performed_by=performed_by,
+                notes=notes or f"FIFO {allocation_type} allocation"
+            )
+            
+            total_qty += qty_to_allocate
+            total_cost += qty_to_allocate * batch.last_unit_cost
+            batch_details.append({
+                'batch_id': str(batch.id),
+                'coded_location': batch.coded_location,
+                'qty_allocated': qty_to_allocate,
+                'unit_cost': float(batch.last_unit_cost),
+                'total_cost': float(qty_to_allocate * batch.last_unit_cost),
+                'movement_id': str(movement.id)
+            })
+            
+            remaining_qty -= qty_to_allocate
+        
+        return {
+            'total_qty_allocated': total_qty,
+            'total_cost': float(total_cost),
+            'batch_details': batch_details,
+            'allocation_type': allocation_type
+        }
+    
     def receive_parts_from_data(
         self,
         data: Dict[str, Any],
@@ -1440,15 +1606,15 @@ class WorkOrderPartRequestWorkflowService:
             raise ValidationError(f"Failed to request parts: {str(e)}")
     
     @staticmethod
-    def confirm_availability(wopr_id: str, qty_available: int, inventory_batch_id: str, 
+    def confirm_availability(wopr_id: str, qty_available: int, coded_location: str, 
                            performed_by: TenantUser = None, notes: str = None, **kwargs) -> Dict[str, Any]:
         """
-        Warehouse keeper confirms availability and reserves parts
+        Warehouse keeper confirms availability and reserves parts using FIFO allocation
         
         Args:
             wopr_id: WorkOrderPartRequest ID
-            qty_available: Quantity available
-            inventory_batch_id: Inventory batch to reserve from
+            qty_available: Quantity available to reserve
+            coded_location: Location code in format LOCATION_CODE-AISLE-ROW-BIN
             performed_by: User performing the action
             notes: Optional notes
             **kwargs: Additional metadata
@@ -1459,23 +1625,29 @@ class WorkOrderPartRequestWorkflowService:
         try:
             with transaction.atomic():
                 wopr = WorkOrderPartRequest.objects.select_for_update().get(id=wopr_id)
-                inventory_batch = InventoryBatch.objects.select_for_update().get(id=inventory_batch_id)
+                part_id = str(wopr.work_order_part.part.id)
                 
-                # Validate availability
-                available_qty = inventory_batch.qty_on_hand - inventory_batch.qty_reserved
-                if qty_available > available_qty:
-                    raise ValidationError(f"Only {available_qty} parts available in batch, requested {qty_available}")
+                # Use centralized FIFO allocation service to reserve inventory
+                allocation_result = InventoryService.allocate_inventory_fifo(
+                    part_id=part_id,
+                    qty_needed=qty_available,
+                    allocation_type='reserve',
+                    coded_location=coded_location,
+                    work_order_part=wopr.work_order_part,
+                    performed_by=performed_by,
+                    notes=notes or f"Reserved for WOPR {wopr_id}"
+                )
                 
-                # Reserve the parts
-                inventory_batch.qty_reserved += qty_available
-                inventory_batch.save()
+                # Update WOPR with allocation results
+                wopr.qty_available = allocation_result['total_qty_allocated']
                 
-                # Update WOPR
-                wopr.qty_available = qty_available
-                wopr.inventory_batch = inventory_batch
+                # Set inventory_batch to the first batch used (for backward compatibility)
+                if allocation_result['batch_details']:
+                    first_batch_id = allocation_result['batch_details'][0]['batch_id']
+                    wopr.inventory_batch = InventoryBatch.objects.get(id=first_batch_id)
                 
                 # Determine action type based on fulfillment
-                is_fully_available = qty_available >= (wopr.qty_needed or 0)
+                is_fully_available = wopr.qty_available >= (wopr.qty_needed or 0)
                 action_type = (WorkOrderPartRequestLog.ActionType.FULLY_AVAILABLE 
                              if is_fully_available 
                              else WorkOrderPartRequestLog.ActionType.PARTIAL_AVAILABLE)
@@ -1497,8 +1669,8 @@ class WorkOrderPartRequestWorkflowService:
                     action_type=action_type,
                     performed_by=performed_by,
                     notes=notes,
-                    qty_in_action=qty_available,
-                    qty_total_after_action=qty_available,
+                    qty_in_action=wopr.qty_available,
+                    qty_total_after_action=wopr.qty_available,
                     **kwargs
                 )
                 
@@ -1506,18 +1678,21 @@ class WorkOrderPartRequestWorkflowService:
                 
                 return {
                     'success': True,
-                    'message': f'Parts {"fully" if is_fully_available else "partially"} available and reserved',
+                    'message': f'Parts {"fully" if is_fully_available else "partially"} available and reserved using FIFO',
                     'wopr_id': str(wopr.id),
                     'qty_available': wopr.qty_available,
                     'qty_needed': wopr.qty_needed,
                     'is_available': wopr.is_available,
                     'is_fully_available': is_fully_available,
-                    'inventory_batch_id': str(inventory_batch.id),
-                    'location': str(inventory_batch.location)
+                    'coded_location': coded_location,
+                    'allocation_details': allocation_result['batch_details'],
+                    'total_cost': allocation_result['total_cost']
                 }
                 
-        except (WorkOrderPartRequest.DoesNotExist, InventoryBatch.DoesNotExist) as e:
-            raise ValidationError(f"Record not found: {str(e)}")
+        except WorkOrderPartRequest.DoesNotExist:
+            raise ValidationError(f"WorkOrderPartRequest with ID {wopr_id} not found")
+        except (InsufficientStockError, InvalidOperationError) as e:
+            raise ValidationError(str(e))
         except Exception as e:
             raise ValidationError(f"Failed to confirm availability: {str(e)}")
     

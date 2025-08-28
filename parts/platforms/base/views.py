@@ -1762,7 +1762,7 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
             metadata = self._get_client_metadata(request)
             
             # Call service with WorkOrderPart ID
-            result = workflow_service.request_parts_for_work_order_part(
+            workflow_service.request_parts_for_work_order_part(
                 wop_id=pk,
                 qty_needed=serializer.validated_data['qty_needed'],
                 performed_by=request.user,
@@ -1771,7 +1771,7 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
             )
             
             return self.format_response(
-                data=result,
+                data=serializer.data,
                 status_code=status.HTTP_200_OK
             )
             
@@ -1796,17 +1796,17 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
             metadata = self._get_client_metadata(request)
             
             # Call service
-            result = workflow_service.confirm_availability(
+            workflow_service.confirm_availability(
                 wopr_id=pk,
                 qty_available=serializer.validated_data['qty_available'],
-                inventory_batch_id=str(serializer.validated_data['inventory_batch_id']),
+                coded_location=serializer.validated_data['coded_location'],
                 performed_by=request.user,
                 notes=serializer.validated_data.get('notes'),
                 **metadata
             )
             
             return self.format_response(
-                data=result,
+                data=serializer.data,
                 status_code=status.HTTP_200_OK
             )
             
@@ -1831,7 +1831,7 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
             metadata = self._get_client_metadata(request)
             
             # Call service
-            result = workflow_service.mark_ordered(
+            workflow_service.mark_ordered(
                 wopr_id=pk,
                 performed_by=request.user,
                 notes=serializer.validated_data.get('notes'),
@@ -1839,7 +1839,7 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
             )
             
             return self.format_response(
-                data=result,
+                data=serializer.data,
                 status_code=status.HTTP_200_OK
             )
             
@@ -1864,7 +1864,7 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
             metadata = self._get_client_metadata(request)
             
             # Call service
-            result = workflow_service.deliver_parts(
+            workflow_service.deliver_parts(
                 wopr_id=pk,
                 qty_delivered=serializer.validated_data['qty_delivered'],
                 performed_by=request.user,
@@ -1873,7 +1873,7 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
             )
             
             return self.format_response(
-                data=result,
+                data=serializer.data,
                 status_code=status.HTTP_200_OK
             )
             
@@ -1898,7 +1898,7 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
             metadata = self._get_client_metadata(request)
             
             # Call service
-            result = workflow_service.pickup_parts(
+            workflow_service.pickup_parts(
                 wopr_id=pk,
                 qty_picked_up=serializer.validated_data['qty_picked_up'],
                 performed_by=request.user,
@@ -1907,7 +1907,7 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
             )
             
             return self.format_response(
-                data=result,
+                data=serializer.data,
                 status_code=status.HTTP_200_OK
             )
             
@@ -1932,7 +1932,7 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
             metadata = self._get_client_metadata(request)
             
             # Call service
-            result = workflow_service.cancel_availability(
+            workflow_service.cancel_availability(
                 wopr_id=pk,
                 performed_by=request.user,
                 notes=serializer.validated_data.get('notes'),
@@ -1940,7 +1940,7 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
             )
             
             return self.format_response(
-                data=result,
+                data=serializer.data,
                 status_code=status.HTTP_200_OK
             )
             
@@ -1989,7 +1989,6 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
             queryset = queryset.order_by('-created_at')
             
             # Apply pagination
-            total_count = queryset.count()
             queryset = queryset[offset:offset + limit]
             
             # Serialize the data

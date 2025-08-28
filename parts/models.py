@@ -118,6 +118,17 @@ class InventoryBatch(BaseModel):
             if self.qty_received != self._original_qty_received:
                 raise ValidationError(_("Quantity received is immutable and cannot be changed after creation"))
 
+    @property
+    def coded_location(self):
+        """Generate coded location string: LOCATION_CODE-AISLE-ROW-BIN"""
+        location_code = getattr(self.location, 'code', '') or str(self.location.id)
+        return f"{location_code}-{self.aisle}-{self.row}-{self.bin}"
+    
+    @property
+    def available_qty(self):
+        """Available quantity for allocation (on_hand - reserved)"""
+        return max(0, self.qty_on_hand - self.qty_reserved)
+    
     def __str__(self):
         return f"{self.part.part_number} @ {self.location} - {self.qty_on_hand} on hand"
 

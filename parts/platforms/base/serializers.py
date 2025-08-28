@@ -616,13 +616,14 @@ class RequestPartsSerializer(serializers.Serializer):
 
 
 class ConfirmAvailabilitySerializer(serializers.Serializer):
-    """Serializer for warehouse keeper confirming parts availability"""
+    """Serializer for warehouse keeper confirming parts availability using coded location"""
     qty_available = serializers.IntegerField(
         min_value=1,
         help_text="Quantity available for reservation"
     )
-    inventory_batch_id = serializers.UUIDField(
-        help_text="Inventory batch to reserve from"
+    coded_location = serializers.CharField(
+        max_length=200,
+        help_text="Location code in format LOCATION_CODE-AISLE-ROW-BIN"
     )
     notes = serializers.CharField(
         required=False,
@@ -631,23 +632,23 @@ class ConfirmAvailabilitySerializer(serializers.Serializer):
         help_text="Optional notes about availability"
     )
     
-    def validate(self, data):
-        """Validate that the inventory batch exists and has sufficient quantity"""
-        from parts.models import InventoryBatch
+    def validate_coded_location(self, value):
+        """Validate coded location format and existence"""
+        parts = value.split('-')
+        if len(parts) != 4:
+            raise serializers.ValidationError(
+                "Invalid coded location format. Expected: LOCATION_CODE-AISLE-ROW-BIN"
+            )
         
+        # Validate location exists
+        location_code = parts[0]
         try:
-            inventory_batch = InventoryBatch.objects.get(id=data['inventory_batch_id'])
-            available_qty = inventory_batch.qty_on_hand - inventory_batch.qty_reserved
-            
-            if data['qty_available'] > available_qty:
-                raise serializers.ValidationError(
-                    f"Only {available_qty} parts available in batch, requested {data['qty_available']}"
-                )
-                
-        except InventoryBatch.DoesNotExist:
-            raise serializers.ValidationError("Inventory batch not found")
-            
-        return data
+            from company.models import Location
+            Location.objects.get(code=location_code)
+        except Location.DoesNotExist:
+            raise serializers.ValidationError(f"Location not found for code: {location_code}")
+        
+        return value
 
 
 class MarkOrderedSerializer(serializers.Serializer):
