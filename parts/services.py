@@ -1878,12 +1878,10 @@ class WorkOrderPartRequestWorkflowService:
                             part=batch.part,
                             inventory_batch=batch,
                             movement_type=PartMovement.MovementType.ISSUE,
-                            quantity=qty_from_this_batch,
-                            unit_cost=batch.last_unit_cost,
-                            total_cost=qty_from_this_batch * batch.last_unit_cost,
-                            work_order_part=wop,
-                            performed_by=performed_by,
-                            notes=notes or f"Delivered for WOPR {wopr_id}"
+                            qty_delta=-qty_from_this_batch,  # Negative for consumption
+                            work_order=wop.work_order,  # Use work_order, not work_order_part
+                            created_by=performed_by,
+                            receipt_id=notes or f"Delivered for WOPR {wopr_id}"
                         )
                         
                         batch_movements.append({
