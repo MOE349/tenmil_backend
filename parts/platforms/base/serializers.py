@@ -134,13 +134,57 @@ class WorkOrderPartBaseSerializer(BaseSerializer):
         response["part_name"] = instance.part.name
         
         # Include total qty_used and qty_needed from all related part requests
-        from django.db.models import Sum
+        from django.db.models import Sum, Max, Q
         aggregates = instance.part_requests.aggregate(
             total_qty_used=Sum('qty_used'),
-            total_qty_needed=Sum('qty_needed')
+            total_qty_needed=Sum('qty_needed'),
+            total_qty_available=Sum('qty_available'),
+            total_qty_delivered=Sum('qty_delivered')
         )
         response['qty_used'] = aggregates['total_qty_used'] or 0
         response['qty_needed'] = aggregates['total_qty_needed'] or 0
+        response['qty_available'] = aggregates['total_qty_available'] or 0
+        response['qty_delivered'] = aggregates['total_qty_delivered'] or 0
+        
+        # Aggregate workflow flags - combine logic from all related part requests
+        workflow_aggregates = instance.part_requests.aggregate(
+            # A WOP is "requested" if ANY related WOPR is requested
+            is_requested=Max('is_requested'),
+            # A WOP is "available" if ANY related WOPR is available
+            is_available=Max('is_available'), 
+            # A WOP is "ordered" if ANY related WOPR is ordered
+            is_ordered=Max('is_ordered'),
+            # A WOP is "delivered" if ANY related WOPR is delivered
+            is_delivered=Max('is_delivered')
+        )
+        
+        # Convert None to False for boolean fields
+        response['is_requested'] = workflow_aggregates['is_requested'] or False
+        response['is_available'] = workflow_aggregates['is_available'] or False
+        response['is_ordered'] = workflow_aggregates['is_ordered'] or False
+        response['is_delivered'] = workflow_aggregates['is_delivered'] or False
+        
+        # Add workflow status summary
+        workflow_statuses = []
+        if response['is_requested']:
+            workflow_statuses.append('Requested')
+        if response['is_available']:
+            workflow_statuses.append('Available')
+        if response['is_ordered']:
+            workflow_statuses.append('Ordered')
+        if response['is_delivered']:
+            workflow_statuses.append('Delivered')
+        
+        response['workflow_status'] = ' | '.join(workflow_statuses) if workflow_statuses else 'Draft'
+        
+        # Add fulfillment indicators
+        total_needed = response['qty_needed']
+        total_available = response['qty_available']
+        total_delivered = response['qty_delivered']
+        
+        response['can_fulfill'] = total_available >= total_needed if total_needed > 0 else True
+        response['is_fully_delivered'] = total_delivered >= total_needed if total_needed > 0 else False
+        response['fulfillment_percentage'] = (total_delivered / total_needed * 100) if total_needed > 0 else 0
         
         return response
 
