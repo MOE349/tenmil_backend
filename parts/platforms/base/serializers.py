@@ -158,7 +158,7 @@ class WorkOrderPartBaseSerializer(BaseSerializer):
             # A WOP is "ordered" if ANY related WOPR is ordered
             is_ordered_count=Count('id', filter=Q(is_ordered=True)),
             # A WOP is "delivered" if ANY related WOPR is delivered
-            is_delivered_count=Count('id', filter=Q(is_delivered=True))
+            is_delivered_count=Count('id', filter=Q(is_delivered=False))
         )
         
         # Convert counts to boolean values (True if count > 0)
