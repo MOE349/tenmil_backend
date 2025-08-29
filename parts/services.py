@@ -1733,7 +1733,7 @@ class WorkOrderPartRequestWorkflowService:
                 
                 # Update quantities and reset all flags
                 wopr.qty_needed = qty_needed
-                wopr.is_requested = False
+                wopr.is_requested = True
                 wopr.is_available = False
                 wopr.is_ordered = False
                 wopr.is_delivered = False
@@ -1743,7 +1743,7 @@ class WorkOrderPartRequestWorkflowService:
                 wopr._create_audit_log(
                     previous_flags=previous_flags,
                     new_flags={
-                        'is_requested': False,
+                        'is_requested': True,
                         'is_available': False,
                         'is_ordered': False,
                         'is_delivered': False,
