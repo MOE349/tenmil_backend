@@ -346,12 +346,16 @@ class WorkOrderPartBaseView(BaseAPIView):
                         wopr_records_created = []
                         for batch_detail in allocation_result['batch_details']:
                             batch = InventoryBatch.objects.get(id=batch_detail['batch_id'])
+                            
+                            # Ensure we have a valid unit cost
+                            unit_cost = batch.last_unit_cost or 0
+                            
                             wopr = WorkOrderPartRequest.objects.create(
                                 work_order_part=work_order_part,
                                 inventory_batch=batch,
                                 qty_used=batch_detail['qty_allocated'],
-                                unit_cost_snapshot=batch.last_unit_cost,
-                                total_parts_cost=batch_detail['qty_allocated'] * batch.last_unit_cost,
+                                unit_cost_snapshot=unit_cost,
+                                total_parts_cost=batch_detail['qty_allocated'] * unit_cost,
                                 # All workflow flags remain False (direct consumption)
                             )
                             wopr_records_created.append({

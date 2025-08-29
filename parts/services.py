@@ -742,6 +742,7 @@ class InventoryService:
             ValidationError: If insufficient consumption to reverse
         """
         from parts.models import WorkOrderPartRequest, PartMovement
+        from decimal import Decimal
         
         if qty_to_return <= 0:
             raise ValidationError("Quantity to return must be positive")
@@ -776,8 +777,19 @@ class InventoryService:
                 
                 # Update the WOPR record
                 record.qty_used -= qty_to_return_from_record
-                record.total_parts_cost = record.qty_used * record.unit_cost_snapshot
-                record.save(update_fields=['qty_used', 'total_parts_cost'])
+                
+                # Handle case where unit_cost_snapshot might be None
+                unit_cost = record.unit_cost_snapshot
+                if unit_cost is None:
+                    # Fallback to batch's last_unit_cost if unit_cost_snapshot is None
+                    unit_cost = record.inventory_batch.last_unit_cost
+                    if unit_cost is None:
+                        # Final fallback if batch also has no cost
+                        unit_cost = Decimal('0.00')
+                    record.unit_cost_snapshot = unit_cost  # Update for consistency
+                
+                record.total_parts_cost = record.qty_used * unit_cost
+                record.save(update_fields=['qty_used', 'total_parts_cost', 'unit_cost_snapshot'])
                 wopr_updates.append(record)
                 
                 # Update inventory batch (return parts)
