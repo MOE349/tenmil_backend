@@ -1705,12 +1705,12 @@ class WorkOrderPartRequestWorkflowService:
             raise ValidationError(f"Failed to request parts: {str(e)}")
     
     @staticmethod
-    def request_parts(wopr_id: str, qty_needed: int, performed_by: TenantUser = None, notes: str = None, **kwargs) -> Dict[str, Any]:
+    def request_parts(wop_id: str, qty_needed: int, performed_by: TenantUser = None, notes: str = None, **kwargs) -> Dict[str, Any]:
         """
-        Mechanic requests parts
+        Mechanic requests parts for a WorkOrderPart
         
         Args:
-            wopr_id: WorkOrderPartRequest ID
+            wop_id: WorkOrderPart ID
             qty_needed: Quantity needed
             performed_by: User performing the action
             notes: Optional notes
@@ -1721,7 +1721,49 @@ class WorkOrderPartRequestWorkflowService:
         """
         try:
             with transaction.atomic():
-                wopr = WorkOrderPartRequestWorkflowService._get_wopr_for_update(wopr_id)
+                # Get WorkOrderPart
+                wop = WorkOrderPart.objects.get(id=wop_id)
+                
+                # Handle potential multiple planning records by getting the first active one
+                try:
+                    wopr = WorkOrderPartRequest.objects.filter(
+                        work_order_part=wop,
+                        inventory_batch__isnull=True,  # Planning record (no specific batch)
+                        is_requested=False,  # Not yet requested
+                        is_delivered=False   # Not yet delivered
+                    ).select_for_update().first()
+                    
+                    if wopr:
+                        # Update existing planning record
+                        wopr.qty_needed = qty_needed
+                    else:
+                        # Create new planning record
+                        wopr = WorkOrderPartRequest.objects.create(
+                            work_order_part=wop,
+                            qty_needed=qty_needed,
+                            is_requested=False,  # Will be set to True below
+                            total_parts_cost=0
+                        )
+                        
+                except WorkOrderPartRequest.MultipleObjectsReturned:
+                    # If multiple planning records exist, get the most recent one
+                    wopr = WorkOrderPartRequest.objects.filter(
+                        work_order_part=wop,
+                        inventory_batch__isnull=True,
+                        is_requested=False,
+                        is_delivered=False
+                    ).select_for_update().order_by('-created_at').first()
+                    
+                    if wopr:
+                        wopr.qty_needed = qty_needed
+                    else:
+                        # Fallback: create new record
+                        wopr = WorkOrderPartRequest.objects.create(
+                            work_order_part=wop,
+                            qty_needed=qty_needed,
+                            is_requested=False,
+                            total_parts_cost=0
+                        )
                 
                 # Capture previous state before changes
                 previous_flags = {
@@ -1766,8 +1808,8 @@ class WorkOrderPartRequestWorkflowService:
                     'is_requested': wopr.is_requested
                 }
                 
-        except WorkOrderPartRequest.DoesNotExist:
-            raise ValidationError(f"WorkOrderPartRequest with ID {wopr_id} not found")
+        except WorkOrderPart.DoesNotExist:
+            raise ValidationError(f"WorkOrderPart with ID {wop_id} not found")
         except Exception as e:
             raise ValidationError(f"Failed to request parts: {str(e)}")
     
