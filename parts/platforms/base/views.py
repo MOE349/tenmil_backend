@@ -218,11 +218,12 @@ class WorkOrderPartBaseView(BaseAPIView):
             return self.handle_exception(e)
     
     def update(self, data, params, pk=None, *args, **kwargs):
-        """Update WorkOrderPart using Workflow Service for proper flag management"""
+        """Update WorkOrderPart - Direct parts management without workflow flags"""
         try:
             from django.db import transaction, models
-            from parts.services import workflow_service, location_decoder
-            import uuid
+            from parts.services import InventoryService
+            from parts.models import WorkOrderPart, WorkOrderPartRequest, InventoryBatch, PartMovement
+            from company.models import Location
             
             with transaction.atomic():
                 # Get the existing WorkOrderPart instance
@@ -247,261 +248,166 @@ class WorkOrderPartBaseView(BaseAPIView):
                 has_qty_used = 'qty_used' in data
                 has_location = 'location' in data
                 
-                # Validate inputs
-                qty_needed_value = None
-                qty_used_value = None
-                coded_location = None
+                # Validate input combinations
+                if has_qty_needed and has_qty_used:
+                    raise LocalBaseException(
+                        exception="Cannot provide both qty_needed and qty_used in the same request",
+                        status_code=status.HTTP_400_BAD_REQUEST
+                    )
                 
+                if has_qty_used and not has_location:
+                    raise LocalBaseException(
+                        exception="location field is required when qty_used is provided",
+                        status_code=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                if not has_qty_needed and not has_qty_used:
+                    raise LocalBaseException(
+                        exception="Either qty_needed or qty_used must be provided",
+                        status_code=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                response_data = {'work_order_part': self.serializer_class(work_order_part).data}
+                
+                # Scenario 1: Planning record (qty_needed only)
                 if has_qty_needed:
-                    try:
-                        qty_needed_value = int(data.get('qty_needed'))
-                        if qty_needed_value < 0:
-                            raise LocalBaseException(
-                                exception="qty_needed cannot be negative",
-                                status_code=status.HTTP_400_BAD_REQUEST
-                            )
-                    except (ValueError, TypeError):
-                        raise LocalBaseException(
-                            exception="qty_needed must be a valid integer",
-                            status_code=status.HTTP_400_BAD_REQUEST
-                        )
+                    qty_needed_value = self._validate_quantity(data.get('qty_needed'), 'qty_needed')
+                    
+                    # Create new WOPR record for planning
+                    wopr = WorkOrderPartRequest.objects.create(
+                        work_order_part=work_order_part,
+                        qty_needed=qty_needed_value,
+                        # All workflow flags remain False (default)
+                        # No inventory_batch assigned yet
+                    )
+                    
+                    response_data.update({
+                        'operation_type': 'planning',
+                        'message': f'Planning record created with qty_needed: {qty_needed_value}',
+                        'wopr_created': {
+                            'id': str(wopr.id),
+                            'qty_needed': wopr.qty_needed,
+                            'workflow_flags': {
+                                'is_requested': wopr.is_requested,
+                                'is_available': wopr.is_available,
+                                'is_ordered': wopr.is_ordered,
+                                'is_delivered': wopr.is_delivered,
+                            }
+                        }
+                    })
                 
-                if has_qty_used:
+                # Scenario 2: Direct consumption/return (qty_used + location)
+                elif has_qty_used:
+                    qty_used_value = self._validate_quantity(data.get('qty_used'), 'qty_used')
+                    location_value = data.get('location')
+                    
+                    # Decode location using existing service
                     try:
-                        qty_used_value = int(data.get('qty_used'))
-                        if qty_used_value < 0:
-                            raise LocalBaseException(
-                                exception="qty_used cannot be negative",
-                                status_code=status.HTTP_400_BAD_REQUEST
-                            )
-                    except (ValueError, TypeError):
-                        raise LocalBaseException(
-                            exception="qty_used must be a valid integer",
-                            status_code=status.HTTP_400_BAD_REQUEST
-                        )
-                
-                # Handle location decoding
-                if has_location:
-                    location_value = data['location']
-                    try:
-                        # Check if it's a UUID or location string
-                        try:
-                            uuid.UUID(location_value)
-                            # It's a UUID, get location and create coded_location
-                            from company.models import Location
-                            location = Location.objects.select_related('site').get(id=location_value)
-                            # Create a basic coded location format for UUID-based locations
-                            coded_location = f"{location.site.code} - {location.name} - A0/R0/B0 - qty: {qty_used_value or 0}.0"
-                        except (ValueError, AttributeError):
-                            # It's a location string, use it directly
-                            coded_location = location_value
-                            # Validate the format
-                            location_decoder.decode_location_string(coded_location)
+                        site_code, location_name, aisle, row, bin_code = InventoryService.decode_location(location_value)
                     except Exception as e:
                         raise LocalBaseException(
                             exception=f"Invalid location format: {str(e)}",
                             status_code=status.HTTP_400_BAD_REQUEST
                         )
-                elif has_qty_used:
-                    # qty_used without location - try to extract from existing records
-                    existing_requests = work_order_part.part_requests.filter(
-                        inventory_batch__isnull=False
-                    ).select_related('inventory_batch', 'inventory_batch__location', 'inventory_batch__location__site')
                     
-                    if not existing_requests.exists():
+                    # Get location object
+                    try:
+                        location = Location.objects.select_related('site').get(
+                            site__code=site_code,
+                            name=location_name
+                        )
+                    except Location.DoesNotExist:
                         raise LocalBaseException(
-                            exception="qty_used provided without location. No existing WorkOrderPartRequest records found to extract location from. Please provide location parameter.",
+                            exception=f"Location not found for site code '{site_code}' and location name '{location_name}'",
                             status_code=status.HTTP_400_BAD_REQUEST
                         )
                     
-                    # Use the location from the most recent request
-                    recent_request = existing_requests.order_by('-created_at').first()
-                    batch = recent_request.inventory_batch
-                    coded_location = f"{batch.location.site.code} - {batch.location.name} - A{batch.aisle or '0'}/R{batch.row or '0'}/B{batch.bin or '0'} - qty: {qty_used_value}.0"
-                
-                # Execute workflow operations based on operation type
-                workflow_results = []
-                operation_type = None
-                
-                if has_qty_needed and not has_qty_used:
-                    # Planning only
-                    operation_type = 'planning'
-                    if qty_needed_value > 0:
-                        result = workflow_service.request_parts_for_work_order_part(
-                            wop_id=str(work_order_part.id),
-                            qty_needed=qty_needed_value,
-                            performed_by=params.get('user'),
-                            notes=f"Planning request via WorkOrderPart update",
-                            ip_address=params.get('ip_address'),
-                            user_agent=params.get('user_agent')
-                        )
-                        workflow_results.append(result)
-                
-                elif has_qty_used and has_location:
-                    # Direct consumption - full workflow in one transaction
-                    operation_type = 'consumption'
-                    
-                    # Calculate current total to determine if it's addition or return
-                    current_total = work_order_part.part_requests.aggregate(
+                    # Calculate current total qty_used for this WOP
+                    current_total_used = work_order_part.part_requests.aggregate(
                         total=models.Sum('qty_used')
                     )['total'] or 0
                     
-                    if qty_used_value > current_total:
-                        # Addition - consume more parts
-                        qty_to_consume = qty_used_value - current_total
+                    if qty_used_value > current_total_used:
+                        # FIFO Consumption - need more parts
+                        qty_to_consume = qty_used_value - current_total_used
                         
-                        # Step 1: Request parts
-                        request_result = workflow_service.request_parts_for_work_order_part(
-                            wop_id=str(work_order_part.id),
+                        # Use existing InventoryService FIFO allocation
+                        allocation_result = InventoryService.allocate_inventory_fifo(
+                            part_id=str(work_order_part.part.id),
                             qty_needed=qty_to_consume,
+                            allocation_type='consume',
+                            coded_location=location_value,  # Use original coded location
+                            work_order_part=work_order_part,
                             performed_by=params.get('user'),
-                            notes=f"Direct consumption via WorkOrderPart update",
-                            ip_address=params.get('ip_address'),
-                            user_agent=params.get('user_agent')
+                            notes=f"Direct consumption for WOP {work_order_part.id}"
                         )
                         
-                        # Step 2: Confirm availability
-                        wopr_id = request_result['wopr_id']
-                        availability_result = workflow_service.confirm_availability(
-                            wopr_id=wopr_id,
-                            qty_available=qty_to_consume,
-                            coded_location=coded_location,
+                        response_data.update({
+                            'operation_type': 'consumption_fifo',
+                            'message': f'Consumed {qty_to_consume} parts using FIFO. Total qty_used now: {qty_used_value}',
+                            'allocation_result': allocation_result,
+                            'total_consumed': qty_to_consume
+                        })
+                        
+                    elif qty_used_value < current_total_used:
+                        # LIFO Return - returning parts
+                        qty_to_return = current_total_used - qty_used_value
+                        
+                        # Use InventoryService for LIFO return (reverse recent consumption)
+                        return_result = InventoryService.reverse_consumption_lifo(
+                            work_order_part=work_order_part,
+                            qty_to_return=qty_to_return,
                             performed_by=params.get('user'),
-                            notes=f"Auto-confirmed for direct consumption",
-                            ip_address=params.get('ip_address'),
-                            user_agent=params.get('user_agent')
+                            notes=f"Direct return for WOP {work_order_part.id}"
                         )
                         
-                        # Step 3: Deliver parts
-                        delivery_result = workflow_service.deliver_parts(
-                            wopr_id=wopr_id,
-                            performed_by=params.get('user'),
-                            notes=f"Auto-delivered for direct consumption",
-                            ip_address=params.get('ip_address'),
-                            user_agent=params.get('user_agent')
-                        )
-                        
-                        workflow_results.extend([request_result, availability_result, delivery_result])
-                        
-                    elif qty_used_value < current_total:
-                        # Return - this is more complex and would need a return workflow
-                        # For now, raise an error suggesting to use the dedicated return endpoint
-                        raise LocalBaseException(
-                            exception=f"Returning parts (reducing qty_used from {current_total} to {qty_used_value}) is not supported via this endpoint. Please use the dedicated return workflow.",
-                            status_code=status.HTTP_400_BAD_REQUEST
-                        )
-                    # If qty_used_value == current_total, no change needed
+                        response_data.update({
+                            'operation_type': 'return_lifo',
+                            'message': f'Returned {qty_to_return} parts using LIFO. Total qty_used now: {qty_used_value}',
+                            'return_result': return_result,
+                            'total_returned': qty_to_return
+                        })
+                    else:
+                        # No change needed
+                        response_data.update({
+                            'operation_type': 'no_change',
+                            'message': f'qty_used already equals {qty_used_value}. No inventory changes made.',
+                        })
                 
-                elif has_qty_needed and has_qty_used and has_location:
-                    # Combined planning and consumption
-                    operation_type = 'combined'
-                    
-                    # First handle planning if qty_needed > 0
-                    if qty_needed_value > 0:
-                        planning_result = workflow_service.request_parts_for_work_order_part(
-                            wop_id=str(work_order_part.id),
-                            qty_needed=qty_needed_value,
-                            performed_by=params.get('user'),
-                            notes=f"Combined planning via WorkOrderPart update",
-                            ip_address=params.get('ip_address'),
-                            user_agent=params.get('user_agent')
-                        )
-                        workflow_results.append(planning_result)
-                    
-                    # Then handle consumption if qty_used > current total
-                    current_total = work_order_part.part_requests.aggregate(
-                        total=models.Sum('qty_used')
-                    )['total'] or 0
-                    
-                    if qty_used_value > current_total:
-                        qty_to_consume = qty_used_value - current_total
-                        
-                        # Create separate request for consumption
-                        consumption_request = workflow_service.request_parts_for_work_order_part(
-                            wop_id=str(work_order_part.id),
-                            qty_needed=qty_to_consume,
-                            performed_by=params.get('user'),
-                            notes=f"Consumption part of combined operation",
-                            ip_address=params.get('ip_address'),
-                            user_agent=params.get('user_agent')
-                        )
-                        
-                        # Confirm and deliver
-                        wopr_id = consumption_request['wopr_id']
-                        availability_result = workflow_service.confirm_availability(
-                            wopr_id=wopr_id,
-                            qty_available=qty_to_consume,
-                            coded_location=coded_location,
-                            performed_by=params.get('user'),
-                            notes=f"Auto-confirmed for combined operation",
-                            ip_address=params.get('ip_address'),
-                            user_agent=params.get('user_agent')
-                        )
-                        
-                        delivery_result = workflow_service.deliver_parts(
-                            wopr_id=wopr_id,
-                            performed_by=params.get('user'),
-                            notes=f"Auto-delivered for combined operation",
-                            ip_address=params.get('ip_address'),
-                            user_agent=params.get('user_agent')
-                        )
-                        
-                        workflow_results.extend([consumption_request, availability_result, delivery_result])
-                
-                # Handle other WorkOrderPart field updates (non-workflow fields)
-                work_order_part_fields = {
-                    key: value for key, value in data.items() 
-                    if key not in ['qty_needed', 'qty_used', 'location']
-                }
-                
-                if work_order_part_fields:
-                    serializer = self.serializer_class(work_order_part, data=work_order_part_fields, partial=True)
-                    if not serializer.is_valid():
-                        raise LocalBaseException(
-                            exception=serializer.errors,
-                            status_code=status.HTTP_400_BAD_REQUEST
-                        )
-                    work_order_part = serializer.save()
-                
-                # Refresh work_order_part to get updated related data
+                # Refresh and return updated data
                 work_order_part.refresh_from_db()
+                response_data['work_order_part'] = self.serializer_class(work_order_part).data
                 
-                # Prepare response data
-                response_data = {
-                    'work_order_part': self.serializer_class(work_order_part).data
-                }
-                
-                # Add workflow operation details
-                if workflow_results:
-                    response_data['workflow_operations'] = workflow_results
-                    response_data['operation_type'] = operation_type
-                
-                # Get updated part requests for response
+                # Include updated part requests
                 updated_requests = work_order_part.part_requests.all()
                 if updated_requests.exists():
                     response_data['work_order_part_requests'] = WorkOrderPartRequestBaseSerializer(updated_requests, many=True).data
-                
-                # Set appropriate message based on operation
-                if operation_type == 'planning':
-                    response_data['message'] = f'WorkOrderPart updated successfully. Planning record created/updated with qty_needed: {qty_needed_value}.'
-                elif operation_type == 'consumption':
-                    current_total = work_order_part.part_requests.aggregate(
-                        total=models.Sum('qty_used')
-                    )['total'] or 0
-                    response_data['message'] = f'WorkOrderPart updated successfully. Parts consumed using workflow service. Total qty_used: {current_total}.'
-                elif operation_type == 'combined':
-                    current_total = work_order_part.part_requests.aggregate(
-                        total=models.Sum('qty_used')
-                    )['total'] or 0
-                    response_data['message'] = f'WorkOrderPart updated successfully. Combined planning (qty_needed: {qty_needed_value}) and consumption (total qty_used: {current_total}) completed.'
-                else:
-                    response_data['message'] = 'WorkOrderPart updated successfully'
                 
                 return self.format_response(data=response_data, status_code=200)
         
         except Exception as e:
             return self.handle_exception(e)
     
+    def _validate_quantity(self, value, field_name):
+        """Validate quantity field"""
+        try:
+            qty = int(value)
+            if qty < 0:
+                raise LocalBaseException(
+                    exception=f"{field_name} cannot be negative",
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+            return qty
+        except (ValueError, TypeError):
+            raise LocalBaseException(
+                exception=f"{field_name} must be a valid integer",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+    
+
+
+
+
 
 class WorkOrderPartRequestBaseView(BaseAPIView):
     """Base view for WorkOrderPartRequest CRUD operations"""

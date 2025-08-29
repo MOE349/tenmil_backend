@@ -716,6 +716,117 @@ class InventoryService:
                 message=f"Returned {qty_to_return} of {part.part_number} from WO {work_order.code}"
             )
     
+    @staticmethod
+    def reverse_consumption_lifo(
+        work_order_part: 'WorkOrderPart',
+        qty_to_return: int,
+        performed_by: 'TenantUser' = None,
+        notes: str = None
+    ) -> Dict[str, Any]:
+        """
+        Reverse recent consumption using LIFO (Last In, First Out) logic
+        
+        This method undoes recent WorkOrderPartRequest consumption records
+        by reducing qty_used in reverse chronological order (newest first).
+        
+        Args:
+            work_order_part: WorkOrderPart instance
+            qty_to_return: Quantity to return/reverse
+            performed_by: User performing the action
+            notes: Optional notes
+            
+        Returns:
+            Dict with return operation details
+            
+        Raises:
+            ValidationError: If insufficient consumption to reverse
+        """
+        from parts.models import WorkOrderPartRequest, PartMovement
+        
+        if qty_to_return <= 0:
+            raise ValidationError("Quantity to return must be positive")
+        
+        with transaction.atomic():
+            # Get consumption records for this WOP (LIFO order - most recent first)
+            consumption_records = WorkOrderPartRequest.objects.filter(
+                work_order_part=work_order_part,
+                qty_used__gt=0,
+                inventory_batch__isnull=False
+            ).order_by('-created_at')  # LIFO: newest first
+            
+            if not consumption_records.exists():
+                raise ValidationError("No consumption records found to return from")
+            
+            total_consumed = sum(record.qty_used for record in consumption_records)
+            if qty_to_return > total_consumed:
+                raise ValidationError(
+                    f"Cannot return more than consumed. Total consumed: {total_consumed}, Requested return: {qty_to_return}"
+                )
+            
+            wopr_updates = []
+            movements = []
+            remaining_to_return = qty_to_return
+            
+            for record in consumption_records:
+                if remaining_to_return <= 0:
+                    break
+                
+                # Calculate how much to return from this record
+                qty_to_return_from_record = min(record.qty_used, remaining_to_return)
+                
+                # Update the WOPR record
+                record.qty_used -= qty_to_return_from_record
+                record.total_parts_cost = record.qty_used * record.unit_cost_snapshot
+                record.save(update_fields=['qty_used', 'total_parts_cost'])
+                wopr_updates.append(record)
+                
+                # Update inventory batch (return parts)
+                batch = record.inventory_batch
+                batch.qty_on_hand += qty_to_return_from_record
+                batch.save(update_fields=['qty_on_hand'])
+                
+                # Create movement record for return
+                movement = PartMovement.objects.create(
+                    part=work_order_part.part,
+                    inventory_batch=batch,
+                    movement_type=PartMovement.MovementType.RETURN,
+                    qty_delta=qty_to_return_from_record,  # Positive for return
+                    work_order=work_order_part.work_order,
+                    created_by=performed_by,
+                    receipt_id=notes or f"LIFO return for WOP {work_order_part.id}"
+                )
+                movements.append(movement)
+                
+                remaining_to_return -= qty_to_return_from_record
+            
+            # Clean up records with qty_used = 0
+            zero_qty_records = [record for record in wopr_updates if record.qty_used == 0]
+            for record in zero_qty_records:
+                record.delete()
+            
+            return {
+                'success': True,
+                'wopr_records_updated': [
+                    {
+                        'id': str(record.id),
+                        'new_qty_used': record.qty_used,
+                        'batch_id': str(record.inventory_batch.id)
+                    }
+                    for record in wopr_updates if record.qty_used > 0
+                ],
+                'wopr_records_deleted': [str(record.id) for record in zero_qty_records],
+                'movements_created': [
+                    {
+                        'id': str(movement.id),
+                        'qty_delta': movement.qty_delta,
+                        'batch_id': str(movement.inventory_batch.id)
+                    }
+                    for movement in movements
+                ],
+                'total_returned': qty_to_return,
+                'message': f'Returned {qty_to_return} parts using LIFO reversal'
+            }
+    
     def transfer_between_locations(
         self,
         part_id: str,
