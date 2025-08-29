@@ -342,10 +342,31 @@ class WorkOrderPartBaseView(BaseAPIView):
                             notes=f"Direct consumption for WOP {work_order_part.id}"
                         )
                         
+                        # Create WOPR records for each batch consumed
+                        wopr_records_created = []
+                        for batch_detail in allocation_result['batch_details']:
+                            batch = InventoryBatch.objects.get(id=batch_detail['batch_id'])
+                            wopr = WorkOrderPartRequest.objects.create(
+                                work_order_part=work_order_part,
+                                inventory_batch=batch,
+                                qty_used=batch_detail['qty_allocated'],
+                                unit_cost_snapshot=batch.last_unit_cost,
+                                total_parts_cost=batch_detail['qty_allocated'] * batch.last_unit_cost,
+                                # All workflow flags remain False (direct consumption)
+                            )
+                            wopr_records_created.append({
+                                'id': str(wopr.id),
+                                'qty_used': wopr.qty_used,
+                                'batch_id': str(wopr.inventory_batch.id),
+                                'unit_cost': float(wopr.unit_cost_snapshot),
+                                'total_cost': float(wopr.total_parts_cost)
+                            })
+                        
                         response_data.update({
                             'operation_type': 'consumption_fifo',
                             'message': f'Consumed {qty_to_consume} parts using FIFO. Total qty_used now: {qty_used_value}',
                             'allocation_result': allocation_result,
+                            'wopr_records_created': wopr_records_created,
                             'total_consumed': qty_to_consume
                         })
                         
