@@ -1838,20 +1838,9 @@ class WorkOrderPartRequestWorkflowService:
                 part_id = str(wopr.work_order_part.part.id)
                 position = wopr.position
                 
-                # Extract coded_location from position field for FIFO allocation
+                # Use the position field directly as coded_location since it's already in the correct format
                 # Position format: "SITE_CODE - LOCATION_NAME - A#/R#/B# - qty: #.#"
-                # Need to convert to coded_location format: "SITE_CODE - LOCATION_NAME - AISLE/ROW/BIN"
-                try:
-                    parts = position.split(' - ')
-                    if len(parts) >= 3:
-                        site_code = parts[0]
-                        location_name = parts[1]
-                        aisle_row_bin = parts[2]
-                        coded_location = f"{site_code} - {location_name} - {aisle_row_bin}"
-                    else:
-                        raise ValueError("Invalid position format")
-                except Exception:
-                    raise ValidationError(f"Invalid position format in record: {position}. Expected: 'SITE_CODE - LOCATION_NAME - A#/R#/B# - qty: #.#'")
+                coded_location = position
                 
                 # Determine available quantity from the position (extract from qty part if present)
                 # or use the qty_needed as the quantity to reserve
