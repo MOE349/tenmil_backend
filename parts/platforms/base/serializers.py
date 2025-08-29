@@ -147,47 +147,89 @@ class WorkOrderPartBaseSerializer(BaseSerializer):
         response['qty_available'] = aggregates['total_qty_available'] or 0
         response['qty_delivered'] = aggregates['total_qty_delivered'] or 0
         
-        # Aggregate workflow flags - combine logic from all related part requests
-        # Use Count with filter for boolean OR logic (ANY record has flag = True)
-        from django.db.models import Count
-        workflow_aggregates = instance.part_requests.aggregate(
-            # A WOP is "requested" if ANY related WOPR is requested
-            is_requested_count=Count('id', filter=Q(is_requested=True)),
-            # A WOP is "available" if ANY related WOPR is available
-            is_available_count=Count('id', filter=Q(is_available=True)),
-            # A WOP is "ordered" if ANY related WOPR is ordered
-            is_ordered_count=Count('id', filter=Q(is_ordered=True)),
-            # A WOP is "delivered" if ANY related WOPR is delivered
-            is_delivered_count=Count('id', filter=Q(is_delivered=False))
-        )
-        
-        # Convert counts to boolean values (True if count > 0)
-        response['is_requested'] = (workflow_aggregates['is_requested_count'] or 0) > 0
-        response['is_available'] = (workflow_aggregates['is_available_count'] or 0) > 0
-        response['is_ordered'] = (workflow_aggregates['is_ordered_count'] or 0) > 0
-        response['is_delivered'] = (workflow_aggregates['is_delivered_count'] or 0) > 0
-        
-        # Add workflow status summary
-        workflow_statuses = []
-        if response['is_requested']:
-            workflow_statuses.append('Requested')
-        if response['is_available']:
-            workflow_statuses.append('Available')
-        if response['is_ordered']:
-            workflow_statuses.append('Ordered')
-        if response['is_delivered']:
-            workflow_statuses.append('Delivered')
-        
-        response['workflow_status'] = ' | '.join(workflow_statuses) if workflow_statuses else 'Draft'
-        
-        # Add fulfillment indicators
+        # Business Logic for WOP Status (based on workflow diagram)
+        # Treat all WOPRs under a WOP as a cohesive unit
         total_needed = response['qty_needed']
         total_available = response['qty_available']
         total_delivered = response['qty_delivered']
         
+        # Get counts for additional logic
+        from django.db.models import Count
+        wopr_counts = instance.part_requests.aggregate(
+            total_wopr_count=Count('id'),
+            requested_count=Count('id', filter=Q(is_requested=True)),
+            available_count=Count('id', filter=Q(is_available=True)),
+            ordered_count=Count('id', filter=Q(is_ordered=True)),
+            delivered_count=Count('id', filter=Q(is_delivered=True))
+        )
+        
+        # WOP Status Logic based on workflow requirements:
+        
+        # 1. IS_REQUESTED: Only when mechanic has actually submitted a request
+        response['is_requested'] = (wopr_counts['requested_count'] or 0) > 0
+        
+        # 2. IS_AVAILABLE: We have some availability AND it's been marked available
+        response['is_available'] = (
+            total_available > 0 and 
+            (wopr_counts['available_count'] or 0) > 0
+        )
+        
+        # 3. IS_ORDERED: Any WOPR is ordered (for parts not available)
+        response['is_ordered'] = (wopr_counts['ordered_count'] or 0) > 0
+        
+        # 4. IS_DELIVERED: Only when ALL WOPRs are delivered
+        response['is_delivered'] = (
+            wopr_counts['total_wopr_count'] > 0 and 
+            wopr_counts['delivered_count'] == wopr_counts['total_wopr_count']
+        )
+        
+        # Enhanced workflow status with granular states matching the diagram
+        workflow_statuses = []
+        
+        if not response['is_requested']:
+            workflow_statuses.append('Draft')
+        else:
+            if response['is_delivered']:
+                if total_delivered >= total_needed:
+                    workflow_statuses.append('Fully Delivered')
+                else:
+                    workflow_statuses.append('Partially Delivered')
+            elif response['is_ordered']:
+                workflow_statuses.append('Ordered')
+            elif response['is_available']:
+                if total_available >= total_needed:
+                    workflow_statuses.append('Fully Available')
+                else:
+                    workflow_statuses.append('Partially Available')
+            else:
+                workflow_statuses.append('Requested')
+        
+        response['workflow_status'] = ' | '.join(workflow_statuses) if workflow_statuses else 'Draft'
+        
+        # Enhanced fulfillment indicators based on workflow diagram
         response['can_fulfill'] = total_available >= total_needed if total_needed > 0 else True
         response['is_fully_delivered'] = total_delivered >= total_needed if total_needed > 0 else False
+        response['is_partially_delivered'] = 0 < total_delivered < total_needed if total_needed > 0 else False
         response['fulfillment_percentage'] = (total_delivered / total_needed * 100) if total_needed > 0 else 0
+        
+        # Additional status indicators based on workflow
+        response['needs_ordering'] = (
+            response['is_requested'] and 
+            not response['is_available'] and 
+            not response['is_ordered'] and
+            total_available < total_needed
+        )
+        
+        response['ready_for_pickup'] = (
+            response['is_available'] and 
+            total_available >= total_needed and
+            not response['is_delivered']
+        )
+        
+        response['awaiting_delivery'] = (
+            response['is_ordered'] and 
+            not response['is_delivered']
+        )
         
         return response
 
