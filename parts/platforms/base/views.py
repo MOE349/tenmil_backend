@@ -271,8 +271,8 @@ class WorkOrderPartBaseView(BaseAPIView):
                     
                     # Check if WOP has any active workflow flags before allowing qty_needed updates
                     if work_order_part.has_active_workflow_flags():
-                        return self.error_response(
-                            "Cannot update qty_needed when work order part has active workflow flags (is_requested, is_available, or is_ordered = True)",
+                        return self.format_response(
+                            errors={"message": "Cannot update qty_needed when work order part has active workflow flags (is_requested, is_available, or is_ordered = True)"},
                             status_code=400
                         )
                     
