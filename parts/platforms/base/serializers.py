@@ -733,18 +733,7 @@ class PickupPartsSerializer(serializers.Serializer):
 
 
 class CancelAvailabilitySerializer(serializers.Serializer):
-    """Serializer for cancelling parts availability"""
-    cancel_type = serializers.ChoiceField(
-        choices=[
-            ('request', 'Cancel mechanic request (delete on request scenario)'),
-            ('availability', 'Cancel warehouse availability (delete on parts available scenario)'),
-            ('order', 'Cancel parts order (order parts cancellation scenario)'),
-            ('full', 'Full cancellation (reset everything)')
-        ],
-        default='availability',
-        required=False,
-        help_text="Type of cancellation to perform"
-    )
+    """Serializer for cancelling parts availability (auto-detects cancel type)"""
     notes = serializers.CharField(
         required=False,
         allow_blank=True,

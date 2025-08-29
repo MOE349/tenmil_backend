@@ -1507,6 +1507,86 @@ class WorkOrderPartRequestWorkflowService:
     """Business logic for WOPR workflow operations"""
     
     @staticmethod
+    def _get_wopr_for_update(wopr_id: str, allow_wop_lookup: bool = False):
+        """
+        Helper method to get a WOPR with select_for_update lock
+        
+        Args:
+            wopr_id: WorkOrderPartRequest ID or WorkOrderPart ID (if allow_wop_lookup=True)
+            allow_wop_lookup: If True, also tries to find WOPR by WorkOrderPart ID
+            
+        Returns:
+            WorkOrderPartRequest instance with select_for_update lock
+            
+        Raises:
+            ValidationError: If WOPR not found or multiple requested WOPRs found
+        """
+        try:
+            return WorkOrderPartRequest.objects.select_for_update().get(id=wopr_id)
+        except WorkOrderPartRequest.DoesNotExist:
+            if not allow_wop_lookup:
+                raise ValidationError(f"WorkOrderPartRequest with ID {wopr_id} not found")
+            
+            # Try to find WOP and get its requested WOPR
+            try:
+                wop = WorkOrderPart.objects.get(id=wopr_id)
+                
+                # Find the WOPR with is_requested=True (should be only one)
+                requested_woprs = wop.part_requests.filter(is_requested=True)
+                
+                if requested_woprs.count() == 0:
+                    raise ValidationError(f"No requested WOPR found for WorkOrderPart {wopr_id}")
+                elif requested_woprs.count() > 1:
+                    raise ValidationError(f"Multiple requested WOPRs found for WorkOrderPart {wopr_id}. Please use specific WOPR ID.")
+                
+                return requested_woprs.select_for_update().first()
+                
+            except WorkOrderPart.DoesNotExist:
+                raise ValidationError(f"Neither WorkOrderPartRequest nor WorkOrderPart found with ID {wopr_id}")
+    
+    @staticmethod
+    def _validate_wopr_state(wopr, operation: str = "modify"):
+        """
+        Helper method to validate WOPR state for various operations
+        
+        Args:
+            wopr: WorkOrderPartRequest instance
+            operation: Type of operation being performed (for error messages)
+            
+        Raises:
+            ValidationError: If operation is not allowed in current state
+        """
+        if wopr.is_ordered:
+            raise ValidationError(f"Cannot {operation} request: parts have already been ordered")
+        if wopr.is_delivered:
+            raise ValidationError(f"Cannot {operation} request: parts have already been delivered")
+    
+    @staticmethod
+    def _validate_and_detect_cancel_type(wopr):
+        """
+        Helper method to validate WOPR state and detect appropriate cancel type
+        
+        Args:
+            wopr: WorkOrderPartRequest instance
+            
+        Returns:
+            str: Cancel type ('availability' or 'request')
+            
+        Raises:
+            ValidationError: If cancellation is not allowed or WOPR is not in cancellable state
+        """
+        # Use general state validation
+        WorkOrderPartRequestWorkflowService._validate_wopr_state(wopr, "cancel")
+        
+        # Auto-detect cancel type based on current state
+        if wopr.is_available:
+            return 'availability'
+        elif wopr.is_requested:
+            return 'request'
+        else:
+            raise ValidationError("Cannot cancel: request is not in a cancellable state")
+    
+    @staticmethod
     def request_parts_for_work_order_part(wop_id: str, qty_needed: int, performed_by: TenantUser = None, notes: str = None, **kwargs) -> Dict[str, Any]:
         """
         Mechanic requests parts for a WorkOrderPart
@@ -1641,7 +1721,7 @@ class WorkOrderPartRequestWorkflowService:
         """
         try:
             with transaction.atomic():
-                wopr = WorkOrderPartRequest.objects.select_for_update().get(id=wopr_id)
+                wopr = WorkOrderPartRequestWorkflowService._get_wopr_for_update(wopr_id)
                 
                 # Capture previous state before changes
                 previous_flags = {
@@ -1710,7 +1790,7 @@ class WorkOrderPartRequestWorkflowService:
         """
         try:
             with transaction.atomic():
-                wopr = WorkOrderPartRequest.objects.select_for_update().get(id=wopr_id)
+                wopr = WorkOrderPartRequestWorkflowService._get_wopr_for_update(wopr_id)
                 part_id = str(wopr.work_order_part.part.id)
                 
                 # Use centralized FIFO allocation service to reserve inventory
@@ -1801,7 +1881,7 @@ class WorkOrderPartRequestWorkflowService:
         """
         try:
             with transaction.atomic():
-                wopr = WorkOrderPartRequest.objects.select_for_update().get(id=wopr_id)
+                wopr = WorkOrderPartRequestWorkflowService._get_wopr_for_update(wopr_id)
                 
                 # Create audit log
                 wopr._create_audit_log(
@@ -1842,7 +1922,15 @@ class WorkOrderPartRequestWorkflowService:
     def deliver_parts(wopr_id: str, performed_by: TenantUser = None, 
                      notes: str = None, **kwargs) -> Dict[str, Any]:
         """
-        Warehouse keeper delivers parts - handles inventory movements and quantity updates
+        Warehouse keeper delivers parts OR acknowledges cancellation
+        
+        Two modes of operation:
+        1. Normal delivery: When is_requested=True and is_available=True
+           - Handles inventory movements and quantity updates
+        2. Cancellation acknowledgment: When is_requested=False and is_available=True
+           - Warehouse keeper acknowledges the cancellation
+           - Cleans up availability info (sets is_available=False, qty_needed=0, qty_available=0)
+           - Preserves qty_used and qty_delivered
         
         Args:
             wopr_id: WorkOrderPartRequest ID
@@ -1855,7 +1943,53 @@ class WorkOrderPartRequestWorkflowService:
         """
         try:
             with transaction.atomic():
-                wopr = WorkOrderPartRequest.objects.select_for_update().get(id=wopr_id)
+                wopr = WorkOrderPartRequestWorkflowService._get_wopr_for_update(wopr_id)
+                
+                # Check if this is a cancellation acknowledgment
+                if not wopr.is_requested and wopr.is_available:
+                    # Warehouse keeper is acknowledging the cancellation
+                    # Clean up availability info without affecting delivered quantities
+                    wopr.is_available = False
+                    wopr.qty_needed = 0
+                    wopr.qty_available = 0
+                    # Keep qty_used and qty_delivered unchanged
+                    # inventory_batch was already handled in cancel_availability
+                    
+                    # Create audit log for cancellation acknowledgment
+                    wopr._create_audit_log(
+                        previous_flags={
+                            'is_requested': False,
+                            'is_available': True,
+                            'is_ordered': wopr.is_ordered,
+                            'is_delivered': wopr.is_delivered,
+                        },
+                        new_flags={
+                            'is_requested': False,
+                            'is_available': False,
+                            'is_ordered': wopr.is_ordered,
+                            'is_delivered': wopr.is_delivered,
+                        },
+                        action_type=WorkOrderPartRequestLog.ActionType.CANCELLED,
+                        performed_by=performed_by,
+                        notes=f"Cancellation acknowledged by warehouse keeper. {notes or ''}".strip(),
+                        **kwargs
+                    )
+                    
+                    wopr.save()
+                    
+                    return {
+                        'success': True,
+                        'message': 'Cancellation acknowledged successfully',
+                        'wopr_id': str(wopr.id),
+                        'action': 'cancellation_acknowledged',
+                        'is_requested': wopr.is_requested,
+                        'is_available': wopr.is_available,
+                        'qty_needed': wopr.qty_needed,
+                        'qty_available': wopr.qty_available,
+                        'qty_delivered': wopr.qty_delivered
+                    }
+                
+                # Normal delivery process
                 wop = wopr.work_order_part
                 qty_to_deliver = wopr.qty_available
                 
@@ -2025,7 +2159,7 @@ class WorkOrderPartRequestWorkflowService:
         """
         try:
             with transaction.atomic():
-                wopr = WorkOrderPartRequest.objects.select_for_update().get(id=wopr_id)
+                wopr = WorkOrderPartRequestWorkflowService._get_wopr_for_update(wopr_id)
                 
                 # Validate pickup quantity
                 available_for_pickup = wopr.qty_delivered
@@ -2069,48 +2203,31 @@ class WorkOrderPartRequestWorkflowService:
     
     @staticmethod
     def cancel_availability(wopr_id: str, performed_by: TenantUser = None, 
-                          notes: str = None, cancel_type: str = 'availability', **kwargs) -> Dict[str, Any]:
+                          notes: str = None, **kwargs) -> Dict[str, Any]:
         """
-        Cancel parts request/availability/order based on the scenario
+        Cancel parts request or availability based on current state
+        
+        Auto-detects cancellation type:
+        - If is_available=True: Cancels warehouse availability
+        - If is_available=False and is_requested=True: Cancels mechanic request
+        - If is_ordered=True or is_delivered=True: Raises validation error (cannot cancel)
         
         Args:
             wopr_id: WorkOrderPartRequest ID or WorkOrderPart ID
             performed_by: User performing the action
             notes: Optional notes
-            cancel_type: Type of cancellation ('request', 'availability', 'order', 'full')
-                - 'request': Cancel mechanic's request (delete on request scenario)
-                - 'availability': Cancel warehouse availability (delete on parts available scenario)
-                - 'order': Cancel parts order (order parts cancellation scenario)
-                - 'full': Full cancellation (reset everything)
             **kwargs: Additional metadata
             
         Returns:
-            Dict with success status
+            Dict with success status and detected cancel_type
         """
         try:
             with transaction.atomic():
-                wopr = None
+                # Get WOPR with support for WorkOrderPart ID lookup
+                wopr = WorkOrderPartRequestWorkflowService._get_wopr_for_update(wopr_id, allow_wop_lookup=True)
                 
-                # Try to get WOPR first
-                try:
-                    wopr = WorkOrderPartRequest.objects.select_for_update().get(id=wopr_id)
-                except WorkOrderPartRequest.DoesNotExist:
-                    # If WOPR not found, try to find WOP and get its requested WOPR
-                    try:
-                        wop = WorkOrderPart.objects.get(id=wopr_id)
-                        
-                        # Find the WOPR with is_requested=True (should be only one)
-                        requested_woprs = wop.part_requests.filter(is_requested=True)
-                        
-                        if requested_woprs.count() == 0:
-                            raise ValidationError(f"No requested WOPR found for WorkOrderPart {wopr_id}")
-                        elif requested_woprs.count() > 1:
-                            raise ValidationError(f"Multiple requested WOPRs found for WorkOrderPart {wopr_id}. Please use specific WOPR ID.")
-                        
-                        wopr = requested_woprs.select_for_update().first()
-                        
-                    except WorkOrderPart.DoesNotExist:
-                        raise ValidationError(f"Neither WorkOrderPartRequest nor WorkOrderPart found with ID {wopr_id}")
+                # Validate and detect cancel type
+                cancel_type = WorkOrderPartRequestWorkflowService._validate_and_detect_cancel_type(wopr)
                 
                 # Store previous state for audit
                 previous_flags = {
@@ -2127,13 +2244,7 @@ class WorkOrderPartRequestWorkflowService:
                     'qty_ordered': getattr(wopr, 'qty_ordered', 0) or 0,
                 }
                 
-                # Release reservation if exists and we're canceling availability or full
-                if (cancel_type in ['availability', 'order', 'full']) and wopr.inventory_batch and wopr.qty_available > 0:
-                    inventory_batch = InventoryBatch.objects.select_for_update().get(id=wopr.inventory_batch.id)
-                    inventory_batch.qty_reserved -= wopr.qty_available
-                    inventory_batch.save()
-                
-                # Apply cancellation logic based on cancel_type and diagram scenarios
+                # Apply cancellation logic based on detected cancel_type
                 new_flags = {
                     'is_requested': wopr.is_requested,
                     'is_available': wopr.is_available,
@@ -2141,54 +2252,30 @@ class WorkOrderPartRequestWorkflowService:
                     'is_delivered': wopr.is_delivered,
                 }
                 
-                action_type = WorkOrderPartRequestLog.ActionType.CANCELLED
-                qty_in_action = 0
-                message_suffix = ""
-                
                 if cancel_type == 'request':
-                    # Scenario: Delete on request - Mechanic cancels their request
+                    # Scenario: Cancel mechanic's request
                     wopr.qty_needed = 0
                     wopr.is_requested = False
                     new_flags['is_requested'] = False
+                    action_type = WorkOrderPartRequestLog.ActionType.CANCELLED
                     qty_in_action = previous_quantities['qty_needed']
                     message_suffix = "request cancelled"
                     
                 elif cancel_type == 'availability':
-                    # Scenario: Delete on parts available - Warehouse cancels availability
-                    wopr.qty_available = 0
-                    wopr.inventory_batch = None
-                    wopr.is_available = False
-                    new_flags['is_available'] = False
+                    # Scenario: Cancel availability - mechanic no longer needs the parts
+                    # Keep is_available=True so warehouse keeper knows they had gathered parts
+                    # Release inventory reservation since parts are no longer needed
+                    if wopr.inventory_batch and wopr.qty_available > 0:
+                        inventory_batch = InventoryBatch.objects.select_for_update().get(id=wopr.inventory_batch.id)
+                        inventory_batch.qty_reserved -= wopr.qty_available
+                        inventory_batch.save()
+                    
+                    # Only set is_requested=False, keep availability info for warehouse visibility
+                    wopr.is_requested = False
+                    new_flags['is_requested'] = False
                     action_type = WorkOrderPartRequestLog.ActionType.AVAILABILITY_CANCELLED
                     qty_in_action = previous_quantities['qty_available']
                     message_suffix = "availability cancelled"
-                    
-                elif cancel_type == 'order':
-                    # Scenario: Order parts cancellation - Cancel when parts are ordered
-                    wopr.is_ordered = False
-                    new_flags['is_ordered'] = False
-                    qty_in_action = previous_quantities['qty_ordered']
-                    message_suffix = "order cancelled"
-                    
-                elif cancel_type == 'full':
-                    # Scenario: Full cancellation - Reset everything to initial state
-                    wopr.qty_needed = 0
-                    wopr.qty_available = 0
-                    wopr.inventory_batch = None
-                    wopr.is_requested = False
-                    wopr.is_available = False
-                    wopr.is_ordered = False
-                    new_flags = {
-                        'is_requested': False,
-                        'is_available': False,
-                        'is_ordered': False,
-                        'is_delivered': False,
-                    }
-                    qty_in_action = max(
-                        previous_quantities['qty_needed'],
-                        previous_quantities['qty_available']
-                    )
-                    message_suffix = "fully cancelled"
                 
                 # Save changes without triggering automatic audit logging
                 # We'll create the audit log manually with proper cancellation context
@@ -2224,93 +2311,7 @@ class WorkOrderPartRequestWorkflowService:
         except Exception as e:
             raise ValidationError(f"Failed to cancel {cancel_type}: {str(e)}")
 
-    @staticmethod
-    def cancel_request(wopr_id: str, performed_by: TenantUser = None, notes: str = None, **kwargs) -> Dict[str, Any]:
-        """
-        Cancel mechanic's parts request (Delete on request scenario)
-        
-        Args:
-            wopr_id: WorkOrderPartRequest ID or WorkOrderPart ID
-            performed_by: User performing the action
-            notes: Optional notes
-            **kwargs: Additional metadata
-            
-        Returns:
-            Dict with success status
-        """
-        return WorkOrderPartRequestWorkflowService.cancel_availability(
-            wopr_id=wopr_id,
-            performed_by=performed_by,
-            notes=notes,
-            cancel_type='request',
-            **kwargs
-        )
 
-    @staticmethod
-    def cancel_parts_availability(wopr_id: str, performed_by: TenantUser = None, notes: str = None, **kwargs) -> Dict[str, Any]:
-        """
-        Cancel warehouse parts availability (Delete on parts available scenario)
-        
-        Args:
-            wopr_id: WorkOrderPartRequest ID or WorkOrderPart ID
-            performed_by: User performing the action
-            notes: Optional notes
-            **kwargs: Additional metadata
-            
-        Returns:
-            Dict with success status
-        """
-        return WorkOrderPartRequestWorkflowService.cancel_availability(
-            wopr_id=wopr_id,
-            performed_by=performed_by,
-            notes=notes,
-            cancel_type='availability',
-            **kwargs
-        )
-
-    @staticmethod
-    def cancel_parts_order(wopr_id: str, performed_by: TenantUser = None, notes: str = None, **kwargs) -> Dict[str, Any]:
-        """
-        Cancel parts order (Order parts cancellation scenario)
-        
-        Args:
-            wopr_id: WorkOrderPartRequest ID or WorkOrderPart ID
-            performed_by: User performing the action
-            notes: Optional notes
-            **kwargs: Additional metadata
-            
-        Returns:
-            Dict with success status
-        """
-        return WorkOrderPartRequestWorkflowService.cancel_availability(
-            wopr_id=wopr_id,
-            performed_by=performed_by,
-            notes=notes,
-            cancel_type='order',
-            **kwargs
-        )
-
-    @staticmethod
-    def cancel_full_request(wopr_id: str, performed_by: TenantUser = None, notes: str = None, **kwargs) -> Dict[str, Any]:
-        """
-        Fully cancel parts request (Reset everything scenario)
-        
-        Args:
-            wopr_id: WorkOrderPartRequest ID or WorkOrderPart ID
-            performed_by: User performing the action
-            notes: Optional notes
-            **kwargs: Additional metadata
-            
-        Returns:
-            Dict with success status
-        """
-        return WorkOrderPartRequestWorkflowService.cancel_availability(
-            wopr_id=wopr_id,
-            performed_by=performed_by,
-            notes=notes,
-            cancel_type='full',
-            **kwargs
-        )
 
 
 # Global service instances

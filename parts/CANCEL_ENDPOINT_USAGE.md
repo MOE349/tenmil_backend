@@ -1,6 +1,6 @@
-# Unified Cancel Availability Endpoint
+# Smart Cancel Availability Endpoint
 
-The `/work-order-part-requests/{id}/cancel-availability` endpoint now handles all cancel scenarios through a single API endpoint.
+The `/work-order-part-requests/{id}/cancel-availability` endpoint automatically detects what type of cancellation to perform based on the current state of the request.
 
 ## Endpoint
 ```
@@ -10,65 +10,31 @@ POST /api/parts/work-order-part-requests/{wopr_id}/cancel-availability
 ## Request Body
 ```json
 {
-  "cancel_type": "availability",  // Optional, defaults to "availability"
   "notes": "Optional cancellation notes"
 }
 ```
 
-## Cancel Types
+## Auto-Detection Logic
 
-### 1. Cancel Mechanic Request (`cancel_type: "request"`)
-**Scenario**: Delete on request - Mechanic cancels their request
+The endpoint automatically determines the appropriate cancellation action:
+
+### 1. **Warehouse Availability Cancellation** (when `is_available = True`)
+**Automatically triggered when**: Parts are currently marked as available
+- Sets `is_requested = False` (mechanic no longer needs the parts)
+- **Keeps `is_available = True`** (so warehouse keeper knows they had gathered parts)
+- **Keeps `qty_available` and `inventory_batch`** (for warehouse visibility)
+- Releases inventory reservation (parts returned to available stock)
+
+### 2. **Mechanic Request Cancellation** (when `is_available = False` and `is_requested = True`)
+**Automatically triggered when**: Request exists but no availability confirmed yet
 - Sets `qty_needed = 0`
 - Sets `is_requested = False`
-- Used when mechanic no longer needs the parts
 
-```json
-{
-  "cancel_type": "request",
-  "notes": "Mechanic no longer needs these parts"
-}
-```
-
-### 2. Cancel Warehouse Availability (`cancel_type: "availability"`) - **DEFAULT**
-**Scenario**: Delete on parts available - Warehouse cancels availability
-- Sets `qty_available = 0`
-- Sets `is_available = False`
-- Releases inventory reservation
-- Used when warehouse can no longer provide the parts
-
-```json
-{
-  "cancel_type": "availability",
-  "notes": "Parts no longer available in warehouse"
-}
-```
-
-### 3. Cancel Parts Order (`cancel_type: "order"`)
-**Scenario**: Order parts cancellation - Cancel when parts are ordered
-- Sets `is_ordered = False`
-- Used when external order is cancelled
-
-```json
-{
-  "cancel_type": "order",
-  "notes": "External order was cancelled"
-}
-```
-
-### 4. Full Cancellation (`cancel_type: "full"`)
-**Scenario**: Full cancellation - Reset everything to initial state
-- Resets all quantities to 0
-- Sets all flags to False
-- Releases any reservations
-- Complete reset of the request
-
-```json
-{
-  "cancel_type": "full",
-  "notes": "Complete cancellation of this request"
-}
-```
+### 3. **Validation Errors**
+**Cannot cancel when**:
+- `is_ordered = True` → Returns error: "Cannot cancel request: parts have already been ordered"
+- `is_delivered = True` → Returns error: "Cannot cancel request: parts have already been delivered"
+- Neither `is_available` nor `is_requested` is true → Returns error: "Cannot cancel: request is not in a cancellable state"
 
 ## Response
 ```json
@@ -76,12 +42,12 @@ POST /api/parts/work-order-part-requests/{wopr_id}/cancel-availability
   "success": true,
   "message": "Parts availability cancelled successfully",
   "wopr_id": "uuid-here",
-  "cancel_type": "availability",
-  "is_requested": false,
-  "is_available": false,
+  "cancel_type": "availability",  // Auto-detected type
+  "is_requested": false,          // Mechanic no longer needs parts
+  "is_available": true,           // Kept true for warehouse visibility
   "is_ordered": false,
-  "qty_needed": 0,
-  "qty_available": 0
+  "qty_needed": 5,                // Original quantity preserved
+  "qty_available": 5              // Quantity info preserved for warehouse
 }
 ```
 
@@ -89,8 +55,8 @@ POST /api/parts/work-order-part-requests/{wopr_id}/cancel-availability
 
 ### Frontend Implementation
 ```javascript
-// Cancel availability (default behavior)
-const cancelAvailability = async (woprId, notes = '') => {
+// Smart cancellation - automatically detects what to cancel
+const cancelRequest = async (woprId, notes = '') => {
   return await fetch(`/api/parts/work-order-part-requests/${woprId}/cancel-availability`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -98,30 +64,45 @@ const cancelAvailability = async (woprId, notes = '') => {
   });
 };
 
-// Cancel mechanic request
-const cancelRequest = async (woprId, notes = '') => {
-  return await fetch(`/api/parts/work-order-part-requests/${woprId}/cancel-availability`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ 
-      cancel_type: 'request',
-      notes 
-    })
-  });
-};
-
-// Full cancellation
-const fullCancel = async (woprId, notes = '') => {
-  return await fetch(`/api/parts/work-order-part-requests/${woprId}/cancel-availability`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ 
-      cancel_type: 'full',
-      notes 
-    })
-  });
-};
+// Usage examples:
+// If WOPR has is_available=true → Cancels availability (keeps availability info for warehouse)
+// If WOPR has is_requested=true but is_available=false → Cancels mechanic request
+// If WOPR has is_ordered=true → Returns validation error
 ```
+
+## Complete Cancellation Workflow
+
+### **Step 1: Mechanic Cancels Request**
+```
+POST /api/parts/work-order-part-requests/{wopr_id}/cancel-availability
+Body: { "notes": "No longer needed" }
+
+Result:
+├── is_requested: False  (mechanic doesn't need parts)
+├── is_available: True   (warehouse keeper can see they gathered parts)
+├── qty_available: 5     (quantity info preserved)
+└── inventory_batch: "BATCH-123"  (batch info preserved)
+```
+
+### **Step 2: Warehouse Keeper Acknowledges Cancellation**
+```
+POST /api/parts/work-order-part-requests/{wopr_id}/deliver
+Body: { "notes": "Acknowledged cancellation" }
+
+Result:
+├── is_requested: False
+├── is_available: False  (cleaned up after acknowledgment)
+├── qty_needed: 0        (cleaned up)
+├── qty_available: 0     (cleaned up)
+├── qty_delivered: 0     (preserved - not affected)
+└── qty_used: 0          (preserved - not affected)
+```
+
+### **Benefits of Two-Step Process**
+- **Visibility**: Warehouse keeper knows what parts were prepared but cancelled
+- **Acknowledgment**: Explicit confirmation that warehouse understands the cancellation
+- **Clean State**: Final state is clean with no leftover availability data
+- **Audit Trail**: Complete record of cancellation and acknowledgment
 
 ## Migration Notes
 - Existing calls without `cancel_type` will continue to work (defaults to "availability")
@@ -130,7 +111,11 @@ const fullCancel = async (woprId, notes = '') => {
 - Inventory reservations are properly released when applicable
 - Fixed issue with duplicate audit logs and incorrect quantity tracking
 
-## Recent Fixes
-- **Fixed quantity tracking**: Corrected `qty_in_action` calculation to use actual quantities instead of boolean flags
-- **Fixed audit logging**: Prevented duplicate audit logs by properly coordinating between service and model layers
-- **Improved reliability**: Enhanced error handling and state management for all cancel scenarios
+## Recent Improvements
+- **Smart Auto-Detection**: Automatically detects cancel type based on current WOPR state
+- **Simplified API**: Removed manual `cancel_type` parameter - no longer needed
+- **Enhanced Validation**: Prevents cancellation of ordered/delivered requests
+- **Code Refactoring**: Extracted reusable helper functions for WOPR lookup and state validation
+- **Enhanced Delivery Logic**: Added cancellation acknowledgment support in deliver_parts endpoint
+- **Fixed quantity tracking**: Corrected `qty_in_action` calculation to use actual quantities
+- **Fixed audit logging**: Prevented duplicate audit logs by coordinating service and model layers
