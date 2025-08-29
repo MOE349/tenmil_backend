@@ -298,16 +298,21 @@ class WorkOrderPartRequest(BaseModel):
             
         super().save(*args, **kwargs)
         
-        # Create audit log entry if flags changed
-        current_flags = {
-            'is_requested': self.is_requested,
-            'is_available': self.is_available,
-            'is_ordered': self.is_ordered,
-            'is_delivered': self.is_delivered,
-        }
+        # Create audit log entry if flags changed (unless explicitly skipped)
+        if not getattr(self, '_skip_audit_log', False):
+            current_flags = {
+                'is_requested': self.is_requested,
+                'is_available': self.is_available,
+                'is_ordered': self.is_ordered,
+                'is_delivered': self.is_delivered,
+            }
+            
+            if previous_flags != current_flags:
+                self._create_audit_log(previous_flags, current_flags)
         
-        if previous_flags != current_flags:
-            self._create_audit_log(previous_flags, current_flags)
+        # Reset the skip flag after use
+        if hasattr(self, '_skip_audit_log'):
+            delattr(self, '_skip_audit_log')
     
     def _create_audit_log(self, previous_flags, new_flags, action_type=None, performed_by=None, notes=None, **kwargs):
         """Helper method to create audit log entries"""

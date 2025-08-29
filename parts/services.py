@@ -2120,6 +2120,13 @@ class WorkOrderPartRequestWorkflowService:
                     'is_delivered': wopr.is_delivered,
                 }
                 
+                # Store previous quantities for audit
+                previous_quantities = {
+                    'qty_needed': wopr.qty_needed or 0,
+                    'qty_available': wopr.qty_available or 0,
+                    'qty_ordered': getattr(wopr, 'qty_ordered', 0) or 0,
+                }
+                
                 # Release reservation if exists and we're canceling availability or full
                 if (cancel_type in ['availability', 'order', 'full']) and wopr.inventory_batch and wopr.qty_available > 0:
                     inventory_batch = InventoryBatch.objects.select_for_update().get(id=wopr.inventory_batch.id)
@@ -2143,7 +2150,7 @@ class WorkOrderPartRequestWorkflowService:
                     wopr.qty_needed = 0
                     wopr.is_requested = False
                     new_flags['is_requested'] = False
-                    qty_in_action = previous_flags.get('qty_needed', 0)
+                    qty_in_action = previous_quantities['qty_needed']
                     message_suffix = "request cancelled"
                     
                 elif cancel_type == 'availability':
@@ -2153,14 +2160,14 @@ class WorkOrderPartRequestWorkflowService:
                     wopr.is_available = False
                     new_flags['is_available'] = False
                     action_type = WorkOrderPartRequestLog.ActionType.AVAILABILITY_CANCELLED
-                    qty_in_action = previous_flags.get('qty_available', 0)
+                    qty_in_action = previous_quantities['qty_available']
                     message_suffix = "availability cancelled"
                     
                 elif cancel_type == 'order':
                     # Scenario: Order parts cancellation - Cancel when parts are ordered
                     wopr.is_ordered = False
                     new_flags['is_ordered'] = False
-                    qty_in_action = previous_flags.get('qty_ordered', 0)
+                    qty_in_action = previous_quantities['qty_ordered']
                     message_suffix = "order cancelled"
                     
                 elif cancel_type == 'full':
@@ -2178,15 +2185,17 @@ class WorkOrderPartRequestWorkflowService:
                         'is_delivered': False,
                     }
                     qty_in_action = max(
-                        previous_flags.get('qty_needed', 0),
-                        previous_flags.get('qty_available', 0)
+                        previous_quantities['qty_needed'],
+                        previous_quantities['qty_available']
                     )
                     message_suffix = "fully cancelled"
                 
-                # Save changes
+                # Save changes without triggering automatic audit logging
+                # We'll create the audit log manually with proper cancellation context
+                wopr._skip_audit_log = True
                 wopr.save()
                 
-                # Create audit log
+                # Create audit log with proper cancellation context
                 wopr._create_audit_log(
                     previous_flags=previous_flags,
                     new_flags=new_flags,
