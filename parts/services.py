@@ -2005,6 +2005,7 @@ class WorkOrderPartRequestWorkflowService:
                     wopr.is_available = False
                     wopr.qty_needed = 0
                     wopr.qty_available = 0
+                    wopr.position = None  # Clear position field when cancelling
                     # Keep qty_used and qty_delivered unchanged
                     # inventory_batch was already handled in cancel_availability
                     
@@ -2170,6 +2171,10 @@ class WorkOrderPartRequestWorkflowService:
                 else:
                     wopr.qty_delivered += qty_to_deliver
                 wopr.qty_available = 0
+                
+                # Clear position field when parts are delivered
+                wopr.position = None
+                
                 wopr.save()
                 
                 return {
