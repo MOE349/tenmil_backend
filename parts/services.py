@@ -1814,15 +1814,12 @@ class WorkOrderPartRequestWorkflowService:
             raise ValidationError(f"Failed to request parts: {str(e)}")
     
     @staticmethod
-    def confirm_availability(wopr_id: str, qty_available: int, position: str, 
-                           performed_by: TenantUser = None, notes: str = None, **kwargs) -> Dict[str, Any]:
+    def confirm_availability(wopr_id: str, performed_by: TenantUser = None, notes: str = None, **kwargs) -> Dict[str, Any]:
         """
-        Warehouse keeper confirms availability and reserves parts using FIFO allocation
+        Warehouse keeper confirms availability and reserves parts using position from record
         
         Args:
             wopr_id: WorkOrderPartRequest ID
-            qty_available: Quantity available to reserve
-            position: Position string in format 'SITE_CODE - LOCATION_NAME - A#/R#/B# - qty: #.#'
             performed_by: User performing the action
             notes: Optional notes
             **kwargs: Additional metadata
@@ -1833,7 +1830,13 @@ class WorkOrderPartRequestWorkflowService:
         try:
             with transaction.atomic():
                 wopr = WorkOrderPartRequestWorkflowService._get_wopr_for_update(wopr_id)
+                
+                # Validate that position is set in the record
+                if not wopr.position:
+                    raise ValidationError("Position field is required in the WorkOrderPartRequest record before confirming availability")
+                
                 part_id = str(wopr.work_order_part.part.id)
+                position = wopr.position
                 
                 # Extract coded_location from position field for FIFO allocation
                 # Position format: "SITE_CODE - LOCATION_NAME - A#/R#/B# - qty: #.#"
@@ -1848,12 +1851,27 @@ class WorkOrderPartRequestWorkflowService:
                     else:
                         raise ValueError("Invalid position format")
                 except Exception:
-                    raise ValidationError(f"Invalid position format: {position}. Expected: 'SITE_CODE - LOCATION_NAME - A#/R#/B# - qty: #.#'")
+                    raise ValidationError(f"Invalid position format in record: {position}. Expected: 'SITE_CODE - LOCATION_NAME - A#/R#/B# - qty: #.#'")
+                
+                # Determine available quantity from the position (extract from qty part if present)
+                # or use the qty_needed as the quantity to reserve
+                qty_to_reserve = wopr.qty_needed or 1
+                
+                # If position contains qty information, extract it
+                try:
+                    if ' - qty: ' in position:
+                        qty_part = position.split(' - qty: ')[1]
+                        available_qty = float(qty_part)
+                        # Use the minimum of what's needed and what's available
+                        qty_to_reserve = min(int(available_qty), wopr.qty_needed or int(available_qty))
+                except (ValueError, IndexError):
+                    # If can't parse qty from position, use qty_needed
+                    pass
                 
                 # Use centralized FIFO allocation service to reserve inventory
                 allocation_result = InventoryService.allocate_inventory_fifo(
                     part_id=part_id,
-                    qty_needed=qty_available,
+                    qty_needed=qty_to_reserve,
                     allocation_type='reserve',
                     coded_location=coded_location,
                     work_order_part=wopr.work_order_part,
@@ -1861,9 +1879,8 @@ class WorkOrderPartRequestWorkflowService:
                     notes=notes or f"Reserved for WOPR {wopr_id}"
                 )
                 
-                # Update WOPR with allocation results and position
+                # Update WOPR with allocation results
                 wopr.qty_available = allocation_result['total_qty_allocated']
-                wopr.position = position
                 
                 # Set inventory_batch to the first batch used (for backward compatibility)
                 if allocation_result['batch_details']:

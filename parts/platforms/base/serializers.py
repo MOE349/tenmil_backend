@@ -659,54 +659,13 @@ class RequestPartsSerializer(serializers.Serializer):
 
 
 class ConfirmAvailabilitySerializer(serializers.Serializer):
-    """Serializer for warehouse keeper confirming parts availability using position field"""
-    qty_available = serializers.IntegerField(
-        min_value=1,
-        help_text="Quantity available for reservation"
-    )
-    position = serializers.CharField(
-        max_length=200,
-        help_text="Position in format 'SITE_CODE - LOCATION_NAME - A#/R#/B# - qty: #.#' (e.g., 'RC - MOUNTAIN - A1/R2/B3 - qty: 15.0')"
-    )
+    """Serializer for warehouse keeper confirming parts availability - uses position from record"""
     notes = serializers.CharField(
         required=False,
         allow_blank=True,
         max_length=1000,
-        help_text="Optional notes about availability"
+        help_text="Optional notes about availability confirmation"
     )
-    
-    def validate_position(self, value):
-        """Validate position format and extract location information"""
-        try:
-            # Position format: "SITE_CODE - LOCATION_NAME - A#/R#/B# - qty: #.#"
-            parts = value.split(' - ')
-            if len(parts) < 3:
-                raise ValueError("Invalid position format")
-            
-            site_code = parts[0].strip()
-            location_name = parts[1].strip()
-            aisle_row_bin = parts[2].strip()
-            
-            # Validate aisle/row/bin format (A#/R#/B#)
-            if not aisle_row_bin or '/' not in aisle_row_bin:
-                raise ValueError("Invalid aisle/row/bin format")
-                
-        except Exception as e:
-            raise serializers.ValidationError(
-                f"Invalid position format: {str(e)}. Expected: 'SITE_CODE - LOCATION_NAME - A#/R#/B# - qty: #.#' (e.g., 'RC - MOUNTAIN - A1/R2/B3 - qty: 15.0')"
-            )
-        
-        # Validate location exists
-        try:
-            from company.models import Location
-            Location.objects.select_related('site').get(
-                site__code=site_code,
-                name=location_name
-            )
-        except Location.DoesNotExist:
-            raise serializers.ValidationError(f"Location not found for site code '{site_code}' and location name '{location_name}'")
-        
-        return value
 
 
 class MarkOrderedSerializer(serializers.Serializer):
