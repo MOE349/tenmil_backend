@@ -1422,7 +1422,7 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
             metadata = self._get_client_metadata(request)
             
             # Call service with WorkOrderPart ID
-            workflow_service.request_parts_for_work_order_part(
+            workflow_service.request_parts(
                 wop_id=pk,
                 qty_needed=serializer.validated_data['qty_needed'],
                 performed_by=request.user,
