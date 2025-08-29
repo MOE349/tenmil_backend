@@ -31,9 +31,9 @@ class WorkOrderPartAdmin(admin.ModelAdmin):
 
 @admin.register(WorkOrderPartRequest)
 class WorkOrderPartRequestAdmin(admin.ModelAdmin):
-    list_display = ['work_order_part', 'qty_needed', 'qty_used', 'qty_available', 'qty_delivered', 'workflow_status', 'is_approved', 'created_at']
+    list_display = ['work_order_part', 'qty_needed', 'qty_used', 'qty_available', 'qty_delivered', 'position', 'workflow_status', 'is_approved', 'created_at']
     list_filter = ['is_approved', 'is_requested', 'is_available', 'is_ordered', 'is_delivered', 'created_at']
-    search_fields = ['work_order_part__work_order__code', 'work_order_part__part__part_number', 'work_order_part__part__name']
+    search_fields = ['work_order_part__work_order__code', 'work_order_part__part__part_number', 'work_order_part__part__name', 'position']
     readonly_fields = ['total_parts_cost', 'created_at', 'updated_at']
     list_select_related = ['work_order_part__work_order', 'work_order_part__part', 'inventory_batch']
     

@@ -1459,7 +1459,7 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
             workflow_service.confirm_availability(
                 wopr_id=pk,
                 qty_available=serializer.validated_data['qty_available'],
-                coded_location=serializer.validated_data['coded_location'],
+                position=serializer.validated_data['position'],
                 performed_by=request.user,
                 notes=serializer.validated_data.get('notes'),
                 **metadata

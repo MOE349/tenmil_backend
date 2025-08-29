@@ -1814,7 +1814,7 @@ class WorkOrderPartRequestWorkflowService:
             raise ValidationError(f"Failed to request parts: {str(e)}")
     
     @staticmethod
-    def confirm_availability(wopr_id: str, qty_available: int, coded_location: str, 
+    def confirm_availability(wopr_id: str, qty_available: int, position: str, 
                            performed_by: TenantUser = None, notes: str = None, **kwargs) -> Dict[str, Any]:
         """
         Warehouse keeper confirms availability and reserves parts using FIFO allocation
@@ -1822,7 +1822,7 @@ class WorkOrderPartRequestWorkflowService:
         Args:
             wopr_id: WorkOrderPartRequest ID
             qty_available: Quantity available to reserve
-            coded_location: Location code in format LOCATION_CODE-AISLE-ROW-BIN
+            position: Position string in format 'SITE_CODE - LOCATION_NAME - A#/R#/B# - qty: #.#'
             performed_by: User performing the action
             notes: Optional notes
             **kwargs: Additional metadata
@@ -1835,6 +1835,21 @@ class WorkOrderPartRequestWorkflowService:
                 wopr = WorkOrderPartRequestWorkflowService._get_wopr_for_update(wopr_id)
                 part_id = str(wopr.work_order_part.part.id)
                 
+                # Extract coded_location from position field for FIFO allocation
+                # Position format: "SITE_CODE - LOCATION_NAME - A#/R#/B# - qty: #.#"
+                # Need to convert to coded_location format: "SITE_CODE - LOCATION_NAME - AISLE/ROW/BIN"
+                try:
+                    parts = position.split(' - ')
+                    if len(parts) >= 3:
+                        site_code = parts[0]
+                        location_name = parts[1]
+                        aisle_row_bin = parts[2]
+                        coded_location = f"{site_code} - {location_name} - {aisle_row_bin}"
+                    else:
+                        raise ValueError("Invalid position format")
+                except Exception:
+                    raise ValidationError(f"Invalid position format: {position}. Expected: 'SITE_CODE - LOCATION_NAME - A#/R#/B# - qty: #.#'")
+                
                 # Use centralized FIFO allocation service to reserve inventory
                 allocation_result = InventoryService.allocate_inventory_fifo(
                     part_id=part_id,
@@ -1846,8 +1861,9 @@ class WorkOrderPartRequestWorkflowService:
                     notes=notes or f"Reserved for WOPR {wopr_id}"
                 )
                 
-                # Update WOPR with allocation results
+                # Update WOPR with allocation results and position
                 wopr.qty_available = allocation_result['total_qty_allocated']
+                wopr.position = position
                 
                 # Set inventory_batch to the first batch used (for backward compatibility)
                 if allocation_result['batch_details']:
@@ -1895,7 +1911,7 @@ class WorkOrderPartRequestWorkflowService:
                     'qty_needed': wopr.qty_needed,
                     'is_available': wopr.is_available,
                     'is_fully_available': is_fully_available,
-                    'coded_location': coded_location,
+                    'position': position,
                     'allocation_details': allocation_result['batch_details'],
                     'total_cost': allocation_result['total_cost']
                 }

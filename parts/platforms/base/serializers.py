@@ -659,14 +659,14 @@ class RequestPartsSerializer(serializers.Serializer):
 
 
 class ConfirmAvailabilitySerializer(serializers.Serializer):
-    """Serializer for warehouse keeper confirming parts availability using coded location"""
+    """Serializer for warehouse keeper confirming parts availability using position field"""
     qty_available = serializers.IntegerField(
         min_value=1,
         help_text="Quantity available for reservation"
     )
-    coded_location = serializers.CharField(
+    position = serializers.CharField(
         max_length=200,
-        help_text="Location code in format 'SITE_CODE - LOCATION_NAME - AISLE/ROW/BIN' (e.g., 'RC - MOUNTAIN - A5/R7/B1')"
+        help_text="Position in format 'SITE_CODE - LOCATION_NAME - A#/R#/B# - qty: #.#' (e.g., 'RC - MOUNTAIN - A1/R2/B3 - qty: 15.0')"
     )
     notes = serializers.CharField(
         required=False,
@@ -675,14 +675,25 @@ class ConfirmAvailabilitySerializer(serializers.Serializer):
         help_text="Optional notes about availability"
     )
     
-    def validate_coded_location(self, value):
-        """Validate coded location format and existence"""
+    def validate_position(self, value):
+        """Validate position format and extract location information"""
         try:
-            from parts.services import InventoryService
-            site_code, location_name, aisle, row, bin_code = InventoryService.decode_location(value)
+            # Position format: "SITE_CODE - LOCATION_NAME - A#/R#/B# - qty: #.#"
+            parts = value.split(' - ')
+            if len(parts) < 3:
+                raise ValueError("Invalid position format")
+            
+            site_code = parts[0].strip()
+            location_name = parts[1].strip()
+            aisle_row_bin = parts[2].strip()
+            
+            # Validate aisle/row/bin format (A#/R#/B#)
+            if not aisle_row_bin or '/' not in aisle_row_bin:
+                raise ValueError("Invalid aisle/row/bin format")
+                
         except Exception as e:
             raise serializers.ValidationError(
-                f"Invalid coded location format: {str(e)}. Expected: 'SITE_CODE - LOCATION_NAME - AISLE/ROW/BIN' (e.g., 'RC - MOUNTAIN - A5/R7/B1')"
+                f"Invalid position format: {str(e)}. Expected: 'SITE_CODE - LOCATION_NAME - A#/R#/B# - qty: #.#' (e.g., 'RC - MOUNTAIN - A1/R2/B3 - qty: 15.0')"
             )
         
         # Validate location exists

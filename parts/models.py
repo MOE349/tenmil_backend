@@ -241,6 +241,13 @@ class WorkOrderPartRequest(BaseModel):
         default=0, 
         help_text="Total quantity delivered to mechanic so far"
     )
+    position = models.CharField(
+        _("Position"), 
+        max_length=200, 
+        null=True, 
+        blank=True,
+        help_text="Decoded location and position in format 'SITE_CODE - LOCATION_NAME - A#/R#/B# - qty: #.#'"
+    )
 
     class Meta:
         indexes = [
@@ -271,6 +278,10 @@ class WorkOrderPartRequest(BaseModel):
             raise ValidationError(_("Unit cost snapshot cannot be negative"))
         if self.qty_needed is not None and self.qty_needed <= 0:
             raise ValidationError(_("Quantity needed must be positive if specified"))
+        
+        # Position field is required when is_available is True
+        if self.is_available and not self.position:
+            raise ValidationError(_("Position field is required when parts are marked as available"))
 
     def save(self, *args, **kwargs):
         from django.utils import timezone
