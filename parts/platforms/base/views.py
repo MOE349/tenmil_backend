@@ -217,58 +217,6 @@ class WorkOrderPartBaseView(BaseAPIView):
         except Exception as e:
             return self.handle_exception(e)
     
-    # def list(self, params, *args, **kwargs):
-    #     """Get list of WorkOrderParts aggregated by part and work_order"""
-    #     from django.db.models import Sum
-    #     from parts.platforms.base.serializers import PartBaseSerializer
-    #     from work_orders.models import WorkOrder
-        
-    #     try:
-    #         # Get base queryset
-    #         ordering_by = None
-    #         if "ordering" in params:
-    #             ordering_by = params.pop('ordering')
-    #         user_lang = params.pop('lang', 'en')
-            
-    #         # Get the filtered queryset but aggregate by part and work_order
-    #         base_queryset = self.get_queryset(params=params, ordering=ordering_by)
-            
-    #         # Aggregate by part and work_order, summing qty_used
-    #         aggregated_data = (base_queryset
-    #             .values('part', 'work_order')
-    #             .annotate(total_qty_used=Sum('qty_used'))
-    #             .order_by('work_order', 'part'))
-            
-    #         # Build response data
-    #         response_data = []
-    #         for item in aggregated_data:
-    #             # Get the part object for serialization
-    #             try:
-    #                 part = Part.objects.get(id=item['part'])
-    #                 work_order = WorkOrder.objects.get(id=item['work_order'])
-                    
-    #                 # Serialize the part
-    #                 part_serializer = PartBaseSerializer(part)
-                    
-    #                 response_item = {
-    #                     'part': part_serializer.data,
-    #                     'work_order': {
-    #                         'id': str(work_order.id),
-    #                         'code': work_order.code,
-    #                         'end_point': '/work_orders/work_order'
-    #                     },
-    #                     'qty_used': str(item['total_qty_used'])
-    #                 }
-    #                 response_data.append(response_item)
-                    
-    #             except (Part.DoesNotExist, WorkOrder.DoesNotExist):
-    #                 continue  # Skip invalid records
-            
-    #         return self.format_response(data=response_data, status_code=200)
-            
-    #     except Exception as e:
-    #         return self.handle_exception(e)
-    
     def update(self, data, params, pk=None, *args, **kwargs):
         """Update WorkOrderPart using Workflow Service for proper flag management"""
         try:
@@ -1676,9 +1624,12 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
             limit = int(request.query_params.get('limit', 100))
             offset = int(request.query_params.get('offset', 0))
             
-            # Base queryset for pending requests
+            # Base queryset for requests needing warehouse attention:
+            # - is_requested=True: Normal pending requests
+            # - is_available=True: Cancelled requests awaiting acknowledgment
+            from django.db.models import Q
             queryset = WorkOrderPartRequest.objects.filter(
-                is_requested=True
+                Q(is_requested=True) | Q(is_available=True)
             ).select_related(
                 'work_order_part__work_order',
                 'work_order_part__work_order__content_type',

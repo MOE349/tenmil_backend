@@ -117,5 +117,6 @@ Result:
 - **Enhanced Validation**: Prevents cancellation of ordered/delivered requests
 - **Code Refactoring**: Extracted reusable helper functions for WOPR lookup and state validation
 - **Enhanced Delivery Logic**: Added cancellation acknowledgment support in deliver_parts endpoint
+- **Updated Pending Requests**: Modified pending requests filter to include cancelled requests awaiting acknowledgment
 - **Fixed quantity tracking**: Corrected `qty_in_action` calculation to use actual quantities
 - **Fixed audit logging**: Prevented duplicate audit logs by coordinating service and model layers

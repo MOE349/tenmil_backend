@@ -1619,7 +1619,7 @@ class WorkOrderPartRequestWorkflowService:
                     if wopr:
                         # Update existing planning record and reset all flags
                         wopr.qty_needed = qty_needed
-                        wopr.is_requested = True
+                        wopr.is_requested = False
                         wopr.is_available = False
                         wopr.is_ordered = False
                         wopr.is_delivered = False
@@ -1629,7 +1629,7 @@ class WorkOrderPartRequestWorkflowService:
                         wopr = WorkOrderPartRequest.objects.create(
                             work_order_part=wop,
                             qty_needed=qty_needed,
-                            is_requested=True,
+                            is_requested=False,
                             is_available=False,
                             is_ordered=False,
                             is_delivered=False
@@ -1647,7 +1647,7 @@ class WorkOrderPartRequestWorkflowService:
                     
                     if wopr:
                         wopr.qty_needed = qty_needed
-                        wopr.is_requested = True
+                        wopr.is_requested = False
                         wopr.is_available = False
                         wopr.is_ordered = False
                         wopr.is_delivered = False
@@ -1733,7 +1733,7 @@ class WorkOrderPartRequestWorkflowService:
                 
                 # Update quantities and reset all flags
                 wopr.qty_needed = qty_needed
-                wopr.is_requested = True
+                wopr.is_requested = False
                 wopr.is_available = False
                 wopr.is_ordered = False
                 wopr.is_delivered = False
@@ -1743,7 +1743,7 @@ class WorkOrderPartRequestWorkflowService:
                 wopr._create_audit_log(
                     previous_flags=previous_flags,
                     new_flags={
-                        'is_requested': True,
+                        'is_requested': False,
                         'is_available': False,
                         'is_ordered': False,
                         'is_delivered': False,
