@@ -1835,27 +1835,17 @@ class WorkOrderPartRequestWorkflowService:
                 if not wopr.position:
                     raise ValidationError("Position field is required in the WorkOrderPartRequest record before confirming availability")
                 
+                # Validate that qty_available is set in the record
+                if wopr.qty_available <= 0:
+                    raise ValidationError("qty_available must be set to a positive value in the WorkOrderPartRequest record before confirming availability")
+                
                 part_id = str(wopr.work_order_part.part.id)
                 position = wopr.position
+                qty_to_reserve = wopr.qty_available  # Use the qty_available that was already set
                 
                 # Use the position field directly as coded_location since it's already in the correct format
                 # Position format: "SITE_CODE - LOCATION_NAME - A#/R#/B# - qty: #.#"
                 coded_location = position
-                
-                # Determine available quantity from the position (extract from qty part if present)
-                # or use the qty_needed as the quantity to reserve
-                qty_to_reserve = wopr.qty_needed or 1
-                
-                # If position contains qty information, extract it
-                try:
-                    if ' - qty: ' in position:
-                        qty_part = position.split(' - qty: ')[1]
-                        available_qty = float(qty_part)
-                        # Use the minimum of what's needed and what's available
-                        qty_to_reserve = min(int(available_qty), wopr.qty_needed or int(available_qty))
-                except (ValueError, IndexError):
-                    # If can't parse qty from position, use qty_needed
-                    pass
                 
                 # Use centralized FIFO allocation service to reserve inventory
                 allocation_result = InventoryService.allocate_inventory_fifo(
@@ -1868,8 +1858,7 @@ class WorkOrderPartRequestWorkflowService:
                     notes=notes or f"Reserved for WOPR {wopr_id}"
                 )
                 
-                # Update WOPR with allocation results
-                wopr.qty_available = allocation_result['total_qty_allocated']
+                # Don't update qty_available - it should already be set correctly by the user
                 
                 # Set inventory_batch to the first batch used (for backward compatibility)
                 if allocation_result['batch_details']:
@@ -1882,7 +1871,7 @@ class WorkOrderPartRequestWorkflowService:
                              if is_fully_available 
                              else WorkOrderPartRequestLog.ActionType.PARTIAL_AVAILABLE)
                 
-                # Update WOPR flags
+                # Update WOPR flags (only set is_available to True, don't change qty_available or position)
                 wopr.is_available = True
                 
                 # Create audit log
