@@ -1628,7 +1628,13 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
     def cancel_availability(self, request, pk=None):
         """
         POST /work-order-part-requests/{id}/cancel-availability
-        Cancel parts availability and release reservation
+        Cancel parts request/availability/order based on the scenario
+        
+        Supports all cancel scenarios through a single endpoint:
+        - 'request': Cancel mechanic's request (delete on request scenario)
+        - 'availability': Cancel warehouse availability (delete on parts available scenario)  
+        - 'order': Cancel parts order (order parts cancellation scenario)
+        - 'full': Full cancellation (reset everything)
         """
         try:
             serializer = CancelAvailabilitySerializer(data=request.data)
@@ -1642,16 +1648,17 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
             # Get client metadata
             metadata = self._get_client_metadata(request)
             
-            # Call service
-            workflow_service.cancel_availability(
+            # Call service with cancel_type parameter
+            result = workflow_service.cancel_availability(
                 wopr_id=pk,
                 performed_by=request.user,
                 notes=serializer.validated_data.get('notes'),
+                cancel_type=serializer.validated_data.get('cancel_type', 'availability'),
                 **metadata
             )
             
             return self.format_response(
-                data=serializer.data,
+                data=result,
                 status_code=status.HTTP_200_OK
             )
             
