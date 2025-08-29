@@ -1733,6 +1733,7 @@ class WorkOrderPartRequestWorkflowBaseView(BaseAPIView, viewsets.ViewSet):
                     'is_available': wopr.is_available,
                     'is_ordered': wopr.is_ordered,
                     'is_delivered': wopr.is_delivered,
+                    "position": wopr.position,
                     'requested_at': first_requested.isoformat() if first_requested else None,
                     'created_at': wopr.created_at.isoformat(),
                     'available_inventory': available_inventory,
