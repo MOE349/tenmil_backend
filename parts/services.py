@@ -251,6 +251,7 @@ class InventoryService:
                 inventory_batch=batch,
                 movement_type=movement_type,
                 qty_delta=qty_to_allocate if allocation_type == 'reserve' else -qty_to_allocate,
+                work_order=work_order_part.work_order if work_order_part else None,
                 created_by=performed_by,
                 receipt_id=notes or f"FIFO {allocation_type} allocation"
             )

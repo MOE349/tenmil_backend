@@ -255,11 +255,7 @@ class WorkOrderPartBaseView(BaseAPIView):
                         status_code=status.HTTP_400_BAD_REQUEST
                     )
                 
-                if has_qty_used and not has_location:
-                    raise LocalBaseException(
-                        exception="location field is required when qty_used is provided",
-                        status_code=status.HTTP_400_BAD_REQUEST
-                    )
+
                 
                 if not has_qty_needed and not has_qty_used:
                     raise LocalBaseException(
@@ -319,31 +315,41 @@ class WorkOrderPartBaseView(BaseAPIView):
                     qty_used_value = self._validate_quantity(data.get('qty_used'), 'qty_used')
                     location_value = data.get('location')
                     
-                    # Decode location using existing service
-                    try:
-                        site_code, location_name, aisle, row, bin_code = InventoryService.decode_location(location_value)
-                    except Exception as e:
-                        raise LocalBaseException(
-                            exception=f"Invalid location format: {str(e)}",
-                            status_code=status.HTTP_400_BAD_REQUEST
-                        )
-                    
-                    # Get location object
-                    try:
-                        location = Location.objects.select_related('site').get(
-                            site__code=site_code,
-                            name=location_name
-                        )
-                    except Location.DoesNotExist:
-                        raise LocalBaseException(
-                            exception=f"Location not found for site code '{site_code}' and location name '{location_name}'",
-                            status_code=status.HTTP_400_BAD_REQUEST
-                        )
-                    
                     # Calculate current total qty_used for this WOP
                     current_total_used = work_order_part.part_requests.aggregate(
                         total=models.Sum('qty_used')
                     )['total'] or 0
+                    
+                    # Validate location requirement based on operation type
+                    if not has_location and qty_used_value > current_total_used:
+                        # This is an addition (consumption) - location is required
+                        raise LocalBaseException(
+                            exception="location field is required when adding qty_used (consumption operation)",
+                            status_code=status.HTTP_400_BAD_REQUEST
+                        )
+                    
+                    # Only decode location if it's provided (needed for consumption, optional for returns)
+                    if has_location:
+                        # Decode location using existing service
+                        try:
+                            site_code, location_name, aisle, row, bin_code = InventoryService.decode_location(location_value)
+                        except Exception as e:
+                            raise LocalBaseException(
+                                exception=f"Invalid location format: {str(e)}",
+                                status_code=status.HTTP_400_BAD_REQUEST
+                            )
+                        
+                        # Get location object
+                        try:
+                            location = Location.objects.select_related('site').get(
+                                site__code=site_code,
+                                name=location_name
+                            )
+                        except Location.DoesNotExist:
+                            raise LocalBaseException(
+                                exception=f"Location not found for site code '{site_code}' and location name '{location_name}'",
+                                status_code=status.HTTP_400_BAD_REQUEST
+                            )
                     
                     if qty_used_value > current_total_used:
                         # FIFO Consumption - need more parts
