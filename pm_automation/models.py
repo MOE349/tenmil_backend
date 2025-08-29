@@ -397,22 +397,28 @@ class PMSettings(BaseModel):
                 ).first()
                 
                 if existing_request:
-                    # Update qty_needed if it's different
+                    # Update qty_needed if it's different, but only if no active workflow flags
                     if existing_request.qty_needed != part_data['qty_needed']:
-                        existing_request.qty_needed = part_data['qty_needed']
-                        existing_request.save(update_fields=['qty_needed'])
-                        logger.info(f"Updated qty_needed to {part_data['qty_needed']} for existing part request")
+                        if work_order_part.has_active_workflow_flags():
+                            logger.warning(f"Cannot update qty_needed for {part_data['part'].part_number} - active workflow flags present")
+                        else:
+                            existing_request.qty_needed = part_data['qty_needed']
+                            existing_request.save(update_fields=['qty_needed'])
+                            logger.info(f"Updated qty_needed to {part_data['qty_needed']} for existing part request")
                 else:
-                    # Create new planning request if none exists
-                    WorkOrderPartRequest.objects.create(
-                        work_order_part=work_order_part,
-                        inventory_batch=None,
-                        qty_needed=part_data['qty_needed'],
-                        qty_used=0,
-                        unit_cost_snapshot=part_data['part'].last_price or 0,
-                        is_approved=False
-                    )
-                    logger.info(f"Created new planning WorkOrderPartRequest for existing WorkOrderPart")
+                    # Create new planning request if none exists, but only if no active workflow flags
+                    if work_order_part.has_active_workflow_flags():
+                        logger.warning(f"Cannot create new WOPR with qty_needed for {part_data['part'].part_number} - active workflow flags present")
+                    else:
+                        WorkOrderPartRequest.objects.create(
+                            work_order_part=work_order_part,
+                            inventory_batch=None,
+                            qty_needed=part_data['qty_needed'],
+                            qty_used=0,
+                            unit_cost_snapshot=part_data['part'].last_price or 0,
+                            is_approved=False
+                        )
+                        logger.info(f"Created new planning WorkOrderPartRequest for existing WorkOrderPart")
         
         logger.info(f"Added {len(parts_data)} predefined parts to work order {work_order.id}")
 

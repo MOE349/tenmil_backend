@@ -157,6 +157,20 @@ class WorkOrderPart(BaseModel):
         verbose_name = _("Work Order Part")
         verbose_name_plural = _("Work Order Parts")
 
+    def has_active_workflow_flags(self):
+        """
+        Check if this WorkOrderPart has any WOPR records with active workflow flags.
+        Active flags are: is_requested, is_available, or is_ordered = True
+        
+        Returns:
+            bool: True if any WOPR has active workflow flags, False otherwise
+        """
+        return self.part_requests.filter(
+            models.Q(is_requested=True) | 
+            models.Q(is_available=True) | 
+            models.Q(is_ordered=True)
+        ).exists()
+
     def __str__(self):
         return f"WO {self.work_order.code} - {self.part.part_number}"
 

@@ -269,6 +269,13 @@ class WorkOrderPartBaseView(BaseAPIView):
                 if has_qty_needed:
                     qty_needed_value = self._validate_quantity(data.get('qty_needed'), 'qty_needed')
                     
+                    # Check if WOP has any active workflow flags before allowing qty_needed updates
+                    if work_order_part.has_active_workflow_flags():
+                        return self.error_response(
+                            "Cannot update qty_needed when work order part has active workflow flags (is_requested, is_available, or is_ordered = True)",
+                            status_code=400
+                        )
+                    
                     # Find existing planning record or create new one
                     # Planning records have no inventory_batch and no qty_used
                     existing_planning_record = WorkOrderPartRequest.objects.filter(
