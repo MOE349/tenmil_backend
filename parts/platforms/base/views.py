@@ -273,18 +273,36 @@ class WorkOrderPartBaseView(BaseAPIView):
                 if has_qty_needed:
                     qty_needed_value = self._validate_quantity(data.get('qty_needed'), 'qty_needed')
                     
-                    # Create new WOPR record for planning
-                    wopr = WorkOrderPartRequest.objects.create(
+                    # Find existing planning record or create new one
+                    # Planning records have no inventory_batch and no qty_used
+                    existing_planning_record = WorkOrderPartRequest.objects.filter(
                         work_order_part=work_order_part,
-                        qty_needed=qty_needed_value,
-                        # All workflow flags remain False (default)
-                        # No inventory_batch assigned yet
-                    )
+                        inventory_batch__isnull=True,  # Planning record (no specific batch)
+                        qty_used__isnull=True,        # Not yet consumed
+                        is_delivered=False,           # Not yet delivered
+                        is_requested=False,           # Not yet requested
+                    ).first()
+                    
+                    if existing_planning_record:
+                        # Update existing planning record
+                        existing_planning_record.qty_needed = qty_needed_value
+                        existing_planning_record.save(update_fields=['qty_needed'])
+                        wopr = existing_planning_record
+                        operation_message = f'Planning record updated with qty_needed: {qty_needed_value}'
+                    else:
+                        # Create new WOPR record for planning
+                        wopr = WorkOrderPartRequest.objects.create(
+                            work_order_part=work_order_part,
+                            qty_needed=qty_needed_value,
+                            # All workflow flags remain False (default)
+                            # No inventory_batch assigned yet
+                        )
+                        operation_message = f'Planning record created with qty_needed: {qty_needed_value}'
                     
                     response_data.update({
                         'operation_type': 'planning',
-                        'message': f'Planning record created with qty_needed: {qty_needed_value}',
-                        'wopr_created': {
+                        'message': operation_message,
+                        'wopr_record': {
                             'id': str(wopr.id),
                             'qty_needed': wopr.qty_needed,
                             'workflow_flags': {
