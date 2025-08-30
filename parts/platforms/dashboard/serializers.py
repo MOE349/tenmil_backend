@@ -30,3 +30,8 @@ class WorkOrderPartRequestLogDashboardSerializer(WorkOrderPartRequestLogBaseSeri
         read_only_fields = ('id', 'created_at', 'updated_at')
 
 
+class PartVendorRelationDashboardSerializer(PartVendorRelationBaseSerializer):
+    """Dashboard serializer for PartVendorRelation model"""
+    pass
+
+

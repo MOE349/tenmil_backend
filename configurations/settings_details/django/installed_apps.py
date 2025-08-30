@@ -36,4 +36,5 @@ TENANT_APPS = [
     "file_uploads.apps.FileUploadsConfig",
     "components.apps.ComponentsConfig",
     "parts.apps.PartsConfig",
+    "vendors.apps.VendorsConfig",
 ]

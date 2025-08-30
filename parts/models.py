@@ -652,3 +652,65 @@ class PartMovement(BaseModel):
         return f"{self.part.part_number} - {self.movement_type} - {self.qty_delta} @ {self.created_at}"
 
 
+class PartVendorRelation(BaseModel):
+    """Relationship between parts and vendors with primary vendor designation"""
+    part = models.ForeignKey(
+        Part,
+        on_delete=models.CASCADE,
+        related_name="vendor_relations",
+        verbose_name=_("Part")
+    )
+    vendor = models.ForeignKey(
+        'vendors.Vendor',
+        on_delete=models.CASCADE,
+        related_name="part_relations",
+        verbose_name=_("Vendor")
+    )
+    is_primary = models.BooleanField(
+        _("Is Primary Vendor"),
+        default=False,
+        help_text="Only one primary vendor allowed per part"
+    )
+
+    class Meta:
+        unique_together = ['part', 'vendor']
+        indexes = [
+            models.Index(fields=['part', 'is_primary']),
+            models.Index(fields=['vendor', 'is_primary']),
+        ]
+        verbose_name = _("Part Vendor Relation")
+        verbose_name_plural = _("Part Vendor Relations")
+        ordering = ['-is_primary', 'vendor__name']
+
+    def __str__(self):
+        primary_indicator = " (Primary)" if self.is_primary else ""
+        return f"{self.part.part_number} - {self.vendor.name}{primary_indicator}"
+
+    def clean(self):
+        """Validate that only one primary vendor exists per part"""
+        if self.is_primary:
+            # Check if another primary vendor exists for this part
+            existing_primary = PartVendorRelation.objects.filter(
+                part=self.part,
+                is_primary=True
+            ).exclude(pk=self.pk)
+            
+            if existing_primary.exists():
+                raise ValidationError({
+                    'is_primary': _('Only one primary vendor is allowed per part.')
+                })
+
+    def save(self, *args, **kwargs):
+        """Override save to handle primary vendor logic"""
+        # If setting as primary, unset other primary vendors for this part
+        if self.is_primary:
+            PartVendorRelation.objects.filter(
+                part=self.part,
+                is_primary=True
+            ).exclude(pk=self.pk).update(is_primary=False)
+        
+        # Run clean validation
+        self.clean()
+        super().save(*args, **kwargs)
+
+

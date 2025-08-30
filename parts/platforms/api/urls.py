@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 from parts.platforms.api.views import (
     PartApiView, InventoryBatchApiView, WorkOrderPartApiView, WorkOrderPartRequestApiView,
     PartMovementApiView, WorkOrderPartMovementApiView, InventoryOperationsApiView,
-    WorkOrderPartRequestWorkflowApiView, WorkOrderPartRequestLogApiView
+    WorkOrderPartRequestWorkflowApiView, WorkOrderPartRequestLogApiView, PartVendorRelationApiView
 )
 
 # Create a router for the operations viewset
@@ -90,4 +90,8 @@ urlpatterns = [
     path('work-order-part-request-logs/<uuid:pk>', 
          WorkOrderPartRequestLogApiView.as_view(), 
          name='wopr-logs-detail'),
+    
+    # Part Vendor Relation endpoints
+    path('part-vendor-relations', PartVendorRelationApiView.as_view(), name='part-vendor-relations-list'),
+    path('part-vendor-relations/<uuid:pk>', PartVendorRelationApiView.as_view(), name='part-vendor-relations-detail'),
 ]

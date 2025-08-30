@@ -61,3 +61,8 @@ class TransferPartsApiSerializer(TransferPartsSerializer):
     pass
 
 
+class PartVendorRelationApiSerializer(PartVendorRelationBaseSerializer):
+    """API serializer for PartVendorRelation model with API-specific customizations"""
+    pass
+
+

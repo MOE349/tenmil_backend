@@ -5,7 +5,7 @@ from datetime import datetime, date
 from django.utils import timezone
 
 from configurations.base_features.serializers.base_serializer import BaseSerializer
-from parts.models import Part, InventoryBatch, WorkOrderPart, WorkOrderPartRequest, PartMovement
+from parts.models import Part, InventoryBatch, WorkOrderPart, WorkOrderPartRequest, PartMovement, PartVendorRelation
 from company.platforms.base.serializers import LocationBaseSerializer
 from tenant_users.platforms.base.serializers import TenantUserBaseSerializer
 
@@ -735,6 +735,40 @@ class WorkOrderPartRequestLogBaseSerializer(BaseSerializer):
         
         # Format action type for display
         response['action_type_display'] = instance.get_action_type_display()
+        
+        return response
+
+
+class PartVendorRelationBaseSerializer(BaseSerializer):
+    """Base serializer for PartVendorRelation model"""
+    
+    class Meta:
+        model = PartVendorRelation
+        fields = "__all__"
+        read_only_fields = ("id", "created_at", "updated_at")
+    
+    def mod_to_representation(self, instance):
+        response = super().mod_to_representation(instance)
+        response['id'] = str(instance.id)
+        
+        # Add related object details
+        response['part'] = {
+            "id": str(instance.part.id),
+            "part_number": instance.part.part_number,
+            "name": instance.part.name,
+            "end_point": "/parts/part"
+        }
+        
+        response['vendor'] = {
+            "id": str(instance.vendor.id),
+            "name": instance.vendor.name,
+            "code": instance.vendor.code,
+            "end_point": "/vendors/vendor"
+        }
+        
+        # Add display fields
+        response['display_name'] = f"{instance.part.part_number} - {instance.vendor.name}"
+        response['is_primary_display'] = "Primary" if instance.is_primary else "Secondary"
         
         return response
 

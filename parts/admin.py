@@ -1,14 +1,36 @@
 from django.contrib import admin
 from django.utils.translation import gettext_lazy as _
-from .models import Part, InventoryBatch, WorkOrderPart, WorkOrderPartRequest, PartMovement, WorkOrderPartRequestLog
+from django.utils.html import format_html
+from .models import Part, InventoryBatch, WorkOrderPart, WorkOrderPartRequest, PartMovement, WorkOrderPartRequestLog, PartVendorRelation
+
+
+class PartVendorRelationInline(admin.TabularInline):
+    """Inline admin for PartVendorRelation within Part admin"""
+    model = PartVendorRelation
+    extra = 1
+    fields = ('vendor', 'is_primary')
+    readonly_fields = ()
 
 
 @admin.register(Part)
 class PartAdmin(admin.ModelAdmin):
-    list_display = ['part_number', 'name', 'make', 'category', 'last_price', 'created_at']
+    list_display = ['part_number', 'name', 'make', 'category', 'last_price', 'get_vendor_count', 'created_at']
     list_filter = ['category', 'make', 'created_at']
     search_fields = ['part_number', 'name', 'description']
     readonly_fields = ['created_at', 'updated_at']
+    inlines = [PartVendorRelationInline]
+    
+    def get_vendor_count(self, obj):
+        """Display number of vendors for this part"""
+        count = obj.vendor_relations.count()
+        primary_count = obj.vendor_relations.filter(is_primary=True).count()
+        return format_html(
+            '<span style="color: {};">{} ({} primary)</span>',
+            'green' if primary_count > 0 else 'orange',
+            count,
+            primary_count
+        )
+    get_vendor_count.short_description = 'Vendors'
 
 
 @admin.register(InventoryBatch)
@@ -88,3 +110,45 @@ class PartMovementAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         # Part movements should be immutable after creation
         return False
+
+
+@admin.register(PartVendorRelation)
+class PartVendorRelationAdmin(admin.ModelAdmin):
+    list_display = (
+        'part', 
+        'vendor', 
+        'is_primary_display',
+        'created_at'
+    )
+    list_filter = ('is_primary', 'created_at')
+    search_fields = ('part__part_number', 'part__name', 'vendor__name', 'vendor__code')
+    readonly_fields = ('created_at', 'updated_at')
+    
+    fieldsets = (
+        ('Relation Information', {
+            'fields': ('part', 'vendor', 'is_primary')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        })
+    )
+    
+    def is_primary_display(self, obj):
+        """Display primary status with styling"""
+        if obj.is_primary:
+            return format_html(
+                '<span style="color: green; font-weight: bold;">✓ Primary</span>'
+            )
+        return format_html('<span style="color: gray;">Secondary</span>')
+    is_primary_display.short_description = 'Primary Status'
+    
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Customize foreign key fields in admin"""
+        if db_field.name == "part":
+            kwargs["queryset"] = Part.objects.order_by('part_number')
+        elif db_field.name == "vendor":
+            # Import here to avoid circular imports
+            from vendors.models import Vendor
+            kwargs["queryset"] = Vendor.objects.order_by('name')
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)

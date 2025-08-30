@@ -3,7 +3,7 @@ from datetime import datetime
 from django.core.exceptions import ValidationError
 from configurations.base_features.views.base_api_view import BaseAPIView
 from configurations.base_features.exceptions.base_exceptions import LocalBaseException
-from parts.models import Part, InventoryBatch, WorkOrderPart, WorkOrderPartRequest, PartMovement, WorkOrderPartRequestLog
+from parts.models import Part, InventoryBatch, WorkOrderPart, WorkOrderPartRequest, PartMovement, WorkOrderPartRequestLog, PartVendorRelation
 from parts.platforms.base.serializers import *
 from parts.services import inventory_service, workflow_service, InsufficientStockError, InvalidOperationError
 
@@ -1734,6 +1734,33 @@ class WorkOrderPartRequestLogBaseView(BaseAPIView):
         performed_by = request.query_params.get('performed_by')
         if performed_by:
             params['performed_by'] = performed_by
+        
+        return params
+
+
+class PartVendorRelationBaseView(BaseAPIView):
+    """Base view for PartVendorRelation CRUD operations"""
+    serializer_class = PartVendorRelationBaseSerializer
+    model_class = PartVendorRelation
+    
+    def get_request_params(self, request):
+        """Override to add PartVendorRelation-specific filtering"""
+        params = super().get_request_params(request)
+        
+        # Add filtering by part
+        part_id = request.query_params.get('part_id')
+        if part_id:
+            params['part'] = part_id
+        
+        # Add filtering by vendor
+        vendor_id = request.query_params.get('vendor_id')
+        if vendor_id:
+            params['vendor'] = vendor_id
+        
+        # Add filtering by primary status
+        is_primary = request.query_params.get('is_primary')
+        if is_primary is not None:
+            params['is_primary'] = is_primary.lower() in ('true', '1', 'yes')
         
         return params
 
