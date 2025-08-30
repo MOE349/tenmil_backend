@@ -170,106 +170,6 @@ class WorkOrderPart(BaseModel):
             models.Q(is_available=True) | 
             models.Q(is_ordered=True)
         ).exists()
-    
-    def get_stuck_planning_records(self):
-        """
-        Get planning records that are stuck (have qty_needed but no active workflow flags).
-        These are records that were created for planning but never progressed through the workflow.
-        
-        Returns:
-            QuerySet: WOPR records that are stuck in planning state
-        """
-        return self.part_requests.filter(
-            inventory_batch__isnull=True,  # Planning record (no specific batch)
-            qty_used__isnull=True,        # Not yet consumed
-            qty_needed__isnull=False,     # Has qty_needed
-            qty_needed__gt=0,             # Positive qty_needed
-            is_requested=False,           # Not requested
-            is_available=False,           # Not available
-            is_ordered=False,             # Not ordered
-            is_delivered=False,           # Not delivered
-        )
-    
-    def consolidate_stuck_planning_records(self):
-        """
-        Consolidate all stuck planning records into a single total qty_needed.
-        This helps clean up old stuck records and prepare for new requests.
-        
-        Returns:
-            dict: Summary of consolidation with total_qty_needed and records_count
-        """
-        stuck_records = self.get_stuck_planning_records()
-        
-        if not stuck_records.exists():
-            return {'total_qty_needed': 0, 'records_count': 0, 'consolidated': False}
-        
-        # Calculate total qty_needed from all stuck records
-        from django.db.models import Sum
-        total_qty_needed = stuck_records.aggregate(
-            total=Sum('qty_needed')
-        )['total'] or 0
-        
-        records_count = stuck_records.count()
-        
-        # If there are multiple stuck records, consolidate them
-        if records_count > 1:
-            # Keep the most recent record and update its qty_needed
-            most_recent = stuck_records.order_by('-created_at').first()
-            most_recent.qty_needed = total_qty_needed
-            most_recent.save(update_fields=['qty_needed'])
-            
-            # Delete the older stuck records
-            older_records = stuck_records.exclude(id=most_recent.id)
-            deleted_count = older_records.count()
-            older_records.delete()
-            
-            return {
-                'total_qty_needed': total_qty_needed,
-                'records_count': records_count,
-                'consolidated': True,
-                'kept_record_id': str(most_recent.id),
-                'deleted_count': deleted_count
-            }
-        
-        return {
-            'total_qty_needed': total_qty_needed,
-            'records_count': records_count,
-            'consolidated': False
-        }
-    
-    def cleanup_useless_draft_records(self):
-        """
-        Clean up all useless draft WOPR records for this WorkOrderPart.
-        
-        Returns:
-            dict: Summary of cleanup with deleted_count
-        """
-        useless_records = []
-        
-        # Find all useless draft records
-        for wopr in self.part_requests.all():
-            if wopr.is_useless_draft_record():
-                useless_records.append({
-                    'id': str(wopr.id),
-                    'qty_needed': wopr.qty_needed,
-                    'qty_used': wopr.qty_used,
-                    'created_at': wopr.created_at.isoformat()
-                })
-        
-        # Delete useless records
-        deleted_count = 0
-        for wopr in self.part_requests.all():
-            if wopr.is_useless_draft_record():
-                # Set flag to skip auto-delete logic in save method to avoid recursion
-                wopr._skip_auto_delete = True
-                wopr.delete()
-                deleted_count += 1
-        
-        return {
-            'deleted_count': deleted_count,
-            'deleted_records': useless_records,
-            'wop_id': str(self.id)
-        }
 
     def __str__(self):
         return f"WO {self.work_order.code} - {self.part.part_number}"
@@ -421,24 +321,7 @@ class WorkOrderPartRequest(BaseModel):
         else:
             self.total_parts_cost = 0
             
-        # Check if this record should be auto-deleted before saving
-        # Only check for existing records (not new ones being created)
-        should_auto_delete = False
-        if self.pk and not getattr(self, '_skip_auto_delete', False):
-            should_auto_delete = self.is_useless_draft_record()
-        
-        if should_auto_delete:
-            # Delete the useless record instead of saving it
-            self.delete()
-            return  # Exit early, no need to continue with save logic
-        
         super().save(*args, **kwargs)
-        
-        # After saving, check if the record became useless and should be deleted
-        # This handles cases where the save operation resulted in a useless state
-        if not getattr(self, '_skip_auto_delete', False) and self.is_useless_draft_record():
-            self.delete()
-            return  # Exit early, record was deleted
         
         # Create audit log entry if flags changed (unless explicitly skipped)
         if not getattr(self, '_skip_audit_log', False):
@@ -452,11 +335,9 @@ class WorkOrderPartRequest(BaseModel):
             if previous_flags != current_flags:
                 self._create_audit_log(previous_flags, current_flags)
         
-        # Reset the skip flags after use
+        # Reset the skip flag after use
         if hasattr(self, '_skip_audit_log'):
             delattr(self, '_skip_audit_log')
-        if hasattr(self, '_skip_auto_delete'):
-            delattr(self, '_skip_auto_delete')
     
     def _create_audit_log(self, previous_flags, new_flags, action_type=None, performed_by=None, notes=None, **kwargs):
         """Helper method to create audit log entries"""
@@ -531,47 +412,6 @@ class WorkOrderPartRequest(BaseModel):
     def is_fully_fulfilled(self):
         """Check if request is completely fulfilled"""
         return self.qty_delivered >= (self.qty_needed or 0)
-    
-    def is_useless_draft_record(self):
-        """
-        Check if this WOPR record is a useless draft that should be deleted.
-        
-        A record is considered useless if:
-        - All quantities are 0 or None (no meaningful data)
-        - All workflow flags are False (no active workflow)
-        - No inventory batch assigned (not a consumption record)
-        - Not approved (not finalized)
-        
-        Returns:
-            bool: True if this record is useless and should be deleted
-        """
-        # Check if all quantities are zero or None
-        quantities_empty = (
-            (self.qty_needed is None or self.qty_needed == 0) and
-            (self.qty_used is None or self.qty_used == 0) and
-            self.qty_available == 0 and
-            self.qty_delivered == 0
-        )
-        
-        # Check if all workflow flags are False
-        workflow_flags_inactive = (
-            not self.is_requested and
-            not self.is_available and
-            not self.is_ordered and
-            not self.is_delivered and
-            not self.is_approved
-        )
-        
-        # Check if no inventory batch is assigned (not a consumption record)
-        no_inventory_batch = self.inventory_batch is None
-        
-        # Check if total cost is zero (no financial impact)
-        no_cost = self.total_parts_cost == 0
-        
-        return (quantities_empty and 
-                workflow_flags_inactive and 
-                no_inventory_batch and 
-                no_cost)
 
     def __str__(self):
         qty_display = self.qty_used if self.qty_used is not None else "TBD"

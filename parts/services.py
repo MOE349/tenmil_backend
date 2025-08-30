@@ -1730,18 +1730,6 @@ class WorkOrderPartRequestWorkflowService:
                 # Get the WorkOrderPart
                 wop = WorkOrderPart.objects.select_for_update().get(id=wop_id)
                 
-                # First, consolidate any stuck planning records
-                consolidation_result = wop.consolidate_stuck_planning_records()
-                
-                # If we have stuck records, add their qty_needed to the new request
-                total_qty_needed = qty_needed
-                if consolidation_result['total_qty_needed'] > 0:
-                    total_qty_needed += consolidation_result['total_qty_needed']
-                    if notes:
-                        notes += f" [Consolidated {consolidation_result['total_qty_needed']} from {consolidation_result['records_count']} stuck planning records]"
-                    else:
-                        notes = f"Consolidated {consolidation_result['total_qty_needed']} from {consolidation_result['records_count']} stuck planning records"
-                
                 # Get or create WorkOrderPartRequest for planning
                 # Handle potential multiple planning records by getting the first active one
                 try:
@@ -1754,7 +1742,7 @@ class WorkOrderPartRequestWorkflowService:
                     
                     if wopr:
                         # Update existing planning record and reset all flags
-                        wopr.qty_needed = total_qty_needed
+                        wopr.qty_needed = qty_needed
                         wopr.is_requested = False
                         wopr.is_available = False
                         wopr.is_ordered = False
@@ -1764,7 +1752,7 @@ class WorkOrderPartRequestWorkflowService:
                         # Create new planning record
                         wopr = WorkOrderPartRequest.objects.create(
                             work_order_part=wop,
-                            qty_needed=total_qty_needed,
+                            qty_needed=qty_needed,
                             is_requested=False,
                             is_available=False,
                             is_ordered=False,
@@ -1782,7 +1770,7 @@ class WorkOrderPartRequestWorkflowService:
                     ).order_by('-created_at').first()
                     
                     if wopr:
-                        wopr.qty_needed = total_qty_needed
+                        wopr.qty_needed = qty_needed
                         wopr.is_requested = False
                         wopr.is_available = False
                         wopr.is_ordered = False
@@ -1792,7 +1780,7 @@ class WorkOrderPartRequestWorkflowService:
                         # Fallback: create new record
                         wopr = WorkOrderPartRequest.objects.create(
                             work_order_part=wop,
-                            qty_needed=total_qty_needed,
+                            qty_needed=qty_needed,
                             is_requested=True,
                             is_available=False,
                             is_ordered=False,
@@ -1831,56 +1819,14 @@ class WorkOrderPartRequestWorkflowService:
                     'wopr_id': str(wopr.id),
                     'wop_id': str(wop.id),
                     'qty_needed': wopr.qty_needed,
-                    'original_qty_requested': qty_needed,
                     'is_requested': wopr.is_requested,
-                    'created': created,
-                    'consolidation': consolidation_result
+                    'created': created
                 }
                 
         except WorkOrderPart.DoesNotExist:
             raise ValidationError(f"WorkOrderPart with ID {wop_id} not found")
         except Exception as e:
             raise ValidationError(f"Failed to request parts: {str(e)}")
-    
-    @staticmethod
-    def cleanup_stuck_planning_records(wop_id: str, performed_by: TenantUser = None) -> Dict[str, Any]:
-        """
-        Clean up stuck planning records for a WorkOrderPart without creating a new request.
-        This is useful for maintenance and cleanup operations.
-        
-        Args:
-            wop_id: WorkOrderPart ID
-            performed_by: User performing the cleanup
-            
-        Returns:
-            Dict with cleanup results
-        """
-        try:
-            with transaction.atomic():
-                # Get the WorkOrderPart
-                wop = WorkOrderPart.objects.select_for_update().get(id=wop_id)
-                
-                # Get stuck planning records before consolidation
-                stuck_records = list(wop.get_stuck_planning_records().values(
-                    'id', 'qty_needed', 'created_at'
-                ))
-                
-                # Consolidate stuck planning records
-                consolidation_result = wop.consolidate_stuck_planning_records()
-                
-                return {
-                    'success': True,
-                    'message': f"Cleaned up {consolidation_result['records_count']} stuck planning records",
-                    'wop_id': str(wop.id),
-                    'consolidation': consolidation_result,
-                    'stuck_records_details': stuck_records,
-                    'performed_by': performed_by.email if performed_by else 'System'
-                }
-                
-        except WorkOrderPart.DoesNotExist:
-            raise ValidationError(f"WorkOrderPart with ID {wop_id} not found")
-        except Exception as e:
-            raise ValidationError(f"Failed to cleanup stuck records: {str(e)}")
     
     @staticmethod
     def request_parts(wop_id: str, qty_needed: int, performed_by: TenantUser = None, notes: str = None, **kwargs) -> Dict[str, Any]:
